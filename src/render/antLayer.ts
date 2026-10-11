@@ -7,7 +7,7 @@
 import { Container, Graphics, type Renderer, Sprite, type Texture } from 'pixi.js';
 import { AntState } from '../sim/ants';
 import { ANT_STRIDE, type AntsSnapshot } from '../worker/protocol';
-import { ANT_SCALE, GAIT_FRAMES, STRIDE, makeAntTextures } from './antSprites';
+import { ANT_SCALE, CROP, GAIT_FRAMES, STRIDE, makeAntTextures } from './antSprites';
 import { grainColor } from './soilColors';
 
 /** Where a carried grain sits, ahead of the head, in mm. */
@@ -73,12 +73,13 @@ export class AntLayer {
       ant.body.rotation = prev.ants[o + 2]! + dh * k;
       const frame = Math.floor(((walked % STRIDE) / STRIDE) * GAIT_FRAMES) % GAIT_FRAMES;
       ant.sprite.texture = this.textures[cur.full[i]!]![frame]!;
-      const material = cur.ants[o + 6]!;
-      if (material !== ant.material) {
-        ant.material = material;
+      // What is at the mouth: a grain of soil (its material), a droplet being shared (-1), or nothing (0).
+      const held = cur.ants[o + 3] === AntState.sharing ? -1 : cur.ants[o + 6]!;
+      if (held !== ant.material) {
+        ant.material = held;
         ant.grain.clear();
-        // A grain of soil held in the mandibles.
-        if (material > 0) ant.grain.circle(GRAIN_AHEAD, 0, 0.55).fill(grainColor(material));
+        if (held > 0) ant.grain.circle(GRAIN_AHEAD, 0, 0.55).fill(grainColor(held));
+        else if (held < 0) ant.grain.circle(GRAIN_AHEAD - 0.4, 0, 0.35).fill({ color: CROP, alpha: 0.9 });
       }
     }
   }

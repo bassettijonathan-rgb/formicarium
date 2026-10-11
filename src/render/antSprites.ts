@@ -16,7 +16,7 @@ export const STRIDE = 2.4;
 const BODY = 0x2a1c15;
 const LEG = 0x3b2a20;
 const SHINE = 0x6b5446;
-const CROP = 0xd9a441;
+export const CROP = 0xd9a441;
 
 /** Leg attachment and resting foot positions (left side, y < 0); the right side mirrors them. */
 const LEGS: { base: [number, number]; knee: [number, number]; foot: [number, number] }[] = [

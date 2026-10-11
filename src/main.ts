@@ -44,7 +44,7 @@ async function start(): Promise<void> {
       view.arena.setArena(msg);
       counts.textContent =
         `${msg.ants - msg.out} ants in the farm, ${msg.out} out foraging · ` +
-        `${msg.stores.toFixed(1)} µL of sugar water stored`;
+        `${msg.stores.toFixed(1)} µL of sugar water in their crops`;
     }
   };
   send({ type: 'start', seed });

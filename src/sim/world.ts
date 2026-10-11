@@ -15,6 +15,13 @@ import { STEPS_PER_SECOND } from './time';
 
 export type { Farm } from './farm';
 
+/** Sugar water in all the workers' crops, µL: in the farm this is the colony's store. */
+export function colonyCrop(world: World): number {
+  let total = 0;
+  for (let i = 0; i < world.ants.count; i++) total += world.ants.crop[i]!;
+  return total;
+}
+
 export interface World {
   seed: number;
   /** Steps since the tank was set up; 20 steps per second of ant time. */
@@ -43,9 +50,11 @@ export interface WorldOptions {
 
 export function createWorld(seed: number, options: WorldOptions = {}): World {
   const nestMode = options.nest ?? 'farm';
+  const params = { ...DEFAULT_ANT_PARAMS, ...options.params };
   const farm = createFarm(new Rng(seed, Purpose.soil));
   const ants = createAnts(options.ants ?? 60);
-  if (nestMode === 'farm') pourAnts(ants, farm, new Rng(seed, Purpose.ants));
+  giveTraits(ants, params, new Rng(seed, Purpose.traits));
+  if (nestMode === 'farm') pourAnts(ants, farm, params, new Rng(seed, Purpose.ants));
   return {
     seed,
     step: 0,
@@ -57,16 +66,23 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
     nestMode,
     food: [],
     nextFoodId: 1,
-    params: { ...DEFAULT_ANT_PARAMS, ...options.params },
+    params,
   };
 }
 
 /** Ants poured into the farm land within this many mm either side of the middle. */
 const POUR_SPREAD = 15;
 
-/** The keeper tips the workers onto the soil surface, all at one spot in the middle. */
-function pourAnts(ants: Ants, farm: Farm, rng: Rng): void {
+/** Each worker's own response threshold for foraging, log-uniform between the two bounds. */
+function giveTraits(ants: Ants, params: AntParams, rng: Rng): void {
+  const ratio = params.forageThresholdMax / params.forageThresholdMin;
+  for (let i = 0; i < ants.count; i++) ants.forageThreshold[i] = params.forageThresholdMin * Math.pow(ratio, rng.float());
+}
+
+/** The keeper tips the workers onto the soil surface, all at one spot in the middle. They come part-fed. */
+function pourAnts(ants: Ants, farm: Farm, params: AntParams, rng: Rng): void {
   for (let i = 0; i < ants.count; i++) {
+    ants.crop[i] = params.startCrop * params.cropLoad;
     const x = rng.range(farm.width / 2 - POUR_SPREAD, farm.width / 2 + POUR_SPREAD);
     ants.place[i] = Place.farm;
     ants.state[i] = AntState.wandering;

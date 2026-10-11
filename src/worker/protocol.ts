@@ -21,7 +21,7 @@ export interface AntsSnapshot {
    * Crop is in `full`.
    */
   ants: Float32Array;
-  /** 1 where the ant's crop holds sugar. */
+  /** 1 where the ant's crop is more than half full (its gaster is stretched). */
   full: Uint8Array;
 }
 
@@ -34,7 +34,7 @@ export interface ArenaSnapshot {
   /** 1 where the floor is blocked (only lab setups have inner walls). */
   wall: Uint8Array;
   food: { id: number; x: number; y: number; volume: number; concentration: number }[];
-  /** All workers; those out foraging (in the arena or the tube); sugar stored (µL). */
+  /** All workers; those out foraging (in the arena or the tube); sugar water in the colony's crops (µL). */
   ants: number;
   out: number;
   stores: number;

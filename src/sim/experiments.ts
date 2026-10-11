@@ -3,11 +3,12 @@
  * the tests in tests/science/ and the `npm run experiment` command.
  * Each run returns the numbers the original papers report.
  */
+import { Place } from './ants';
 import { excavatedArea } from './farm';
 import { doubleBridge, foodChoice, Tally } from './lab';
 import type { AntParams } from './params';
 import { STEPS_PER_SECOND } from './time';
-import { createWorld, removeFood, step, type World } from './world';
+import { colonyCrop, createWorld, placeSugar, removeFood, step, type World } from './world';
 
 export interface RunOptions {
   seed: number;
@@ -132,4 +133,64 @@ export function runNestVolume(opts: RunOptions & { hours: number }): NestResult 
     areaByHour.push(excavatedArea(world.farm));
   }
   return { areaByHour };
+}
+
+export interface FoodSpreadResult {
+  /** Fraction of workers that have had food in their crop since the sugar went in, at the end of each minute. */
+  fedByMinute: number[];
+  /** Fraction of workers that went out to the arena since the sugar went in. */
+  foragers: number;
+  /** Tube departures per minute, and sugar in all crops (µL), at the end of each minute. */
+  departuresByMinute: number[];
+  cropByMinute: number[];
+}
+
+/**
+ * Food spread (Planckaert et al. 2019, Lasius niger): a colony that has dug
+ * its nest is starved, then a drop of 1 M sucrose goes in the arena. Count
+ * how fast the workers get food in their crops, whether they fetched it
+ * themselves or were fed by a nestmate.
+ */
+export function runFoodSpread(
+  opts: RunOptions & { digMinutes?: number; minutes?: number; satiated?: boolean },
+): FoodSpreadResult {
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 50, params: opts.params ?? {} });
+  const { ants, params } = world;
+  const settle = Math.round((opts.digMinutes ?? 60) * 60 * STEPS_PER_SECOND);
+  for (let s = 0; s < settle; s++) step(world);
+  // Starved (or, as a control, fed to the brim) before the food goes in; nobody remembers food.
+  for (let i = 0; i < ants.count; i++) {
+    ants.crop[i] = opts.satiated ? params.cropLoad : 0;
+    ants.hasMemory[i] = 0;
+  }
+  placeSugar(world, 60, world.arena.entranceY, 200, 1);
+  const fed = new Uint8Array(ants.count);
+  const out = new Uint8Array(ants.count);
+  const wasIn = new Uint8Array(ants.count);
+  const fedByMinute: number[] = [];
+  const departuresByMinute: number[] = [];
+  const cropByMinute: number[] = [];
+  const threshold = 0.1 * params.cropLoad;
+  for (let m = 0; m < (opts.minutes ?? 60); m++) {
+    let departures = 0;
+    for (let s = 0; s < 60 * STEPS_PER_SECOND; s++) {
+      for (let i = 0; i < ants.count; i++) wasIn[i] = ants.place[i] === Place.farm ? 1 : 0;
+      step(world);
+      for (let i = 0; i < ants.count; i++) {
+        if (!opts.satiated && ants.crop[i]! >= threshold) fed[i] = 1;
+        if (ants.place[i] === Place.arena) out[i] = 1;
+        if (wasIn[i] && ants.place[i] === Place.tube) departures++;
+      }
+    }
+    fedByMinute.push(sum8(fed) / ants.count);
+    departuresByMinute.push(departures);
+    cropByMinute.push(colonyCrop(world));
+  }
+  return { fedByMinute, foragers: sum8(out) / ants.count, departuresByMinute, cropByMinute };
+}
+
+function sum8(values: Uint8Array): number {
+  let total = 0;
+  for (const v of values) total += v;
+  return total;
 }

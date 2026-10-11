@@ -145,6 +145,71 @@ export interface AntParams {
   restLength: number;
   /** Time for a forager to walk through the tube, seconds. */
   tubeTime: number;
+
+  // --- Food flow in the farm (M3) ---
+
+  /**
+   * Seconds of ant time per tank day on the life clock (D6): development,
+   * ageing and metabolism run this much faster than walking. Default 3600:
+   * one tank day passes in an hour of play.
+   */
+  daySeconds: number;
+  /**
+   * Sugar water (1 M sucrose) an ant burns per tank day, µL (rough: a 1 mg
+   * worker's resting metabolism of about 0.5 µL O2 an hour comes to about
+   * 0.04 µL of 1 M sucrose a day, a little more when active).
+   */
+  burnRate: number;
+  /** Crop contents of the workers poured into a new tank, as a fraction of a full crop. */
+  startCrop: number;
+  /** Switch for control experiments: when false, nestmates never share food. */
+  sharing: boolean;
+  /**
+   * Chance per second that a hungry ant begs from a nestmate it touches, per
+   * unit of difference in hunger (hunger = empty fraction of the crop).
+   */
+  begRate: number;
+  /** Below this difference in hunger, an ant does not beg. */
+  begMargin: number;
+  /**
+   * Mean length of a trophallaxis, seconds. In Lasius niger the chance of
+   * ending an exchange is the same every second, whatever the food
+   * (Buffin et al. 2011), so lengths are exponential (rough mean).
+   */
+  shareTime: number;
+  /**
+   * Flow during trophallaxis, as a fraction of the receiver's empty crop per
+   * second. Exchanges fill a set fraction of the receiver's free space
+   * whatever the donor holds (Greenwald et al. 2018, in Camponotus); with
+   * `shareTime` this gives about 40% of the free space per exchange (rough).
+   */
+  shareFlow: number;
+  /**
+   * Response thresholds for going out to forage (Bonabeau et al. 1996): each
+   * worker gets a threshold θ, log-uniform between these. Its propensity to
+   * forage is its response to the strongest stimulus, 1 / (1 + θⁿ) with n =
+   * `forageSteepness`, and it sets off at `forageRate` times that propensity
+   * times its hunger (see `scoutShare`). Low-θ workers become the foragers;
+   * high-θ workers stay in and are fed by them. M4 lets θ change with age.
+   */
+  forageThresholdMin: number;
+  forageThresholdMax: number;
+  forageSteepness: number;
+  /**
+   * In the farm, the chance per second that a starving forager (threshold
+   * far below its hunger) sets off. Hungry Camponotus foragers set off about
+   * every 4 minutes (Greenwald et al. 2018). Replaces `leaveRate`, which
+   * stays for the lab nest of the M1 experiments.
+   */
+  forageRate: number;
+  /**
+   * Scouting: a worker goes out even when fed, at this fraction of the rate
+   * it would if starving; in between, the rate rises in step with hunger.
+   * Camponotus foragers' trip rate rose linearly with how empty the colony
+   * was, and well-fed ones still made about a fifth as many trips as hungry
+   * ones (Greenwald et al. 2018), so a fed colony keeps a few scouts out.
+   */
+  scoutShare: number;
 }
 
 export const DEFAULT_ANT_PARAMS: AntParams = {
@@ -209,4 +274,18 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   restOdourGain: 0.5,
   restLength: 60,
   tubeTime: 7,
+
+  daySeconds: 3600,
+  burnRate: 0.05,
+  startCrop: 0.3,
+  sharing: true,
+  begRate: 0.5,
+  begMargin: 0.2,
+  shareTime: 30,
+  shareFlow: 0.02,
+  forageThresholdMin: 1,
+  forageThresholdMax: 20,
+  forageSteepness: 4,
+  forageRate: 1 / 240,
+  scoutShare: 0.2,
 };

@@ -37,6 +37,8 @@ export const AntState = {
   wandering: 7,
   /** Carrying a dug-out grain up to the open. */
   carrying: 8,
+  /** Mouth to mouth with a nestmate, passing food (trophallaxis). */
+  sharing: 9,
 } as const;
 
 export type AntState = (typeof AntState)[keyof typeof AntState];
@@ -79,7 +81,11 @@ export interface Ants {
   hasMemory: Uint8Array;
   /** Id of the drop the ant is drinking from, or -1. */
   foodId: Int32Array;
-  /** Sugar water in the crop, µL, and the quality of the food it came from. */
+  /**
+   * Sugar water in the crop, µL, and how strongly the last meal moves the ant
+   * to lay trail and recruit: the food's quality times the fraction of a full
+   * crop it drank there.
+   */
   crop: Float64Array;
   cropQuality: Float64Array;
   /** Total distance walked, mm; the renderer uses it to animate the legs. */
@@ -104,6 +110,12 @@ export interface Ants {
   hasDigSite: Uint8Array;
   /** Steps a carrying ant has walked out in the open; it dumps its grain only well away from the hole. */
   carryOut: Int32Array;
+  /** The state a carrying ant goes back to once it has dropped its grain (0: wandering). */
+  resume: Uint8Array;
+  /** The nestmate a sharing ant is exchanging food with, or -1. */
+  partner: Int32Array;
+  /** How hungry the ant must be to go out foraging (see `AntParams.forageThresholdMin`). */
+  forageThreshold: Float64Array;
 }
 
 export function createAnts(count: number): Ants {
@@ -134,12 +146,15 @@ export function createAnts(count: number): Ants {
     digY: new Float64Array(count),
     hasDigSite: new Uint8Array(count),
     carryOut: new Int32Array(count),
+    resume: new Uint8Array(count),
+    partner: new Int32Array(count).fill(-1),
+    forageThreshold: new Float64Array(count),
   };
 }
 
 /** What the nest holds as a whole. */
 export interface Nest {
-  /** Sugar water brought home, µL. */
+  /** Lab nest only: sugar water brought home, µL. In the farm the colony's food is in its workers' crops. */
   stores: number;
   /**
    * Lab nest only: excitement from recently returned foragers (see
@@ -178,7 +193,10 @@ export function stepAnts(ctx: AntContext): void {
   const { ants, nest, params } = ctx;
   if (ctx.nestMode === 'lab') nest.excitement *= Math.pow(0.5, DT / params.excitementHalfLife);
   else computeContacts(ctx);
+  // Every worker burns the sugar in its crop on the life clock (D6); the lab nest has no metabolism.
+  const burn = ctx.nestMode === 'farm' ? (params.burnRate / params.daySeconds) * DT : 0;
   for (let i = 0; i < ants.count; i++) {
+    if (burn > 0 && ants.crop[i]! > 0) ants.crop[i] = Math.max(0, ants.crop[i]! - burn);
     const place = ants.place[i]!;
     const state = ants.state[i]!;
     if (place === Place.tube) walkTube(ctx, i);
@@ -251,10 +269,12 @@ function feed(ctx: AntContext, i: number): void {
   const drop = food.find((d) => d.id === ants.foodId[i]);
   ants.foodId[i] = -1;
   if (drop && drop.volume > 0) {
-    const take = Math.min(params.cropLoad, drop.volume);
+    // An ant tops up what is left in its crop. It lays trail by how much it drank, so foragers from a
+    // well-fed colony, who could not unload at home, lay less (Mailleux et al. 2000, 2006).
+    const take = Math.min(Math.max(0, params.cropLoad - ants.crop[i]!), drop.volume);
     drop.volume -= take;
-    ants.crop[i] = take;
-    ants.cropQuality[i] = foodQuality(drop.concentration, params);
+    ants.crop[i]! += take;
+    ants.cropQuality[i] = foodQuality(drop.concentration, params) * (take / params.cropLoad);
     ants.memX[i] = ants.piX[i]!;
     ants.memY[i] = ants.piY[i]!;
     ants.hasMemory[i] = 1;

@@ -10,7 +10,7 @@ import { excavatedArea } from '../src/sim/farm';
 import { MATERIAL_COUNT, MATERIAL_NAMES } from '../src/sim/materials';
 import { hashHex, hashState } from '../src/sim/hash';
 import { STEPS_PER_SECOND, formatAntTime } from '../src/sim/time';
-import { createWorld, placeSugar, step } from '../src/sim/world';
+import { colonyCrop, createWorld, placeSugar, step } from '../src/sim/world';
 
 function parseArgs(argv: string[]): { seed: number; seconds: number } {
   let seed = 42;
@@ -45,6 +45,6 @@ let trail = 0;
 for (const v of world.arena.trail) trail += v;
 console.log(`nest        ${excavatedArea(world.farm)} mm² dug out`);
 console.log(`ants        ${world.ants.count - out} in the farm, ${out} out foraging`);
-console.log(`sugar       ${world.nest.stores.toFixed(1)} µL stored, ${world.food.reduce((a, d) => a + d.volume, 0).toFixed(1)} µL left in the arena`);
+console.log(`sugar       ${colonyCrop(world).toFixed(1)} µL in the workers' crops, ${world.food.reduce((a, d) => a + d.volume, 0).toFixed(1)} µL left in the arena`);
 console.log(`trail       ${trail.toFixed(0)} units on the arena floor`);
 console.log(`state hash  ${hashHex(hashState(world))}`);

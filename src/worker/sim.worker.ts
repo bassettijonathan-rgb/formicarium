@@ -5,7 +5,7 @@
  */
 import { AntState, Place } from '../sim/ants';
 import { STEPS_PER_SECOND } from '../sim/time';
-import { createWorld, placeSugar, removeFood, step, type World } from '../sim/world';
+import { colonyCrop, createWorld, placeSugar, removeFood, step, type World } from '../sim/world';
 import { ANT_STRIDE, type FromWorker, type ToWorker } from './protocol';
 
 const INTERVAL_MS = 50;
@@ -50,7 +50,7 @@ function sendAnts(w: World): void {
     data[o + 4] = ants.walked[i]!;
     data[o + 5] = ants.place[i]!;
     data[o + 6] = ants.state[i] === AntState.carrying ? ants.grain[i]! : 0;
-    full[i] = ants.crop[i]! > 0 ? 1 : 0;
+    full[i] = ants.crop[i]! > 0.5 * w.params.cropLoad ? 1 : 0;
   }
   post({ type: 'ants', step: w.step, ants: data, full }, [data.buffer, full.buffer]);
 }
@@ -70,7 +70,7 @@ function sendArena(w: World): void {
       food: w.food.map((d) => ({ ...d })),
       ants: w.ants.count,
       out,
-      stores: w.nest.stores,
+      stores: w.nestMode === 'farm' ? colonyCrop(w) : w.nest.stores,
     },
     [trail.buffer, wall.buffer],
   );
@@ -91,7 +91,7 @@ onmessage = (e: MessageEvent<ToWorker>) => {
   if (msg.type === 'start') {
     world = createWorld(msg.seed);
     // A first sugar drop, so a new tank has something to find.
-    placeSugar(world, 140, 55, 40, 1);
+    placeSugar(world, 100, 55, 40, 1);
     sendFarm(world);
     sendAnts(world);
     sendArena(world);
