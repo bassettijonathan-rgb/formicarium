@@ -42,8 +42,8 @@ describe('food flow', () => {
     'a well-fed colony sends out far fewer foragers than a starved one',
     () => {
       const fed = mean(spread({}, true).map(departures));
-      // About a quarter over 10 colonies (DESIGN.md 9.3); seeds 1-3 give 3.7, since a starved ant now sets
-      // off from its resting place deep in the nest (M3b). The literature gives no ratio to hold it to.
+      // About a third over 10 colonies since M4a (DESIGN.md 9.3; seeds 1-3 give 3.3): lean scouts keep
+      // going back to the drop. The literature gives no colony-level ratio to hold it to.
       expect(fed).toBeLessThan(mean(starved.map(departures)) / 3);
     },
     300_000,

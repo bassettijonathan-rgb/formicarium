@@ -9,7 +9,7 @@ import { excavatedArea } from './farm';
 import { doubleBridge, foodChoice, Tally } from './lab';
 import type { AntParams } from './params';
 import { STEPS_PER_SECOND } from './time';
-import { colonyCrop, createWorld, placeProtein, placeSugar, removeFood, step, type World } from './world';
+import { colonyCrop, createWorld, placeProtein, placeSugar, removeAnt, removeFood, step, type World } from './world';
 
 export interface RunOptions {
   seed: number;
@@ -238,4 +238,78 @@ export function runColonyGrowth(opts: RunOptions & { days: number; protein?: boo
     out.push({ day, ...broodCounts(world.brood), workers, reserve, crops: crop / workers / params.cropLoad });
   }
   return out;
+}
+
+export interface DivisionResult {
+  /** Foraging trips out of the farm by the whole colony, each tank day. */
+  tripsByDay: number[];
+  /** How full the workers' crops are on average at the end of each tank day, 0 to 1. */
+  cropsByDay: number[];
+  /** Per worker at the end of the settling days: trips so far and fat. */
+  tripsBefore: number[];
+  fatBefore: number[];
+  /** Workers the keeper took out (the busiest foragers), by id. */
+  removed: number[];
+  /** Per worker at the end: trips made after the removal, and fat. */
+  tripsAfter: number[];
+  fatAfter: number[];
+  /** Per worker: age in tank days at the end. */
+  age: number[];
+}
+
+/**
+ * Division of labour (DESIGN.md section 7.5): a queen, her workers and brood
+ * in the farm, fed sugar and an insect every tank day. After `days` the
+ * keeper takes out the `removeShare` of workers that foraged most, and the
+ * colony runs `afterDays` more: who takes over the foraging, and how fast?
+ * As in forager-removal experiments (Robinson et al. 2009).
+ */
+export function runDivision(
+  opts: RunOptions & { days: number; afterDays: number; removeShare: number },
+): DivisionResult {
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, queen: true, params: opts.params ?? {} });
+  const { ants, params } = world;
+  const daySteps = Math.round(params.daySeconds * STEPS_PER_SECOND);
+  const y = world.arena.entranceY;
+  const tripsByDay: number[] = [];
+  const cropsByDay: number[] = [];
+  const total = () => {
+    let n = 0;
+    for (let i = 0; i < ants.count; i++) n += ants.trips[i]!;
+    return n;
+  };
+  const day = () => {
+    world.food = [];
+    placeSugar(world, 60, y - 15, 40, 1);
+    placeProtein(world, 60, y + 15, 10);
+    const before = total();
+    for (let s = 0; s < daySteps; s++) step(world);
+    tripsByDay.push(total() - before);
+    let crop = 0;
+    let workers = 0;
+    for (let i = 0; i < ants.count; i++) {
+      if (ants.caste[i] !== Caste.worker || ants.place[i] === Place.gone) continue;
+      crop += ants.crop[i]!;
+      workers++;
+    }
+    cropsByDay.push(crop / workers / params.cropLoad);
+  };
+  for (let d = 0; d < opts.days; d++) day();
+  const workers = [...Array(ants.count).keys()].filter((i) => ants.caste[i] === Caste.worker);
+  const tripsBefore = workers.map((i) => ants.trips[i]!);
+  const fatBefore = workers.map((i) => ants.fat[i]!);
+  const busiest = [...workers].sort((a, b) => ants.trips[b]! - ants.trips[a]! || a - b);
+  const removed = busiest.slice(0, Math.round(opts.removeShare * workers.length));
+  for (const i of removed) removeAnt(world, i);
+  for (let d = 0; d < opts.afterDays; d++) day();
+  return {
+    tripsByDay,
+    cropsByDay,
+    tripsBefore,
+    fatBefore,
+    removed,
+    tripsAfter: workers.map((i, n) => ants.trips[i]! - tripsBefore[n]!),
+    fatAfter: workers.map((i) => ants.fat[i]!),
+    age: workers.map((i) => ants.age[i]!),
+  };
 }

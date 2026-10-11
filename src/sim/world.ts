@@ -19,7 +19,7 @@ export type { Farm } from './farm';
 /** Sugar water in all the workers' crops, µL: in the farm this is the colony's store. */
 export function colonyCrop(world: World): number {
   let total = 0;
-  for (let i = 0; i < world.ants.count; i++) total += world.ants.crop[i]!;
+  for (let i = 0; i < world.ants.count; i++) if (world.ants.place[i] !== Place.gone) total += world.ants.crop[i]!;
   return total;
 }
 
@@ -58,7 +58,7 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
   const params = { ...DEFAULT_ANT_PARAMS, ...options.params };
   const farm = createFarm(new Rng(seed, Purpose.soil));
   const ants = createAnts(options.ants ?? 60);
-  giveTraits(ants, params, new Rng(seed, Purpose.traits));
+  giveTraits(ants, params, seed);
   if (nestMode === 'farm') {
     const pour = new Rng(seed, Purpose.ants);
     pourAnts(ants, farm, params, pour);
@@ -83,10 +83,20 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
 /** Ants poured into the farm land within this many mm either side of the middle. */
 const POUR_SPREAD = 15;
 
-/** Each worker's own response threshold for foraging, log-uniform between the two bounds. */
-function giveTraits(ants: Ants, params: AntParams, rng: Rng): void {
+/**
+ * Each worker's own response threshold for foraging, log-uniform between the
+ * two bounds, and its age. The keeper's workers start with the fat of a
+ * settled nest worker; who becomes lean is up to what each one does.
+ */
+function giveTraits(ants: Ants, params: AntParams, seed: number): void {
+  const rng = new Rng(seed, Purpose.traits);
+  const ages = new Rng(seed, Purpose.ages);
   const ratio = params.forageThresholdMax / params.forageThresholdMin;
-  for (let i = 0; i < ants.count; i++) ants.forageThreshold[i] = params.forageThresholdMin * Math.pow(ratio, rng.float());
+  for (let i = 0; i < ants.count; i++) {
+    ants.forageThreshold[i] = params.forageThresholdMin * Math.pow(ratio, rng.float());
+    ants.age[i] = ages.range(params.startAgeMin, params.startAgeMax);
+    ants.fat[i] = params.fatRef;
+  }
 }
 
 /** The keeper tips the workers onto the soil surface, all at one spot in the middle. They come part-fed. */
@@ -174,6 +184,31 @@ export function placeProtein(world: World, x: number, y: number, volume: number)
   const id = world.nextFoodId++;
   world.food.push({ id, x, y, volume, concentration: 1, protein: 1 });
   return id;
+}
+
+/**
+ * The keeper takes a worker out of the tank (an experiment removing workers).
+ * It lets go of whatever it held, and a nestmate it was feeding goes on its way.
+ */
+export function removeAnt(world: World, i: number): void {
+  const { ants, brood } = world;
+  const j = ants.partner[i]!;
+  if (j >= 0 && ants.partner[j] === i) {
+    ants.state[j] = AntState.wandering;
+    ants.partner[j] = -1;
+    ants.timer[j] = 0;
+  }
+  ants.partner[i] = -1;
+  const k = ants.broodHeld[i]!;
+  if (k >= 0) {
+    brood.carried[k] = 0;
+    brood.x[k] = ants.x[i]!;
+    brood.y[k] = ants.y[i]!;
+    ants.broodHeld[i] = -1;
+  }
+  ants.grain[i] = 0;
+  ants.foodId[i] = -1;
+  ants.place[i] = Place.gone;
 }
 
 /** Takes a drop away (the keeper cleaning up, or an experiment removing food). */

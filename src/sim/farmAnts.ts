@@ -270,8 +270,8 @@ const needy: number[] = [];
 
 /**
  * A pupa ready to emerge, helped out by a worker: a new worker appears where
- * it lay. Callows start hungry and resting; their foraging threshold is drawn
- * like any worker's.
+ * it lay. Callows start hungry and resting, aged 0; their foraging threshold
+ * is drawn like any worker's.
  */
 function eclose(ctx: AntContext, k: number): void {
   const { ants, brood, params, rng } = ctx;
@@ -285,6 +285,8 @@ function eclose(ctx: AntContext, k: number): void {
   ants.heading[i] = rng.range(-Math.PI, Math.PI);
   const ratio = params.forageThresholdMax / params.forageThresholdMin;
   ants.forageThreshold[i] = params.forageThresholdMin * Math.pow(ratio, rng.float());
+  // A new worker comes out of its cocoon with a full fat body, built from what it was fed as a larva.
+  ants.fat[i] = 1;
   brood.stage[k] = BroodStage.none;
 }
 
@@ -427,6 +429,10 @@ function layEggs(ctx: AntContext, i: number): void {
 function setOffToForage(ctx: AntContext, i: number): boolean {
   const { ants, params, rng } = ctx;
   if (ants.caste[i] === Caste.queen) return false; // a queen never leaves the nest
+  if (ants.age[i]! < params.callowDays) return false; // nor does a callow, newly out of its cocoon
+  // A worker carrying protein for the brood takes it there before it goes out again; without this a
+  // lean forager, keen to go out, carries the insect back and forth and the larvae starve.
+  if (ants.cropProtein[i]! >= params.nurseLoad) return false;
   const hungry = hunger(ctx, i);
   // An ant already carrying protein has some for the brood: it feels the need to fetch more less.
   const need = ants.broodNeed[i]! * Math.max(0, 1 - ants.cropProtein[i]! / params.cropLoad);
@@ -435,7 +441,9 @@ function setOffToForage(ctx: AntContext, i: number): boolean {
   const own = remembers ? params.returnToFoodRate : params.forageRate;
   // How readily this worker forages at all (its threshold against the strongest stimulus, Bonabeau et
   // al. 1996), times how hungry it or the brood is: trips rise in step with hunger (Greenwald et al. 2018).
-  const propensity = 1 / (1 + Math.pow(ants.forageThreshold[i]!, params.forageSteepness));
+  // The threshold falls as the worker's fat runs down: lean workers forage (Robinson et al. 2009).
+  const threshold = (ants.forageThreshold[i]! * ants.fat[i]!) / params.fatRef;
+  const propensity = 1 / (1 + Math.pow(threshold, params.forageSteepness));
   const response = propensity * (params.scoutShare + (1 - params.scoutShare) * Math.max(hungry, need));
   const rate = (own + params.recruitRate * ants.excitement[i]!) * response;
   if (!rng.chance(rate * DT)) return false;
@@ -484,11 +492,13 @@ function walkFarm(ctx: AntContext, i: number): void {
 
   const outside = openAbove(farm, x, y) && enclosure(ctx, x, y) < INSIDE;
   // A worker with protein to give, coming home or about the nest, follows the scent of hungry larvae to
-  // the brood, as does the queen, and inside the soil, while it smells them, that call outweighs the colony odour. Out in
-  // the open it goes back in by the colony odour and its hole first.
+  // the brood, and while it smells them that call outweighs the colony odour, its hole and the pull
+  // downwards: in the open too, so that it finds brood in another part of the nest (M4a). The queen
+  // follows the brood scent only inside the soil; in the open she goes back in by the colony odour.
   let toBrood = false;
   const queen = ants.caste[i] === Caste.queen;
-  if ((inbound || state === AntState.wandering) && !outside && (queen || ants.cropProtein[i]! >= params.nurseLoad)) {
+  const carrier = !queen && ants.cropProtein[i]! >= params.nurseLoad;
+  if ((inbound || state === AntState.wandering) && (carrier || (queen && !outside))) {
     const bl = sampleField(farm, farm.broodScent, lx, ly);
     const br = sampleField(farm, farm.broodScent, rx, ry);
     if (bl + br > 1e-3) {
@@ -525,11 +535,11 @@ function walkFarm(ctx: AntContext, i: number): void {
     // Back to the face it was digging, by its path integrator.
     goal = Math.atan2(ants.digY[i]! - ants.piY[i]!, ants.digX[i]! - ants.piX[i]!);
     strength = params.goalTurn;
-  } else if (state === AntState.wandering && outside && ants.hasHole[i]) {
+  } else if (state === AntState.wandering && outside && ants.hasHole[i] && !toBrood) {
     // Out in the open with nothing to do: back to the hole it came out of, by its path integrator.
     goal = Math.atan2(ants.holeY[i]! - ants.piY[i]!, ants.holeX[i]! - ants.piX[i]!);
     strength = params.goalTurn;
-  } else if (state === AntState.wandering && ants.caste[i] === Caste.worker) {
+  } else if (state === AntState.wandering && ants.caste[i] === Caste.worker && !toBrood) {
     goal = Math.PI / 2; // nest-building ants are drawn downwards, into the soil
     strength = params.geotaxis;
   } else if (state === AntState.carrying) {

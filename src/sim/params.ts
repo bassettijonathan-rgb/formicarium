@@ -307,6 +307,36 @@ export interface AntParams {
   nurseTurn: number;
   /** How fast a queen walks, as a fraction of a worker's speed. */
   queenSpeed: number;
+
+  // --- Division of labour (M4) ---
+
+  /**
+   * Fat body (Blanchard et al. 2000; Robinson et al. 2009; Bernadou et al.
+   * 2020): a worker's foraging threshold is its own θ times its fat over
+   * `fatRef`, so lean workers forage and fat ones stay in. Fat is built at
+   * `fatGain` per tank day times how full the crop is times what is left to
+   * fill, while the ant is in the farm; it is spent at `fatBurn` per tank day,
+   * and `fatBurnOut` more while the ant is out of the farm. All rough, chosen
+   * so that a worker that stays in with a half-full crop settles at `fatRef`,
+   * four days without food take off only a quarter of that (Planckaert et al.
+   * 2019's colonies, starved four days, still sent out only a fifth of their
+   * workers), and a worker out a tenth of its time runs empty within days.
+   */
+  fatGain: number;
+  fatBurn: number;
+  fatBurnOut: number;
+  fatRef: number;
+  /** False holds every worker's fat where it starts: fixed thresholds, the control for M4. */
+  fatDrift: boolean;
+  /**
+   * Days a newly emerged (callow) worker stays in the nest, pale and soft,
+   * before it will go out (rough; callows of Camponotus and Lasius stay
+   * inside, Mersch et al. 2013).
+   */
+  callowDays: number;
+  /** Ages of the workers the keeper starts with, tank days: drawn evenly between these (rough). */
+  startAgeMin: number;
+  startAgeMax: number;
 }
 
 export const DEFAULT_ANT_PARAMS: AntParams = {
@@ -420,4 +450,13 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   needHalfLife: 600,
   nurseTurn: 4,
   queenSpeed: 0.5,
+
+  fatGain: 0.5,
+  fatBurn: 0.05,
+  fatBurnOut: 3,
+  fatRef: 0.8,
+  fatDrift: true,
+  callowDays: 7,
+  startAgeMin: 14,
+  startAgeMax: 200,
 };

@@ -55,6 +55,8 @@ export const Place = {
   arena: 0,
   farm: 1,
   tube: 2,
+  /** Taken out of the tank by the keeper (an experiment removing workers): no longer simulated. */
+  gone: 3,
 } as const;
 
 export type Place = (typeof Place)[keyof typeof Place];
@@ -154,6 +156,15 @@ export interface Ants {
   cropProtein: Float64Array;
   /** Queens: protein held in the body for making eggs, µL. */
   reserve: Float64Array;
+  /** Workers: age in tank days since the ant left its cocoon (M4). */
+  age: Float64Array;
+  /**
+   * Workers: fat body, 0 (none left) to 1 (a newly emerged worker's). Lean
+   * workers forage, fat ones stay in (see `AntParams.fatRef`, M4).
+   */
+  fat: Float64Array;
+  /** Trips out of the farm to forage since the ant was born or poured in. */
+  trips: Int32Array;
 }
 
 export function createAnts(count: number): Ants {
@@ -197,6 +208,9 @@ export function createAnts(count: number): Ants {
     caste: new Uint8Array(count),
     cropProtein: new Float64Array(count),
     reserve: new Float64Array(count),
+    age: new Float64Array(count),
+    fat: new Float64Array(count),
+    trips: new Int32Array(count),
   };
 }
 
@@ -265,12 +279,14 @@ export function stepAnts(ctx: AntContext): void {
   // Every worker burns the sugar in its crop on the life clock (D6); the lab nest has no metabolism.
   const burn = ctx.nestMode === 'farm' ? (params.burnRate / params.daySeconds) * DT : 0;
   for (let i = 0; i < ants.count; i++) {
+    const place = ants.place[i]!;
+    if (place === Place.gone) continue;
+    if (ctx.nestMode === 'farm' && ants.caste[i] === Caste.worker) age(ctx, i);
     if (burn > 0 && ants.crop[i]! > 0) {
       // Sugar is burnt first; protein only once the sugar is gone.
       ants.crop[i] = Math.max(0, ants.crop[i]! - burn);
       if (ants.cropProtein[i]! > ants.crop[i]!) ants.cropProtein[i] = ants.crop[i]!;
     }
-    const place = ants.place[i]!;
     const state = ants.state[i]!;
     if (place === Place.tube) walkTube(ctx, i);
     else if (place === Place.farm) stepFarmAnt(ctx, i);
@@ -278,6 +294,27 @@ export function stepAnts(ctx: AntContext): void {
     else if (state === AntState.feeding) feed(ctx, i);
     else walk(ctx, i);
   }
+}
+
+/**
+ * A worker ages on the life clock, and its fat body follows what it eats and
+ * what it does (Blanchard et al. 2000): it builds fat while its crop holds
+ * sugar, toward a full fat body, and spends it slowly at all times and fast
+ * while it is out foraging. So workers that forage grow lean, and lean
+ * workers forage more (`setOffToForage`); a forager that stays home well fed
+ * grows fat again, as foragers turned back into nurses do (Bernadou et al.
+ * 2020). The fat is part of the metabolism `burnRate` already charges the crop.
+ */
+function age(ctx: AntContext, i: number): void {
+  const { ants, params } = ctx;
+  const days = DT / params.daySeconds;
+  ants.age[i]! += days;
+  if (!params.fatDrift) return;
+  const fat = ants.fat[i]!;
+  const full = Math.min(1, ants.crop[i]! / params.cropLoad);
+  const out = ants.place[i] === Place.farm ? 0 : params.fatBurnOut;
+  const gain = ants.place[i] === Place.farm ? params.fatGain * full * (1 - fat) : 0;
+  ants.fat[i] = Math.min(1, Math.max(0, fat + (gain - params.fatBurn - out) * days));
 }
 
 /** True for the states that mean "heading out to forage". */
@@ -289,6 +326,7 @@ export function isOutbound(state: number): boolean {
 export function enterTube(ctx: AntContext, i: number): void {
   const { ants } = ctx;
   if (ants.place[i] === Place.farm) {
+    if (isOutbound(ants.state[i]!)) ants.trips[i]! += 1;
     // Path integration restarts at the tube mouth when the ant comes back: keep its hole relative to the mouth.
     ants.holeX[i]! -= ants.piX[i]!;
     ants.holeY[i]! -= ants.piY[i]!;
