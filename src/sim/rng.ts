@@ -65,6 +65,16 @@ export class Rng {
     if ((this.state[0]! | this.state[1]! | this.state[2]! | this.state[3]!) === 0) this.state[0] = 1;
   }
 
+  /**
+   * A generator that reads and advances `state` in place, so the world's saved
+   * state always matches the stream (used for the simulation's main stream).
+   */
+  static over(state: RngState): Rng {
+    const rng = Object.create(Rng.prototype) as Rng;
+    (rng as unknown as { state: RngState }).state = state;
+    return rng;
+  }
+
   /** Rebuilds a generator from a saved state. */
   static fromState(state: ArrayLike<number>): Rng {
     const rng = new Rng(0);

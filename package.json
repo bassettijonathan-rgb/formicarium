@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "sim": "tsx tools/headless.ts"
+    "sim": "tsx tools/headless.ts",
+    "experiment": "tsx tools/experiment.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
