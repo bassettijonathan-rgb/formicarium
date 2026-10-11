@@ -12,6 +12,8 @@ update DESIGN.md in the same pull request when a model changes.
 - `npm run typecheck`, `npm run lint`: must pass before every push
 - `npm run sim -- --seed 42 --seconds 600`: headless run in Node, prints a summary and state hash
 - `npm run experiment -- bridge|symmetric|choice|equal-choice|decay [--no-trail]`: validation experiments over 10 seeds
+- `npm run experiment -- nest --ants 40 --hours 8 --runs 3 [--no-crowd]`: nest size over time (slow: minutes per run)
+- `npm run farm -- --seed 1 --ants 60 --hours 3`: a farm colony headless, with a text picture of the nest
 - `npm run build`: production build (deployed to GitHub Pages from `main`)
 
 ## Layout

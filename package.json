@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "sim": "tsx tools/headless.ts",
-    "experiment": "tsx tools/experiment.ts"
+    "experiment": "tsx tools/experiment.ts",
+    "farm": "tsx tools/farm.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

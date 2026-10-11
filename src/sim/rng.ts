@@ -41,6 +41,8 @@ export const Purpose = {
   soil: 1,
   /** The running simulation's main stream, saved in the world. */
   sim: 2,
+  /** Placing the first workers when a tank is set up. */
+  ants: 3,
   test: 99,
 } as const;
 

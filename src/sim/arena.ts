@@ -19,6 +19,13 @@ export interface Arena {
   entranceY: number;
 }
 
+/** Any 1 mm grid that holds trail pheromone: the arena floor or the farm. */
+export interface TrailGrid {
+  width: number;
+  height: number;
+  trail: Float64Array;
+}
+
 export function createArena(): Arena {
   const width = ARENA_SIZE;
   const height = ARENA_SIZE;
@@ -42,7 +49,7 @@ export function isBlocked(arena: Arena, x: number, y: number): boolean {
  * Trail concentration at a point, interpolated between the four nearest
  * cell centres, so an antenna feels a smooth gradient.
  */
-export function sampleTrail(arena: Arena, x: number, y: number): number {
+export function sampleTrail(arena: TrailGrid, x: number, y: number): number {
   const fx = x - 0.5;
   const fy = y - 0.5;
   const x0 = Math.floor(fx);
@@ -57,13 +64,13 @@ export function sampleTrail(arena: Arena, x: number, y: number): number {
   );
 }
 
-function cellTrail(arena: Arena, cx: number, cy: number): number {
+function cellTrail(arena: TrailGrid, cx: number, cy: number): number {
   if (cx < 0 || cy < 0 || cx >= arena.width || cy >= arena.height) return 0;
   return arena.trail[cy * arena.width + cx]!;
 }
 
 /** Lays `amount` of trail at a point, split over the four nearest cells (the reverse of `sampleTrail`). */
-export function depositTrail(arena: Arena, x: number, y: number, amount: number): void {
+export function depositTrail(arena: TrailGrid, x: number, y: number, amount: number): void {
   const fx = x - 0.5;
   const fy = y - 0.5;
   const x0 = Math.floor(fx);
@@ -76,13 +83,13 @@ export function depositTrail(arena: Arena, x: number, y: number, amount: number)
   addTrail(arena, x0 + 1, y0 + 1, amount * tx * ty);
 }
 
-function addTrail(arena: Arena, cx: number, cy: number, amount: number): void {
+function addTrail(arena: TrailGrid, cx: number, cy: number, amount: number): void {
   if (cx < 0 || cy < 0 || cx >= arena.width || cy >= arena.height) return;
   arena.trail[cy * arena.width + cx]! += amount;
 }
 
 /** Evaporates trail over `seconds`, given the pheromone's half-life. */
-export function evaporateTrail(arena: Arena, seconds: number, halfLife: number): void {
+export function evaporateTrail(arena: TrailGrid, seconds: number, halfLife: number): void {
   const keep = Math.pow(0.5, seconds / halfLife);
   const trail = arena.trail;
   for (let i = 0; i < trail.length; i++) {

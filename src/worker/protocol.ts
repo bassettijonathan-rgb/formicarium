@@ -10,12 +10,16 @@ export type ToWorker =
   | { type: 'clearFood' };
 
 /** Numbers per ant in `AntsSnapshot.ants`. */
-export const ANT_STRIDE = 5;
+export const ANT_STRIDE = 7;
 
 export interface AntsSnapshot {
   type: 'ants';
   step: number;
-  /** Per ant: x, y (arena mm), heading, state, distance walked (mm). Crop is in `full`. */
+  /**
+   * Per ant: x, y (mm, in the arena or the farm), heading, state, distance
+   * walked (mm), place (`Place`), and the `Material` of a carried grain (0 = none).
+   * Crop is in `full`.
+   */
   ants: Float32Array;
   /** 1 where the ant's crop holds sugar. */
   full: Uint8Array;
@@ -30,14 +34,24 @@ export interface ArenaSnapshot {
   /** 1 where the floor is blocked (only lab setups have inner walls). */
   wall: Uint8Array;
   food: { id: number; x: number; y: number; volume: number; concentration: number }[];
-  /** All workers, those in the nest, and sugar stored (µL). */
+  /** All workers; those out foraging (in the arena or the tube); sugar stored (µL). */
   ants: number;
-  inNest: number;
+  out: number;
   stores: number;
+}
+
+export interface FarmSnapshot {
+  type: 'farm';
+  width: number;
+  height: number;
+  material: Uint8Array;
+  moisture: Uint8Array;
+  /** 1 for loose grains (spoil and fallen soil). */
+  loose: Uint8Array;
 }
 
 export type FromWorker =
   /** The farm's soil layers; sent at start and whenever the soil changes. */
-  | { type: 'farm'; width: number; height: number; material: Uint8Array; moisture: Uint8Array }
+  | FarmSnapshot
   | AntsSnapshot
   | ArenaSnapshot;

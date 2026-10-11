@@ -5,6 +5,9 @@
  */
 import { Container, Graphics, type Renderer, Sprite, Text, Texture } from 'pixi.js';
 import { ARENA_GAP, ARENA_SIZE, FARM_HEIGHT, FARM_WIDTH, TUBE } from '../sim/tank';
+import { Place } from '../sim/ants';
+import type { FarmSnapshot } from '../worker/protocol';
+import { AntLayer } from './antLayer';
 import { ArenaLayer } from './arenaLayer';
 import { paintSoil } from './soilColors';
 
@@ -15,12 +18,16 @@ export const ARENA_X = FARM_WIDTH + ARENA_GAP;
 export class TankView {
   readonly root = new Container();
   readonly arena: ArenaLayer;
+  /** Ants in the farm: on the glass, in the tunnels and in the headspace. */
+  readonly farmAnts: AntLayer;
   private readonly soil = new Sprite();
   private soilCanvas: HTMLCanvasElement | undefined;
 
   constructor(renderer: Renderer) {
     this.root.addChild(this.drawFarmFrame());
     this.root.addChild(this.soil);
+    this.farmAnts = new AntLayer(renderer, Place.farm);
+    this.root.addChild(this.farmAnts.root);
     this.root.addChild(this.drawGlass());
     this.root.addChild(this.drawArena());
     this.arena = new ArenaLayer(renderer);
@@ -41,14 +48,14 @@ export class TankView {
   };
 
   /** Repaints the soil from a snapshot of the farm's layers. */
-  setSoil(width: number, height: number, material: Uint8Array, moisture: Uint8Array): void {
+  setSoil({ width, height, material, moisture, loose }: FarmSnapshot): void {
     const canvas = (this.soilCanvas ??= document.createElement('canvas'));
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const image = ctx.createImageData(width, height);
-    paintSoil(material, moisture, image.data);
+    paintSoil(material, moisture, image.data, loose);
     ctx.putImageData(image, 0, 0);
     const texture = Texture.from(canvas, true);
     // Crisp grains when zoomed in, instead of a blur.

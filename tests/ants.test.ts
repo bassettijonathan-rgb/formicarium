@@ -11,7 +11,7 @@ const MINUTE = 60 * STEPS_PER_SECOND;
 describe('ants', () => {
   it('are deterministic', () => {
     expectDeterministic((seed) => {
-      const w = createWorld(seed, { ants: 30 });
+      const w = createWorld(seed, { ants: 30, nest: 'lab' });
       placeSugar(w, 120, 80, 50, 1);
       for (let i = 0; i < 2 * MINUTE; i++) step(w);
       return w;
@@ -19,14 +19,14 @@ describe('ants', () => {
   });
 
   it('start in the nest and come out over time', () => {
-    const w = createWorld(1, { ants: 40, params: { leaveRate: 1 / 60 } });
+    const w = createWorld(1, { ants: 40, nest: 'lab', params: { leaveRate: 1 / 60 } });
     expect([...w.ants.state].every((s) => s === AntState.inNest)).toBe(true);
     for (let i = 0; i < 2 * MINUTE; i++) step(w);
     expect([...w.ants.state].filter((s) => s !== AntState.inNest).length).toBeGreaterThan(10);
   });
 
   it('never walk into walls', () => {
-    const w = createWorld(2, { ants: 40, params: { leaveRate: 1 / 30 } });
+    const w = createWorld(2, { ants: 40, nest: 'lab', params: { leaveRate: 1 / 30 } });
     doubleBridge(w, 2);
     for (let i = 0; i < 5 * MINUTE; i++) {
       step(w);
@@ -39,7 +39,7 @@ describe('ants', () => {
 
   it('find their way home by path integration after exploring', () => {
     // No food: every ant explores, gives up and must get home on its own.
-    const w = createWorld(3, { ants: 40, params: { leaveRate: 1 / 60, exploreTime: 60 } });
+    const w = createWorld(3, { ants: 40, nest: 'lab', params: { leaveRate: 1 / 60, exploreTime: 60 } });
     const homingSince = new Int32Array(w.ants.count).fill(-1);
     let longest = 0;
     let homeComings = 0;
@@ -64,13 +64,13 @@ describe('ants', () => {
   });
 
   it('lay no trail unless they found food', () => {
-    const w = createWorld(4, { ants: 40, params: { leaveRate: 1 / 30 } });
+    const w = createWorld(4, { ants: 40, nest: 'lab', params: { leaveRate: 1 / 30 } });
     for (let i = 0; i < 5 * MINUTE; i++) step(w);
     expect(w.arena.trail.every((v) => v === 0)).toBe(true);
   });
 
   it('carry sugar from a drop to the nest, and lay trail on the way back', () => {
-    const w = createWorld(5, { ants: 40, params: { leaveRate: 1 / 30 } });
+    const w = createWorld(5, { ants: 40, nest: 'lab', params: { leaveRate: 1 / 30 } });
     placeSugar(w, 60, 100, 500, 1);
     for (let i = 0; i < 15 * MINUTE; i++) step(w);
     const drop = w.food[0]!;
@@ -84,7 +84,7 @@ describe('ants', () => {
   });
 
   it('remove a drop once it is used up', () => {
-    const w = createWorld(6, { ants: 40, params: { leaveRate: 1 / 20 } });
+    const w = createWorld(6, { ants: 40, nest: 'lab', params: { leaveRate: 1 / 20 } });
     placeSugar(w, 40, 100, 0.5, 1);
     for (let i = 0; i < 15 * MINUTE; i++) step(w);
     expect(w.food.length).toBe(0);

@@ -1,30 +1,19 @@
 /**
  * The world: everything the simulation knows, as plain data (DESIGN.md section 10).
  *
- * M1: the farm's soil (not yet dug), and workers foraging in the arena from a
- * nest that is, for now, a single chamber behind the tube.
+ * M2: the colony lives in the sand farm, digs its nest, and forages in the
+ * arena through the tube. Lab experiments use a simple lab nest instead.
  */
-import { type Ants, type Nest, createAnts, stepAnts } from './ants';
+import { type Ants, AntState, type Nest, type NestMode, Place, createAnts, stepAnts } from './ants';
 import { type Arena, createArena, evaporateTrail } from './arena';
+import { type Farm, createFarm, updateField, updateFresh } from './farm';
 import type { FoodDrop } from './food';
-import { Material } from './materials';
-import { valueNoise2D } from './noise';
 import { type AntParams, DEFAULT_ANT_PARAMS } from './params';
 import { Purpose, Rng } from './rng';
-import { FARM_HEIGHT, FARM_WIDTH, HEADSPACE } from './tank';
+import { stepSoil } from './soil';
 import { STEPS_PER_SECOND } from './time';
 
-/** The farm's soil grid (side view), one cell per mm, row-major from the top-left. */
-export interface Farm {
-  width: number;
-  height: number;
-  /** A `Material` per cell. */
-  material: Uint8Array;
-  /** Water content per cell, 0 (dust dry) to 255 (saturated). */
-  moisture: Uint8Array;
-  /** Depth of the soil surface below the lid, per column, in mm. */
-  surface: Uint16Array;
-}
+export type { Farm } from './farm';
 
 export interface World {
   seed: number;
@@ -36,6 +25,7 @@ export interface World {
   arena: Arena;
   ants: Ants;
   nest: Nest;
+  nestMode: NestMode;
   /** Sugar drops in the arena, in the order they were placed. */
   food: FoodDrop[];
   nextFoodId: number;
@@ -45,42 +35,83 @@ export interface World {
 export interface WorldOptions {
   /** Number of workers (default 60). */
   ants?: number;
+  /** Where the colony lives: the sand farm (default) or a lab nest behind the arena entrance. */
+  nest?: NestMode;
   /** Changes to the default ant parameters, e.g. `{ trailLaying: false }` for a control. */
   params?: Partial<AntParams>;
 }
 
 export function createWorld(seed: number, options: WorldOptions = {}): World {
+  const nestMode = options.nest ?? 'farm';
+  const farm = createFarm(new Rng(seed, Purpose.soil));
+  const ants = createAnts(options.ants ?? 60);
+  if (nestMode === 'farm') pourAnts(ants, farm, new Rng(seed, Purpose.ants));
   return {
     seed,
     step: 0,
     rng: new Rng(seed, Purpose.sim).state,
-    farm: createFarm(new Rng(seed, Purpose.soil)),
+    farm,
     arena: createArena(),
-    ants: createAnts(options.ants ?? 60),
+    ants,
     nest: { stores: 0, excitement: 0 },
+    nestMode,
     food: [],
     nextFoodId: 1,
     params: { ...DEFAULT_ANT_PARAMS, ...options.params },
   };
 }
 
-/** Trail evaporates once per second of ant time; finer steps would change nothing visible. */
+/** Ants poured into the farm land within this many mm either side of the middle. */
+const POUR_SPREAD = 15;
+
+/** The keeper tips the workers onto the soil surface, all at one spot in the middle. */
+function pourAnts(ants: Ants, farm: Farm, rng: Rng): void {
+  for (let i = 0; i < ants.count; i++) {
+    const x = rng.range(farm.width / 2 - POUR_SPREAD, farm.width / 2 + POUR_SPREAD);
+    ants.place[i] = Place.farm;
+    ants.state[i] = AntState.wandering;
+    ants.x[i] = x;
+    ants.y[i] = farm.surface[Math.floor(x)]! - 1.5;
+    ants.heading[i] = rng.range(-Math.PI, Math.PI);
+  }
+}
+
+/** Arena trail evaporates once per second of ant time; finer steps would change nothing visible. */
 const EVAPORATE_EVERY = STEPS_PER_SECOND;
+/** The farm's chemical fields update every few seconds; they change slowly. */
+const FARM_FIELDS_EVERY = 2 * STEPS_PER_SECOND;
+const FARM_TRAIL_EVERY = 5 * STEPS_PER_SECOND;
 
 /** Advances the world by one step (1/20 s of ant time). */
 export function step(world: World): void {
+  const rng = Rng.over(world.rng);
   stepAnts({
     ants: world.ants,
     arena: world.arena,
+    farm: world.farm,
     food: world.food,
     nest: world.nest,
+    nestMode: world.nestMode,
     params: world.params,
-    rng: Rng.over(world.rng),
+    rng,
   });
   if (world.food.some((d) => d.volume <= 0)) world.food = world.food.filter((d) => d.volume > 0);
   world.step += 1;
   if (world.step % EVAPORATE_EVERY === 0) {
     evaporateTrail(world.arena, EVAPORATE_EVERY / STEPS_PER_SECOND, world.params.trailHalfLife);
+  }
+  if (world.nestMode === 'farm') {
+    const { farm, params } = world;
+    stepSoil(farm, rng);
+    if (world.step % FARM_FIELDS_EVERY === 0) {
+      const seconds = FARM_FIELDS_EVERY / STEPS_PER_SECOND;
+      updateField(farm, farm.odour, seconds, params.odourHalfLife, params.odourDiffusion);
+      updateField(farm, farm.digMark, seconds, params.digMarkHalfLife, 0);
+      updateFresh(farm);
+    }
+    if (world.step % FARM_TRAIL_EVERY === 0) {
+      evaporateTrail(farm, FARM_TRAIL_EVERY / STEPS_PER_SECOND, params.trailHalfLife);
+    }
   }
 }
 
@@ -94,42 +125,4 @@ export function placeSugar(world: World, x: number, y: number, volume: number, c
 /** Takes a drop away (the keeper cleaning up, or an experiment removing food). */
 export function removeFood(world: World, id: number): void {
   world.food = world.food.filter((d) => d.id !== id);
-}
-
-/**
- * Fills the farm the way a keeper would: a damp sand-loam mix with patches
- * of sandier and clay-rich soil, a slightly uneven surface, and water that
- * has drained toward the bottom.
- */
-function createFarm(rng: Rng): Farm {
-  const width = FARM_WIDTH;
-  const height = FARM_HEIGHT;
-  const material = new Uint8Array(width * height);
-  const moisture = new Uint8Array(width * height);
-  const surface = new Uint16Array(width);
-
-  // Surface: a few mm of unevenness from pouring and settling.
-  const surfaceNoise = valueNoise2D(rng, width, 1, 40);
-  for (let x = 0; x < width; x++) surface[x] = Math.round(HEADSPACE + (surfaceNoise(x, 0) - 0.5) * 6);
-
-  const patches = valueNoise2D(rng, width, height, 45);
-  const grain = valueNoise2D(rng, width, height, 5);
-  const wetness = valueNoise2D(rng, width, height, 30);
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = y * width + x;
-      if (y < surface[x]!) continue; // air under the lid
-      const v = 0.6 * patches(x, y) + 0.4 * grain(x, y) + 0.12 * (rng.float() - 0.5);
-      const m: Material = v < 0.33 ? Material.sand : v > 0.67 ? Material.clay : Material.loam;
-      material[i] = m;
-
-      // Water drains down, and clay holds more of it than sand.
-      const depth = (y - surface[x]!) / (height - surface[x]!);
-      const retention = m === Material.clay ? 0.12 : m === Material.sand ? -0.12 : 0;
-      const w = 0.3 + 0.35 * depth + retention + 0.15 * (wetness(x, y) - 0.5);
-      moisture[i] = Math.round(255 * Math.min(1, Math.max(0, w)));
-    }
-  }
-  return { width, height, material, moisture, surface };
 }

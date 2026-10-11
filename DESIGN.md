@@ -87,12 +87,20 @@ Each row has a recommendation. Approving the doc as written accepts all of them.
 
 ### 3.2 Soil physics
 
-Falling-sand style cellular automaton, but slow and cohesive: a loose grain
-with no support falls; a packed grain only falls if its cohesion (from
-material and moisture) is beaten by the unsupported span above it. Damp clay
-holds a wide ceiling, dry sand caves in. Ants pack the walls they walk on, so
-used tunnels get sturdier. This is why ant-farm keepers pick damp sand-loam
-mixes, and the sim should show it.
+Falling-sand style cellular automaton, but slow and cohesive (`src/sim/soil.ts`):
+
+- A **loose** grain (dropped by an ant, or fallen) with air below falls. Dry
+  grains slide down a 45° slope. Damp grains stick to any grain beside them,
+  and a free one only topples off a drop of two cells, so damp spoil stands in
+  steep heaps and does not pour into tunnel mouths.
+- A **packed** grain with air below is ceiling. It holds while the gap under
+  it is no wider than its material can span: about 8 cm for damp clay, 4 cm
+  for damp loam, 1 cm for damp sand, a quarter of that when dry. The spans are
+  generous because in a thin farm damp soil also clings to the glass.
+
+Dry sand caves in, damp clay holds wide chambers. This is why ant-farm keepers
+pick damp sand-loam mixes, and the sim shows it. (Ants packing the walls they
+walk on, so used tunnels get sturdier, is left for later.)
 
 ### 3.3 The arena and the tube
 
@@ -114,6 +122,19 @@ with another ant gives its colony odour, task state and crop fullness.
 Movement is a **correlated random walk** (Bovet & Benhamou 1988) biased by
 pheromone gradients, path integration, temperature and walls. Ants climb glass
 walls and soil faces; they can't cross water.
+
+In the farm an ant also feels (M2):
+
+- **Soil around it:** which way its antennae touch soil, and how hemmed in it
+  is (firm soil within 3 mm in 8 directions). Loose spoil does not count as
+  shelter.
+- **Open air:** whether there is nothing but air straight above it, and,
+  underground, which way the air is fresher. Real ants find the way out by
+  the draught and the CO2 that builds up deep in a nest; the sim stands in for
+  that with a field that is 1 in the open and loses 15% per 2 mm along the
+  tunnels, rebuilt from the soil every 2 s.
+- **Nestmates it touches** (within 3 mm), averaged over the last 30 s: how
+  crowded it has been lately.
 
 ### 4.2 Internal state
 
@@ -147,6 +168,16 @@ contacts between nestmates in a small chamber (Lasius niger recruits by
 those contacts plus the trail). It is the only colony-level number in the
 model and goes away when the nest is simulated.
 
+**M2: the nest in the farm.** In the farm there is no nest box: the nest is
+wherever the colony gathers. A wandering ant settles to rest where it is
+hemmed in by soil and where colony odour is strong, and a resting ant leaves
+colony odour, so resting spots attract more resters and a nest forms where
+the colony dug. An ant coming in from the tube is home when the odour is
+strong or it touches a resting nestmate. Recruitment works by contact: a
+forager back with food excites the nestmates it touches for 30 s, and
+excited ants set off for the tube. The lab experiments of section 9.1 keep
+the M1 nest box.
+
 Each ant logs short events (born, first foraging trip, found food, died) so
 you can open any ant and read its life.
 
@@ -173,21 +204,31 @@ recognised as enemy.
 
 ## 6. Digging and nest architecture
 
-Rules per ant (after Buhl et al. 2004 and Khuong et al. 2016):
+Rules per ant (after Buhl et al. 2004, Rasse & Deneubourg 2001 and Khuong et
+al. 2016), in `src/sim/farmAnts.ts`:
 
-1. A digging ant picks up a grain with a probability that rises with
-   building pheromone and with the number of ants nearby digging (density
-   amplifies digging), and falls with depth and packing.
-2. It carries the grain up (anti-gravity) and drops it with a probability that
-   rises where pellets already lie, which lays building pheromone there.
-3. Total digging slows as the nest's volume per ant grows (Rasse & Deneubourg
-   2001): bigger colony, bigger nest, with no target size coded.
+1. **Where to dig.** A wandering ant may pick up the grain its antennae touch
+   straight ahead, or, where the passage is narrower than its body, the wall
+   beside it, so tunnels end up about a body's width wide. The chance rises
+   steeply with how hemmed in it is (a dead end: soil on most sides; a flat
+   open face is mostly left alone), with fresh dig marks nearby (digging
+   attracts digging, the short-lived building cue), and with how often it has
+   met nestmates lately (crowding). Debris that fell into a tunnel is cleared
+   wherever it lies.
+2. **Carrying out.** The digger turns round and carries the grain up the
+   fresh-air gradient until it is out in the open, walks at least 2 cm along
+   the surface away from its hole, then drops the grain, more readily next to
+   other spoil, so heaps grow. Ants never drop spoil by the tube's mouth and
+   clear any that blocks it.
+3. **Site fidelity.** After dropping its grain, a digger walks back to the
+   face it was digging by its path integrator (for up to a minute), as real
+   diggers return to the same face.
+4. **Regulation.** Digging needs crowding, so a colony digs fast while
+   cramped and slows as the nest gets roomier: no target size is coded.
 
-Expected emergent result: branching tunnels, chambers where digging clusters,
-spoil heaps at the surface, and nest volume growing with colony size. None
-of these shapes are coded.
-
----
+Emergent result (section 9.2): branching tunnels from a few entrances, small
+chambers where tunnels meet, spoil heaps on the surface with the entrances
+kept open, and nests that grow with colony size.
 
 ## 7. The colony's life
 
@@ -273,6 +314,28 @@ The occasional lock-in on the long branch is real ant behaviour too: when the
 long branch happens to be found first, trail reinforcement can keep a colony
 there.
 
+### 9.2 Results so far (M2, 3 farms per condition, 8 h of ant time each)
+
+`npm run experiment -- nest --ants N --hours 8 --runs 3 [--no-crowd]`;
+`tests/science/nestVolume.test.ts` checks a shorter version. Area is what the
+colony dug out below the original surface, in mm² (the farm is a 2D slice).
+
+| Colony | Nest after 8 h, crowding on | Per ant | Control: crowding off | Note |
+|---|---|---|---|---|
+| 20 workers | 1,640-2,190 (mean 1,920); by hours 6-8 digging is down to about a third of its rate in hours 2-4 | 96 | 5,050-5,360, still digging fast | crowding holds the nest to about a third |
+| 40 workers | 4,860-6,370 (mean 5,550) | 139 | 6,150-8,130 (mean 7,410) | |
+| 80 workers | 7,970-8,300 (mean 8,140) | 102 | 7,550-8,830 (mean 8,380) | the farm is full: spoil fills the headspace, on and off alike |
+
+What holds: tunnels, side branches and small chambers emerge with no shape
+coded; spoil ends up in heaps on the surface with the entrances kept open;
+a bigger colony digs a bigger nest, and per worker the nests are within about
+±20% of each other (96-139 mm²); without the crowding cue a small colony
+digs on and on. What is weaker than in Rasse & Deneubourg 2001: the nests
+are still growing slowly at 8 h rather than flat, and an 80-worker colony is
+stopped by the size of the farm, not by its own regulation. Groups of 5 dig
+much less per ant than groups of 40 (`tests/farmAnts.test.ts`), the social
+facilitation Chen 1937 described.
+
 ---
 
 ## 10. Architecture
@@ -319,6 +382,7 @@ parameters, I stop and report before changing the model.
 - Bonabeau, Theraulaz & Deneubourg 1996. Quantitative study of the fixed threshold model for the regulation of division of labour in insect societies. Proc. R. Soc. B.
 - Bovet & Benhamou 1988. Spatial analysis of animals' movements using a correlated random walk model. J. Theor. Biol.
 - Buhl et al. 2004. Self-organized digging activity in ant colonies. Behav. Ecol. Sociobiol.
+- Chen 1937. Social modification of the activity of ants in nest-building. Physiol. Zool.
 - Charbonneau & Dornhaus 2015. When doing nothing is something. J. Bioecon.
 - Franks & Sendova-Franks 1992. Brood sorting by ants. Behav. Ecol. Sociobiol.
 - Goss, Aron, Deneubourg & Pasteels 1989. Self-organized shortcuts in the Argentine ant. Naturwissenschaften.

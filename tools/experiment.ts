@@ -3,15 +3,21 @@
  *
  *   npm run experiment -- bridge [--runs 10] [--no-trail]
  *   npm run experiment -- symmetric | choice | equal-choice | decay
+ *   npm run experiment -- nest [--ants 40] [--hours 12] [--no-crowd]
  */
-import { runDoubleBridge, runFoodChoice, runTrailDecay } from '../src/sim/experiments';
+import { runDoubleBridge, runFoodChoice, runNestVolume, runTrailDecay } from '../src/sim/experiments';
 
 const [name, ...rest] = process.argv.slice(2);
 let runs = 10;
-const params: { trailLaying?: boolean } = {};
+let ants = 40;
+let hours = 12;
+const params: { trailLaying?: boolean; crowdControl?: boolean } = {};
 for (let i = 0; i < rest.length; i++) {
   if (rest[i] === '--runs') runs = Number(rest[++i]);
+  else if (rest[i] === '--ants') ants = Number(rest[++i]);
+  else if (rest[i] === '--hours') hours = Number(rest[++i]);
   else if (rest[i] === '--no-trail') params.trailLaying = false;
+  else if (rest[i] === '--no-crowd') params.crowdControl = false;
   else throw new Error(`Unknown argument: ${rest[i]}`);
 }
 
@@ -30,7 +36,10 @@ for (let seed = 1; seed <= runs; seed++) {
       `seed ${seed}: ${r.departuresWithFood.toFixed(1)} departures/min with food, ${r.departuresAfter.toFixed(1)}/min after; ` +
         `trail ${r.trailAtRemoval.toFixed(0)} -> ${r.trailAfter.toFixed(0)}`,
     );
+  } else if (name === 'nest') {
+    const r = runNestVolume({ seed, ants, hours, params });
+    console.log(`seed ${seed}: dug out by hour (mm²) ${r.areaByHour.join(' ')}`);
   } else {
-    throw new Error('Experiment must be bridge, symmetric, choice, equal-choice or decay');
+    throw new Error('Experiment must be bridge, symmetric, choice, equal-choice, decay or nest');
   }
 }

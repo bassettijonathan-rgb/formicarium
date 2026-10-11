@@ -34,19 +34,26 @@ async function start(): Promise<void> {
   const send = (msg: ToWorker) => worker.postMessage(msg);
   worker.onmessage = (e: MessageEvent<FromWorker>) => {
     const msg = e.data;
-    if (msg.type === 'farm') view.setSoil(msg.width, msg.height, msg.material, msg.moisture);
+    if (msg.type === 'farm') view.setSoil(msg);
     else if (msg.type === 'ants') {
-      view.arena.setAnts(msg, performance.now());
+      const now = performance.now();
+      view.arena.ants.setAnts(msg, now);
+      view.farmAnts.setAnts(msg, now);
       status.textContent = `Tank ${seed} · ant time ${formatAntTime(msg.step)}`;
     } else if (msg.type === 'arena') {
       view.arena.setArena(msg);
-      const out = msg.ants - msg.inNest;
-      counts.textContent = `${out} ants out, ${msg.inNest} in the nest · ${msg.stores.toFixed(1)} µL of sugar water stored`;
+      counts.textContent =
+        `${msg.ants - msg.out} ants in the farm, ${msg.out} out foraging · ` +
+        `${msg.stores.toFixed(1)} µL of sugar water stored`;
     }
   };
   send({ type: 'start', seed });
 
-  app.ticker.add(() => view.arena.update(performance.now()));
+  app.ticker.add(() => {
+    const now = performance.now();
+    view.arena.ants.update(now);
+    view.farmAnts.update(now);
+  });
 
   // Feeding: tap the arena floor to put a drop there.
   let concentration = 1;

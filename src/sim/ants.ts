@@ -1,13 +1,17 @@
 /**
- * Worker ants in the arena (DESIGN.md section 4).
+ * Worker ants (DESIGN.md section 4): their data, and what they do in the
+ * arena and the tube. Life in the farm is in farmAnts.ts.
  *
  * Each ant decides from what it can sense where it stands: trail pheromone at
  * its two antennae, nest scent near the entrance, a sugar drop within a few
- * mm, walls it bumps into, and its own path integrator (a noisy running sum
- * of how far it walked in which direction since leaving the nest). Nothing
- * here reads where other ants are or where food is beyond that range.
+ * mm, walls it bumps into, nestmates it touches, and its own path integrator
+ * (a noisy running sum of how far it walked in which direction since it last
+ * passed the tube). Nothing here reads where other ants are beyond touching
+ * range, or where food is beyond smelling range.
  */
 import { type Arena, depositTrail, isBlocked, sampleTrail } from './arena';
+import type { Farm } from './farm';
+import { computeContacts, stepFarmAnt } from './farmAnts';
 import { type FoodDrop, dropRadius, foodQuality } from './food';
 import type { AntParams } from './params';
 import type { Rng } from './rng';
@@ -27,22 +31,46 @@ export const AntState = {
   homing: 4,
   /** Heading back to food it found before, by path integration. */
   toFood: 5,
+  /** Resting in the farm, leaving colony odour where it lies. */
+  resting: 6,
+  /** Walking about in the farm: may dig, rest, or set off to forage. */
+  wandering: 7,
+  /** Carrying a dug-out grain up to the open. */
+  carrying: 8,
 } as const;
 
 export type AntState = (typeof AntState)[keyof typeof AntState];
+
+/**
+ * Where an ant is. Stored in saves, so append-only. In the farm, the states
+ * exploring and toFood mean "on the way out to the tube", returning and
+ * homing mean "on the way in from it".
+ */
+export const Place = {
+  arena: 0,
+  farm: 1,
+  tube: 2,
+} as const;
+
+export type Place = (typeof Place)[keyof typeof Place];
 
 /** All workers, as parallel arrays indexed by ant id. */
 export interface Ants {
   count: number;
   state: Uint8Array;
-  /** Position in the arena, mm. */
+  /** A `Place`. */
+  place: Uint8Array;
+  /** Position in the arena or the farm (see `place`), mm. */
   x: Float64Array;
   y: Float64Array;
   /** Direction of travel, radians (0 = +x, π/2 = +y). */
   heading: Float64Array;
-  /** Steps left of the current rest or meal. */
+  /** Steps left of the current rest, meal or tube walk; in the farm, steps spent carrying or coming in. */
   timer: Int32Array;
-  /** Where the ant believes it is relative to the nest entrance (path integration), mm. */
+  /**
+   * Where the ant believes it is (path integration), mm: in the arena,
+   * relative to the entrance; in the farm, relative to the tube's mouth.
+   */
   piX: Float64Array;
   piY: Float64Array;
   /** Remembered food position in path-integration coordinates, if `hasMemory`. */
@@ -56,12 +84,33 @@ export interface Ants {
   cropQuality: Float64Array;
   /** Total distance walked, mm; the renderer uses it to animate the legs. */
   walked: Float64Array;
+  /** The `Material` of the grain in the ant's mandibles (0 = none) and its moisture. */
+  grain: Uint8Array;
+  grainMoisture: Uint8Array;
+  /** How often the ant has met nestmates lately, contacts per second. */
+  encounters: Float64Array;
+  /** Urge to go foraging, raised by meeting foragers just back with food. */
+  excitement: Float64Array;
+  /** Steps left during which this forager, just back with food, excites the ants it meets. */
+  recruiting: Int32Array;
+  /** 1 once the ant has come in through the tube, so its farm path integrator points to the tube. */
+  knowsTube: Uint8Array;
+  /**
+   * Where the ant last dug, in path-integration coordinates, if `hasDigSite`:
+   * after dumping its grain a digger walks back to the same face (site fidelity).
+   */
+  digX: Float64Array;
+  digY: Float64Array;
+  hasDigSite: Uint8Array;
+  /** Steps a carrying ant has walked out in the open; it dumps its grain only well away from the hole. */
+  carryOut: Int32Array;
 }
 
 export function createAnts(count: number): Ants {
   return {
     count,
     state: new Uint8Array(count),
+    place: new Uint8Array(count),
     x: new Float64Array(count),
     y: new Float64Array(count),
     heading: new Float64Array(count),
@@ -75,29 +124,51 @@ export function createAnts(count: number): Ants {
     crop: new Float64Array(count),
     cropQuality: new Float64Array(count),
     walked: new Float64Array(count),
+    grain: new Uint8Array(count),
+    grainMoisture: new Uint8Array(count),
+    encounters: new Float64Array(count),
+    excitement: new Float64Array(count),
+    recruiting: new Int32Array(count),
+    knowsTube: new Uint8Array(count),
+    digX: new Float64Array(count),
+    digY: new Float64Array(count),
+    hasDigSite: new Uint8Array(count),
+    carryOut: new Int32Array(count),
   };
 }
 
-/** What the nest knows as a whole. A stand-in until M3 models the nest's inside. */
+/** What the nest holds as a whole. */
 export interface Nest {
   /** Sugar water brought home, µL. */
   stores: number;
-  /** Excitement from recently returned foragers (see `AntParams.recruitRate`). */
+  /**
+   * Lab nest only: excitement from recently returned foragers (see
+   * `AntParams.recruitRate`). In the farm each ant has its own.
+   */
   excitement: number;
 }
+
+/**
+ * "lab": the nest is a small box behind the arena's entrance, as in the lab
+ * experiments of section 9; ants inside are not simulated one by one.
+ * "farm": the colony lives in the sand farm and reaches the arena by the tube.
+ */
+export type NestMode = 'lab' | 'farm';
 
 /** Distance from the entrance at which a returning ant counts as home, mm. */
 const HOME_RADIUS = 2.5;
 /** How close an ant must get to a remembered food spot before it gives up on it, mm. */
 const MEMORY_RADIUS = 4;
 
-const DT = 1 / STEPS_PER_SECOND;
+export const DT = 1 / STEPS_PER_SECOND;
 
 export interface AntContext {
   ants: Ants;
   arena: Arena;
+  farm: Farm;
   food: FoodDrop[];
   nest: Nest;
+  nestMode: NestMode;
   params: AntParams;
   rng: Rng;
 }
@@ -105,12 +176,52 @@ export interface AntContext {
 /** Advances every ant by one step, in id order. */
 export function stepAnts(ctx: AntContext): void {
   const { ants, nest, params } = ctx;
-  nest.excitement *= Math.pow(0.5, DT / params.excitementHalfLife);
+  if (ctx.nestMode === 'lab') nest.excitement *= Math.pow(0.5, DT / params.excitementHalfLife);
+  else computeContacts(ctx);
   for (let i = 0; i < ants.count; i++) {
+    const place = ants.place[i]!;
     const state = ants.state[i]!;
-    if (state === AntState.inNest) restInNest(ctx, i);
+    if (place === Place.tube) walkTube(ctx, i);
+    else if (place === Place.farm) stepFarmAnt(ctx, i);
+    else if (state === AntState.inNest) restInNest(ctx, i);
     else if (state === AntState.feeding) feed(ctx, i);
     else walk(ctx, i);
+  }
+}
+
+/** True for the states that mean "heading out to forage". */
+export function isOutbound(state: number): boolean {
+  return state === AntState.exploring || state === AntState.toFood;
+}
+
+/** Starts walking through the tube; `outbound` ants come out in the arena, the others in the farm. */
+export function enterTube(ctx: AntContext, i: number): void {
+  ctx.ants.place[i] = Place.tube;
+  ctx.ants.timer[i] = Math.round(ctx.params.tubeTime * STEPS_PER_SECOND);
+}
+
+function walkTube(ctx: AntContext, i: number): void {
+  const { ants, arena, farm, rng } = ctx;
+  if (ants.timer[i]! > 0) {
+    ants.timer[i]!--;
+    ants.walked[i]! += ctx.params.speed * DT;
+    return;
+  }
+  // Out of the tube: path integration starts again from its mouth, the one landmark both ends share.
+  ants.piX[i] = 0;
+  ants.piY[i] = 0;
+  if (isOutbound(ants.state[i]!)) {
+    ants.place[i] = Place.arena;
+    ants.x[i] = arena.entranceX;
+    ants.y[i] = arena.entranceY;
+    ants.heading[i] = rng.range(-1, 1);
+  } else {
+    ants.place[i] = Place.farm;
+    ants.x[i] = farm.tubeX;
+    ants.y[i] = farm.tubeY;
+    ants.heading[i] = Math.PI + rng.range(-1, 1);
+    ants.knowsTube[i] = 1;
+    ants.timer[i] = 0;
   }
 }
 
@@ -228,41 +339,11 @@ function walk(ctx: AntContext, i: number): void {
 
   heading = wrapAngle(heading + turn);
 
-  // 5. Move, sliding along walls when blocked.
+  // 5. Move, sliding along walls when blocked, and update the path integrator.
   const stepLength = params.speed * DT;
-  let nx = x + stepLength * Math.cos(heading);
-  let ny = y + stepLength * Math.sin(heading);
-  if (isBlocked(arena, nx, ny)) {
-    const side = rng.chance(0.5) ? 1 : -1;
-    let moved = false;
-    for (let k = 1; k <= 8 && !moved; k++) {
-      for (const sign of [side, -side]) {
-        const h = heading + sign * k * 0.35;
-        const tx = x + stepLength * Math.cos(h);
-        const ty = y + stepLength * Math.sin(h);
-        if (!isBlocked(arena, tx, ty)) {
-          heading = wrapAngle(h);
-          nx = tx;
-          ny = ty;
-          moved = true;
-          break;
-        }
-      }
-    }
-    if (!moved) {
-      ants.heading[i] = wrapAngle(heading + Math.PI);
-      return;
-    }
-  }
-  ants.x[i] = nx;
-  ants.y[i] = ny;
-  ants.heading[i] = heading;
-  ants.walked[i]! += stepLength;
-
-  // 6. Path integration: the ant adds up the steps it believes it took.
-  const believed = heading + rng.normal(0, params.piNoise);
-  ants.piX[i]! += stepLength * Math.cos(believed);
-  ants.piY[i]! += stepLength * Math.sin(believed);
+  if (!moveAnt(ctx, i, heading, stepLength, (px, py) => isBlocked(arena, px, py))) return;
+  const nx = ants.x[i]!;
+  const ny = ants.y[i]!;
 
   // 7. Lay trail on the way home from food, more for better food.
   const now = ants.state[i]!;
@@ -272,7 +353,10 @@ function walk(ctx: AntContext, i: number): void {
 
   // 8. Arrivals and decisions.
   if (now === AntState.returning || now === AntState.homing) {
-    if (Math.hypot(nx - arena.entranceX, ny - arena.entranceY) < HOME_RADIUS) enterNest(ctx, i);
+    if (Math.hypot(nx - arena.entranceX, ny - arena.entranceY) < HOME_RADIUS) {
+      if (ctx.nestMode === 'lab') enterNest(ctx, i);
+      else enterTube(ctx, i);
+    }
   } else {
     const drop = nearestDrop(ctx, nx, ny, 1);
     if (drop) {
@@ -296,6 +380,58 @@ function enterNest(ctx: AntContext, i: number): void {
   ants.timer[i] = Math.round(params.restTime * STEPS_PER_SECOND);
 }
 
+/**
+ * Steps the ant forward along `heading`; if the way is blocked, tries
+ * turning further and further to either side (it slides along the wall), and
+ * if every way is blocked it turns round and stays put. Updates position,
+ * heading, distance walked and the path integrator. Returns true if it moved.
+ */
+export function moveAnt(
+  ctx: AntContext,
+  i: number,
+  heading: number,
+  stepLength: number,
+  blocked: (x: number, y: number) => boolean,
+): boolean {
+  const { ants, params, rng } = ctx;
+  const x = ants.x[i]!;
+  const y = ants.y[i]!;
+  let nx = x + stepLength * Math.cos(heading);
+  let ny = y + stepLength * Math.sin(heading);
+  if (blocked(nx, ny)) {
+    const side = rng.chance(0.5) ? 1 : -1;
+    let moved = false;
+    for (let k = 1; k <= 8 && !moved; k++) {
+      for (const sign of [side, -side]) {
+        const h = heading + sign * k * 0.35;
+        const tx = x + stepLength * Math.cos(h);
+        const ty = y + stepLength * Math.sin(h);
+        if (!blocked(tx, ty)) {
+          heading = wrapAngle(h);
+          nx = tx;
+          ny = ty;
+          moved = true;
+          break;
+        }
+      }
+    }
+    if (!moved) {
+      ants.heading[i] = wrapAngle(heading + Math.PI);
+      return false;
+    }
+  }
+  ants.x[i] = nx;
+  ants.y[i] = ny;
+  ants.heading[i] = heading;
+  ants.walked[i]! += stepLength;
+
+  // Path integration: the ant adds up the steps it believes it took.
+  const believed = heading + rng.normal(0, params.piNoise);
+  ants.piX[i]! += stepLength * Math.cos(believed);
+  ants.piY[i]! += stepLength * Math.sin(believed);
+  return true;
+}
+
 /** The first drop (in id order) whose edge is within `range` mm of (x, y). */
 function nearestDrop(ctx: AntContext, x: number, y: number, range: number): FoodDrop | undefined {
   let best: FoodDrop | undefined;
@@ -317,10 +453,10 @@ function nestScent(arena: Arena, x: number, y: number, params: AntParams): numbe
   return Math.exp(-d / (params.nestScentRange / 3));
 }
 
-function wrapAngle(a: number): number {
+export function wrapAngle(a: number): number {
   return a - 2 * Math.PI * Math.floor((a + Math.PI) / (2 * Math.PI));
 }
 
-function angleDiff(to: number, from: number): number {
+export function angleDiff(to: number, from: number): number {
   return wrapAngle(to - from);
 }
