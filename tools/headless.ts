@@ -1,12 +1,15 @@
 /**
  * Headless runner: runs a tank in Node and prints a summary.
  *
- *   npm run sim -- --seed 42 --seconds 60
+ * Same start as the page: the default colony and one rich sugar drop.
+ *
+ *   npm run sim -- --seed 42 --seconds 600
  */
+import { AntState } from '../src/sim/ants';
 import { MATERIAL_COUNT, MATERIAL_NAMES } from '../src/sim/materials';
 import { hashHex, hashState } from '../src/sim/hash';
 import { STEPS_PER_SECOND, formatAntTime } from '../src/sim/time';
-import { createWorld, step } from '../src/sim/world';
+import { createWorld, placeSugar, step } from '../src/sim/world';
 
 function parseArgs(argv: string[]): { seed: number; seconds: number } {
   let seed = 42;
@@ -24,6 +27,7 @@ function parseArgs(argv: string[]): { seed: number; seconds: number } {
 
 const { seed, seconds } = parseArgs(process.argv.slice(2));
 const world = createWorld(seed);
+placeSugar(world, 140, 55, 40, 1);
 for (let i = 0; i < seconds * STEPS_PER_SECOND; i++) step(world);
 
 const counts = new Array<number>(MATERIAL_COUNT).fill(0);
@@ -34,4 +38,11 @@ console.log(`formicarium headless run`);
 console.log(`seed        ${seed}`);
 console.log(`ant time    ${formatAntTime(world.step)}`);
 console.log(`farm soil   ${counts.map((c, m) => `${MATERIAL_NAMES[m]} ${((100 * c) / cells).toFixed(1)}%`).join(', ')}`);
+let out = 0;
+for (const s of world.ants.state) if (s !== AntState.inNest) out++;
+let trail = 0;
+for (const v of world.arena.trail) trail += v;
+console.log(`ants        ${out} of ${world.ants.count} out of the nest`);
+console.log(`sugar       ${world.nest.stores.toFixed(1)} µL stored, ${world.food.reduce((a, d) => a + d.volume, 0).toFixed(1)} µL left in the arena`);
+console.log(`trail       ${trail.toFixed(0)} units on the arena floor`);
 console.log(`state hash  ${hashHex(hashState(world))}`);

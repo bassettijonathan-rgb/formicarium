@@ -1,12 +1,18 @@
 /**
  * The world: everything the simulation knows, as plain data (DESIGN.md section 10).
  *
- * M0 holds only the tank's soil. Ants arrive in M1.
+ * M1: the farm's soil (not yet dug), and workers foraging in the arena from a
+ * nest that is, for now, a single chamber behind the tube.
  */
+import { type Ants, type Nest, createAnts, stepAnts } from './ants';
+import { type Arena, createArena, evaporateTrail } from './arena';
+import type { FoodDrop } from './food';
 import { Material } from './materials';
 import { valueNoise2D } from './noise';
+import { type AntParams, DEFAULT_ANT_PARAMS } from './params';
 import { Purpose, Rng } from './rng';
 import { FARM_HEIGHT, FARM_WIDTH, HEADSPACE } from './tank';
+import { STEPS_PER_SECOND } from './time';
 
 /** The farm's soil grid (side view), one cell per mm, row-major from the top-left. */
 export interface Farm {
@@ -27,20 +33,67 @@ export interface World {
   /** State of the simulation's random stream (`Purpose.sim`). */
   rng: Uint32Array;
   farm: Farm;
+  arena: Arena;
+  ants: Ants;
+  nest: Nest;
+  /** Sugar drops in the arena, in the order they were placed. */
+  food: FoodDrop[];
+  nextFoodId: number;
+  params: AntParams;
 }
 
-export function createWorld(seed: number): World {
+export interface WorldOptions {
+  /** Number of workers (default 60). */
+  ants?: number;
+  /** Changes to the default ant parameters, e.g. `{ trailLaying: false }` for a control. */
+  params?: Partial<AntParams>;
+}
+
+export function createWorld(seed: number, options: WorldOptions = {}): World {
   return {
     seed,
     step: 0,
     rng: new Rng(seed, Purpose.sim).state,
     farm: createFarm(new Rng(seed, Purpose.soil)),
+    arena: createArena(),
+    ants: createAnts(options.ants ?? 60),
+    nest: { stores: 0, excitement: 0 },
+    food: [],
+    nextFoodId: 1,
+    params: { ...DEFAULT_ANT_PARAMS, ...options.params },
   };
 }
 
+/** Trail evaporates once per second of ant time; finer steps would change nothing visible. */
+const EVAPORATE_EVERY = STEPS_PER_SECOND;
+
 /** Advances the world by one step (1/20 s of ant time). */
 export function step(world: World): void {
+  stepAnts({
+    ants: world.ants,
+    arena: world.arena,
+    food: world.food,
+    nest: world.nest,
+    params: world.params,
+    rng: Rng.over(world.rng),
+  });
+  if (world.food.some((d) => d.volume <= 0)) world.food = world.food.filter((d) => d.volume > 0);
   world.step += 1;
+  if (world.step % EVAPORATE_EVERY === 0) {
+    evaporateTrail(world.arena, EVAPORATE_EVERY / STEPS_PER_SECOND, world.params.trailHalfLife);
+  }
+}
+
+/** Puts a drop of sugar water on the arena floor. Returns its id. */
+export function placeSugar(world: World, x: number, y: number, volume: number, concentration: number): number {
+  const id = world.nextFoodId++;
+  world.food.push({ id, x, y, volume, concentration });
+  return id;
+}
+
+/** Takes a drop away (the keeper cleaning up, or an experiment removing food). */
+export function removeFood(world: World, id: number): void {
+  world.food = world.food.filter((d) => d.id !== id);
 }
 
 /**

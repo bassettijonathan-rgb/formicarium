@@ -20,6 +20,11 @@ export class Camera {
   }
 
   private readonly pointers = new Map<number, { x: number; y: number }>();
+  /** Where the current press started and whether it has moved enough to be a drag. */
+  private press: { x: number; y: number; dragged: boolean } | undefined;
+
+  /** Called with element-relative pixel coordinates when the user clicks or taps without dragging. */
+  onTap: ((x: number, y: number) => void) | undefined;
 
   /** Fits a rectangle (in mm) to the element with a margin, leaving `top` pixels free for the panel. */
   fit(bounds: { x: number; y: number; width: number; height: number }, top = 0): void {
@@ -50,11 +55,13 @@ export class Camera {
   private onPointerDown(e: PointerEvent): void {
     this.element.setPointerCapture(e.pointerId);
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    this.press = this.pointers.size === 1 ? { x: e.clientX, y: e.clientY, dragged: false } : undefined;
   }
 
   private onPointerMove(e: PointerEvent): void {
     const prev = this.pointers.get(e.pointerId);
     if (!prev) return;
+    if (this.press && Math.hypot(e.clientX - this.press.x, e.clientY - this.press.y) > 5) this.press.dragged = true;
     if (this.pointers.size === 1) {
       this.target.position.x += e.clientX - prev.x;
       this.target.position.y += e.clientY - prev.y;
@@ -74,6 +81,12 @@ export class Camera {
   }
 
   private onPointerUp(e: PointerEvent): void {
+    const wasTap = e.type === 'pointerup' && this.press && !this.press.dragged && this.pointers.size === 1;
     this.pointers.delete(e.pointerId);
+    if (wasTap) {
+      const rect = this.element.getBoundingClientRect();
+      this.onTap?.(e.clientX - rect.left, e.clientY - rect.top);
+    }
+    if (this.pointers.size === 0) this.press = undefined;
   }
 }

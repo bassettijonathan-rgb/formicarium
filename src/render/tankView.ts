@@ -3,24 +3,30 @@
  * the left, the arena in top view on the right, joined by a tube. Units in
  * the scene are millimetres; the camera scales them to pixels.
  */
-import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+import { Container, Graphics, type Renderer, Sprite, Text, Texture } from 'pixi.js';
 import { ARENA_GAP, ARENA_SIZE, FARM_HEIGHT, FARM_WIDTH, TUBE } from '../sim/tank';
+import { ArenaLayer } from './arenaLayer';
 import { paintSoil } from './soilColors';
 
 /** Thickness of the farm's frame and the arena's walls, in mm. */
 const FRAME = 8;
-const ARENA_X = FARM_WIDTH + ARENA_GAP;
+export const ARENA_X = FARM_WIDTH + ARENA_GAP;
 
 export class TankView {
   readonly root = new Container();
+  readonly arena: ArenaLayer;
   private readonly soil = new Sprite();
   private soilCanvas: HTMLCanvasElement | undefined;
 
-  constructor() {
+  constructor(renderer: Renderer) {
     this.root.addChild(this.drawFarmFrame());
     this.root.addChild(this.soil);
     this.root.addChild(this.drawGlass());
     this.root.addChild(this.drawArena());
+    this.arena = new ArenaLayer(renderer);
+    this.arena.root.position.set(ARENA_X, 0);
+    this.root.addChild(this.arena.root);
+    this.root.addChild(this.drawBarrier());
     this.root.addChild(this.drawTube());
     this.root.addChild(label('Formicarium · side view', 0, -FRAME - 14));
     this.root.addChild(label('Arena · top view', ARENA_X, -FRAME - 14));
@@ -74,9 +80,14 @@ export class TankView {
     // Walls seen from above, then the floor: a pale plaster base, as many keepers use.
     g.roundRect(ARENA_X - FRAME, -FRAME, ARENA_SIZE + 2 * FRAME, ARENA_SIZE + 2 * FRAME, 3).fill(0x2b2f36);
     g.rect(ARENA_X, 0, ARENA_SIZE, ARENA_SIZE).fill(0xd9d2c3);
-    // The escape barrier: a slippery band (fluon or oil) round the top of the walls.
-    g.rect(ARENA_X - 3, -3, ARENA_SIZE + 6, ARENA_SIZE + 6).stroke({ color: 0xe8eef4, alpha: 0.5, width: 2 });
     return g;
+  }
+
+  /** The escape barrier: a slippery band (fluon or oil) round the top of the arena's walls. */
+  private drawBarrier(): Graphics {
+    return new Graphics()
+      .rect(ARENA_X - 3, -3, ARENA_SIZE + 6, ARENA_SIZE + 6)
+      .stroke({ color: 0xe8eef4, alpha: 0.5, width: 2 });
   }
 
   private drawTube(): Graphics {

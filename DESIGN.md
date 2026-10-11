@@ -139,6 +139,14 @@ A small state machine per ant, entered by thresholds and stimuli:
 - **Clean:** carry refuse and corpses to the midden, outside the nest.
 - **Share food:** trophallaxis with nestmates that beg.
 
+**M1 stand-in for the nest.** Until M3 builds the inside of the nest, a
+resting ant leaves on its own at a low rate, sooner if it remembers food,
+and sooner still when foragers have recently come home with food. That last
+effect is one "excitement" number for the whole nest, standing in for the
+contacts between nestmates in a small chamber (Lasius niger recruits by
+those contacts plus the trail). It is the only colony-level number in the
+model and goes away when the nest is simulated.
+
 Each ant logs short events (born, first foraging trip, found food, died) so
 you can open any ant and read its life.
 
@@ -247,6 +255,23 @@ project. If one fails, we fix the model, not the test.
 5. **Brood sorting:** brood stages end up spatially separated.
 6. **Cemetery formation:** corpses end up clustered in one or a few piles
    (Theraulaz et al. 2002).
+
+### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
+
+Each experiment runs with trail laying on and, as a control, off. Run them
+with `npm run experiment -- <name>`; the tests in `tests/science/` check them.
+
+| Experiment | With trail | Control (no trail) | Paper |
+|---|---|---|---|
+| Double bridge, long branch 2x | 7 of 10 colonies put >90% of traffic on the short branch and 1 put 74%; 2 locked onto the long one | 60-66% short in every colony, none settles | Goss et al. 1989, Beckers et al. 1992 |
+| Equal branches | every colony puts >80% of traffic on one branch (6 upper, 4 lower) | 47-53% each, no choice | Deneubourg et al. 1990 |
+| 1 M vs 0.1 M sugar | 98-100% of visits at the rich drop in all 10 | n/a | Beckers et al. 1990, 1993 |
+| Two equal drops | 9 of 10 put >80% of visits on one drop (5 on one side, 4 on the other) | n/a | Beckers et al. 1990 |
+| Food removed | departures from the nest fall about 10-fold within 20 min; trail fades at its half-life | n/a | |
+
+The occasional lock-in on the long branch is real ant behaviour too: when the
+long branch happens to be found first, trail reinforcement can keep a colony
+there.
 
 ---
 
