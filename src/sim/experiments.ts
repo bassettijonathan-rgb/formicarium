@@ -3,6 +3,7 @@
  * the tests in tests/science/ and the `npm run experiment` command.
  * Each run returns the numbers the original papers report.
  */
+import { excavatedArea } from './farm';
 import { doubleBridge, foodChoice, Tally } from './lab';
 import type { AntParams } from './params';
 import { STEPS_PER_SECOND } from './time';
@@ -37,7 +38,7 @@ export function runDoubleBridge(
 ): BridgeResult {
   const minutes = opts.minutes ?? 30;
   const windowMinutes = opts.windowMinutes ?? 10;
-  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, params: opts.params ?? {} });
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, nest: 'lab', params: opts.params ?? {} });
   const { zones } = doubleBridge(world, opts.longRatio);
   const tally = new Tally(world, zones);
   run(world, tally, (minutes - windowMinutes) * 60);
@@ -61,7 +62,7 @@ export function runFoodChoice(
 ): ChoiceResult {
   const minutes = opts.minutes ?? 30;
   const windowMinutes = opts.windowMinutes ?? 10;
-  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, params: opts.params ?? {} });
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, nest: 'lab', params: opts.params ?? {} });
   const { ids } = foodChoice(world, opts.concentrationA, opts.concentrationB);
   const tally = new Tally(world);
   run(world, tally, (minutes - windowMinutes) * 60);
@@ -86,7 +87,7 @@ export interface DecayResult {
 export function runTrailDecay(opts: RunOptions & { minutesWithFood?: number; minutesAfter?: number }): DecayResult {
   const withFood = opts.minutesWithFood ?? 20;
   const after = opts.minutesAfter ?? 20;
-  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, params: opts.params ?? {} });
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, nest: 'lab', params: opts.params ?? {} });
   const { zones, foodId } = doubleBridge(world, 1);
   const tally = new Tally(world, zones);
   run(world, tally, (withFood - 5) * 60);
@@ -111,4 +112,24 @@ function sum(values: Float64Array): number {
   let total = 0;
   for (const v of values) total += v;
   return total;
+}
+
+export interface NestResult {
+  /** Area dug out below the original surface at the end of each hour, mm². */
+  areaByHour: number[];
+}
+
+/**
+ * Nest size regulation (Rasse & Deneubourg 2001): a group of workers poured
+ * onto fresh soil digs, fast at first, then slows as the nest gets roomier;
+ * the size it settles at grows in proportion to the number of workers.
+ */
+export function runNestVolume(opts: RunOptions & { hours: number }): NestResult {
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 40, params: opts.params ?? {} });
+  const areaByHour: number[] = [];
+  for (let h = 0; h < opts.hours; h++) {
+    for (let s = 0; s < 3600 * STEPS_PER_SECOND; s++) step(world);
+    areaByHour.push(excavatedArea(world.farm));
+  }
+  return { areaByHour };
 }

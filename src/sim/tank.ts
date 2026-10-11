@@ -10,8 +10,11 @@
 export const FARM_WIDTH = 300;
 export const FARM_HEIGHT = 200;
 
-/** Mean depth of the air gap between the lid and the soil surface, in mm. */
-export const HEADSPACE = 30;
+/**
+ * Mean depth of the air gap between the lid and the soil surface, in mm.
+ * Keepers leave a generous gap: the colony piles everything it digs out on top.
+ */
+export const HEADSPACE = 50;
 
 /** Arena (top view): 20 x 20 cm. */
 export const ARENA_SIZE = 200;
@@ -25,7 +28,7 @@ export const ARENA_GAP = 60;
  * ant keepers use for small colonies.
  */
 export const TUBE = {
-  farmY: 14,
+  farmY: 20,
   arenaY: ARENA_SIZE / 2,
   diameter: 8,
 } as const;

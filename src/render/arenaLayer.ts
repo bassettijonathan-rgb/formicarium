@@ -4,79 +4,29 @@
  * placed at the arena's position in the scene.
  */
 import { Container, Graphics, type Renderer, Sprite, Texture } from 'pixi.js';
-import { AntState } from '../sim/ants';
+import { Place } from '../sim/ants';
 import { dropRadius } from '../sim/food';
-import { ANT_STRIDE, type AntsSnapshot, type ArenaSnapshot } from '../worker/protocol';
-import { ANT_SCALE, GAIT_FRAMES, STRIDE, makeAntTextures } from './antSprites';
+import type { ArenaSnapshot } from '../worker/protocol';
+import { AntLayer } from './antLayer';
 
 export class ArenaLayer {
   readonly root = new Container();
+  readonly ants: AntLayer;
   private readonly walls = new Sprite();
   private readonly trail = new Sprite();
   private readonly food = new Graphics();
-  private readonly antLayer = new Container();
-  private readonly antSprites: Sprite[] = [];
-  private readonly textures: Texture[][];
   private trailCanvas: HTMLCanvasElement | undefined;
   private wallCanvas: HTMLCanvasElement | undefined;
   private wallKey = '';
 
-  /** The two latest ant snapshots and when the newer one arrived, for smooth motion between them. */
-  private previous: AntsSnapshot | undefined;
-  private current: AntsSnapshot | undefined;
-  private arrivedAt = 0;
-  private interval = 50;
-
   constructor(renderer: Renderer) {
-    this.textures = makeAntTextures(renderer);
+    this.ants = new AntLayer(renderer, Place.arena);
     this.trail.alpha = 0.6;
-    this.root.addChild(this.walls, this.trail, this.food, this.antLayer);
+    this.root.addChild(this.walls, this.trail, this.food, this.ants.root);
   }
 
   set showTrails(on: boolean) {
     this.trail.visible = on;
-  }
-
-  setAnts(snapshot: AntsSnapshot, now: number): void {
-    if (this.current) this.interval = Math.min(200, Math.max(16, now - this.arrivedAt));
-    this.previous = this.current;
-    this.current = snapshot;
-    this.arrivedAt = now;
-    const count = snapshot.full.length;
-    while (this.antSprites.length < count) {
-      const s = new Sprite(this.textures[0]![0]);
-      s.anchor.set(0.5);
-      s.scale.set(ANT_SCALE);
-      this.antSprites.push(s);
-      this.antLayer.addChild(s);
-    }
-  }
-
-  /** Places the ants for this frame, interpolating between the last two snapshots. */
-  update(now: number): void {
-    const cur = this.current;
-    if (!cur) return;
-    const prev = this.previous && this.previous.full.length === cur.full.length ? this.previous : cur;
-    const t = Math.min(1, (now - this.arrivedAt) / this.interval);
-    for (let i = 0; i < this.antSprites.length; i++) {
-      const sprite = this.antSprites[i]!;
-      const o = i * ANT_STRIDE;
-      const state = cur.ants[o + 3]!;
-      sprite.visible = state !== AntState.inNest;
-      if (!sprite.visible) continue;
-      const wasOut = prev.ants[o + 3] !== AntState.inNest;
-      const k = wasOut ? t : 1;
-      // Interpolate from the previous snapshot towards the current one.
-      const x = prev.ants[o]! + (cur.ants[o]! - prev.ants[o]!) * k;
-      const y = prev.ants[o + 1]! + (cur.ants[o + 1]! - prev.ants[o + 1]!) * k;
-      let dh = cur.ants[o + 2]! - prev.ants[o + 2]!;
-      dh -= 2 * Math.PI * Math.round(dh / (2 * Math.PI));
-      const walked = prev.ants[o + 4]! + (cur.ants[o + 4]! - prev.ants[o + 4]!) * k;
-      sprite.position.set(x, y);
-      sprite.rotation = prev.ants[o + 2]! + dh * k;
-      const frame = Math.floor(((walked % STRIDE) / STRIDE) * GAIT_FRAMES) % GAIT_FRAMES;
-      sprite.texture = this.textures[cur.full[i]!]![frame]!;
-    }
   }
 
   setArena(snapshot: ArenaSnapshot): void {

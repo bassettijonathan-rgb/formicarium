@@ -80,6 +80,71 @@ export interface AntParams {
   recruitPerReturn: number;
   /** Half-life of nest excitement, seconds. */
   excitementHalfLife: number;
+
+  // --- In the farm (M2) ---
+
+  /** Two ants closer than this, mm, touch antennae. */
+  contactRadius: number;
+  /** Time over which an ant averages how often it meets nestmates, seconds. */
+  encounterMemory: number;
+  /**
+   * Excitement an ant gains per second of touching a forager just back with
+   * food. Replaces the whole-nest excitement of the lab nest: in the farm,
+   * recruitment happens by real contacts.
+   */
+  recruitPerContact: number;
+  /** How long a forager back with food keeps exciting the nestmates it meets, seconds. */
+  recruitTime: number;
+
+  /** Turning up (carrying soil out) or down (going home), radians per second, scaled like goalTurn. */
+  geotaxis: number;
+  /** Turning towards stronger colony odour when going home or staying in, scaled by (L - R) / (L + R). */
+  odourTurn: number;
+  /** Colony odour a resting ant leaves per second (arbitrary units). */
+  odourDeposit: number;
+  odourHalfLife: number;
+  /** Spread of colony odour through the air, mm²/s. */
+  odourDiffusion: number;
+  /** Colony odour at which a returning ant knows it is home. */
+  homeOdour: number;
+
+  /**
+   * Chance per second of picking up a grain at a soil face the antennae touch,
+   * for an ant that meets nestmates often. Digging rises with crowding, so a
+   * colony digs until it has room and then slows down (Buhl et al. 2004;
+   * Rasse & Deneubourg 2001).
+   */
+  digRate: number;
+  /** Encounters per second at which digging runs at half its full rate. */
+  crowdHalf: number;
+  /** Switch for control experiments: when false, digging ignores crowding. */
+  crowdControl: boolean;
+  /** How sharply digging rises with how hemmed in the ant is (power of `enclosure`, 0-1). */
+  hemmedPower: number;
+  /** Width of a worker's body, mm; it widens passages narrower than this. Lasius niger workers are ~1 mm wide. */
+  bodyWidth: number;
+  /** Extra digging per unit of fresh dig mark nearby (digging attracts digging). */
+  digMarkGain: number;
+  digMarkHalfLife: number;
+  /** Once out in the open, a digger carries its grain at least this far along the surface before dropping it, mm (rough). */
+  spoilDistance: number;
+  /** After this long carrying, seconds, a digger drops its grain wherever it is. */
+  maxCarryTime: number;
+  /** Chance per second of dropping a carried grain out in the open. */
+  dropRate: number;
+  /** How long a digger keeps trying to get back to the face it dug, seconds, before giving up. */
+  digReturnTime: number;
+  /** Extra dropping per loose grain already lying next to the ant: spoil piles up in heaps. */
+  pileGain: number;
+
+  /** Chance per second that a wandering ant settles to rest, in a fully enclosed spot. */
+  restRate: number;
+  /** Extra settling per unit of colony odour: ants rest where nestmates rest. */
+  restOdourGain: number;
+  /** Mean length of a rest, seconds. */
+  restLength: number;
+  /** Time for a forager to walk through the tube, seconds. */
+  tubeTime: number;
 }
 
 export const DEFAULT_ANT_PARAMS: AntParams = {
@@ -114,4 +179,34 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   recruitRate: 0.05,
   recruitPerReturn: 1,
   excitementHalfLife: 60,
+
+  contactRadius: 3,
+  encounterMemory: 30,
+  recruitPerContact: 2,
+  recruitTime: 30,
+
+  geotaxis: 1.5,
+  odourTurn: 4,
+  odourDeposit: 1,
+  odourHalfLife: 30 * 60,
+  odourDiffusion: 1,
+  homeOdour: 5,
+
+  digRate: 2,
+  crowdHalf: 0.3,
+  crowdControl: true,
+  hemmedPower: 6,
+  bodyWidth: 1.5,
+  digMarkGain: 3,
+  digMarkHalfLife: 10 * 60,
+  spoilDistance: 20,
+  maxCarryTime: 120,
+  dropRate: 0.5,
+  digReturnTime: 60,
+  pileGain: 0.5,
+
+  restRate: 0.05,
+  restOdourGain: 0.5,
+  restLength: 60,
+  tubeTime: 7,
 };
