@@ -105,12 +105,95 @@ export function computeContacts(ctx: AntContext): void {
     }
     ants.encounters[i] = ants.encounters[i]! * memory + touching * (1 - memory);
     ants.excitement[i]! += params.recruitPerContact * recruiters * DT;
+    if (params.sharing && canShare(ants.state[i]!)) beg(ctx, i, bx, by, bw, bh);
   }
+}
+
+/** Resting and wandering ants can stop to exchange food; ants busy carrying, travelling or sharing can't. */
+function canShare(state: number): boolean {
+  return state === AntState.resting || state === AntState.wandering;
+}
+
+/** How empty the ant's crop is: 0 full, 1 empty. */
+export function hunger(ctx: AntContext, i: number): number {
+  return Math.max(0, 1 - ctx.ants.crop[i]! / ctx.params.cropLoad);
+}
+
+/**
+ * A hungry ant begs from the nestmates it touches that are better fed,
+ * more readily the bigger the difference, and the first that responds
+ * (in id order) feeds it (trophallaxis).
+ */
+function beg(ctx: AntContext, i: number, bx: number, by: number, bw: number, bh: number): void {
+  const { ants, params, rng } = ctx;
+  const hi = hunger(ctx, i);
+  if (hi < params.begMargin) return;
+  const r2 = params.contactRadius * params.contactRadius;
+  for (let y = Math.max(0, by - 1); y <= Math.min(bh - 1, by + 1); y++) {
+    for (let x = Math.max(0, bx - 1); x <= Math.min(bw - 1, bx + 1); x++) {
+      const cell = y * bw + x;
+      for (let k = start[cell]!; k < start[cell + 1]!; k++) {
+        const j = members[k]!;
+        if (j === i || !canShare(ants.state[j]!)) continue;
+        const gap = hi - hunger(ctx, j);
+        if (gap < params.begMargin) continue;
+        const dx = ants.x[j]! - ants.x[i]!;
+        const dy = ants.y[j]! - ants.y[i]!;
+        if (dx * dx + dy * dy > r2) continue;
+        if (!rng.chance(params.begRate * gap * DT)) continue;
+        // Mouth to mouth: both stop and face each other; the exchange ends at a constant rate (Buffin et al. 2011).
+        const steps = Math.max(1, Math.round(-Math.log(1 - rng.float()) * params.shareTime * STEPS_PER_SECOND));
+        for (const [a, b] of [[i, j], [j, i]] as const) {
+          ants.state[a] = AntState.sharing;
+          ants.partner[a] = b;
+          ants.timer[a] = steps;
+          ants.hasDigSite[a] = 0;
+          ants.heading[a] = Math.atan2(ants.y[b]! - ants.y[a]!, ants.x[b]! - ants.x[a]!);
+        }
+        return;
+      }
+    }
+  }
+}
+
+/**
+ * One step of trophallaxis. The fuller ant regurgitates into the emptier
+ * one at a rate set by how much room the receiver has left, never past the
+ * point where both hold the same. The exchange ends when its time is up,
+ * the receiver is full, or the two are pulled apart.
+ */
+function share(ctx: AntContext, i: number): void {
+  const { ants, params } = ctx;
+  const j = ants.partner[i]!;
+  let done = j < 0 || ants.partner[j] !== i || --ants.timer[i]! <= 0;
+  if (!done) {
+    const dx = ants.x[j]! - ants.x[i]!;
+    const dy = ants.y[j]! - ants.y[i]!;
+    if (dx * dx + dy * dy > 4 * params.contactRadius * params.contactRadius) done = true;
+  }
+  if (!done && ants.crop[i]! < ants.crop[j]!) {
+    const room = params.cropLoad - ants.crop[i]!;
+    const flow = Math.min(params.shareFlow * room * DT, (ants.crop[j]! - ants.crop[i]!) / 2);
+    ants.crop[i]! += flow;
+    ants.crop[j]! -= flow;
+    if (room - flow < 0.02 * params.cropLoad || ants.crop[j]! - ants.crop[i]! < 0.02 * params.cropLoad) done = true;
+  }
+  if (!done) return;
+  if (j >= 0 && ants.partner[j] === i) {
+    ants.state[j] = AntState.wandering;
+    ants.partner[j] = -1;
+    ants.timer[j] = 0;
+  }
+  ants.state[i] = AntState.wandering;
+  ants.partner[i] = -1;
+  ants.timer[i] = 0;
 }
 
 export function stepFarmAnt(ctx: AntContext, i: number): void {
   if (cellSolid(ctx.farm, Math.floor(ctx.ants.x[i]!), Math.floor(ctx.ants.y[i]!)) && unbury(ctx, i)) return;
-  if (ctx.ants.state[i] === AntState.resting) rest(ctx, i);
+  const state = ctx.ants.state[i];
+  if (state === AntState.resting) rest(ctx, i);
+  else if (state === AntState.sharing) share(ctx, i);
   else walkFarm(ctx, i);
 }
 
@@ -121,11 +204,21 @@ function rest(ctx: AntContext, i: number): void {
   if (--ants.timer[i]! <= 0) ants.state[i] = AntState.wandering;
 }
 
-/** Decides whether a resting or wandering ant sets off for the tube; returns true if it does. */
+/**
+ * Decides whether a resting or wandering ant sets off for the tube; returns
+ * true if it does. Only workers with a low threshold go out much, and they
+ * go out more the emptier their own crop: a forager that could unload its
+ * crop at home goes back to the food; one that could not, because its
+ * nestmates are full, mostly stays in and only scouts now and then.
+ */
 function setOffToForage(ctx: AntContext, i: number): boolean {
   const { ants, params, rng } = ctx;
-  const own = ants.hasMemory[i] ? params.returnToFoodRate : params.leaveRate;
-  const rate = own + params.recruitRate * ants.excitement[i]!;
+  const own = ants.hasMemory[i] ? params.returnToFoodRate : params.forageRate;
+  // How readily this worker forages at all (its threshold against the strongest stimulus, Bonabeau et
+  // al. 1996), times how hungry it is: trips rise in step with hunger (Greenwald et al. 2018).
+  const propensity = 1 / (1 + Math.pow(ants.forageThreshold[i]!, params.forageSteepness));
+  const response = propensity * (params.scoutShare + (1 - params.scoutShare) * hunger(ctx, i));
+  const rate = (own + params.recruitRate * ants.excitement[i]!) * response;
   if (!rng.chance(rate * DT)) return false;
   ants.state[i] = ants.hasMemory[i] ? AntState.toFood : AntState.exploring;
   ants.timer[i] = 0;
@@ -265,7 +358,7 @@ function walkFarm(ctx: AntContext, i: number): void {
     if (dTube < 3) enterTube(ctx, i);
     else clearWay(ctx, i, dTube < TUBE_CLEAR);
   } else if (inbound) {
-    if (ants.crop[i]! > 0 && params.trailLaying) {
+    if (state === AntState.returning && params.trailLaying) {
       depositTrail(farm, nx, ny, params.trailDeposit * params.speed * DT * ants.cropQuality[i]!);
     }
     const inSeconds = ++ants.timer[i]! / STEPS_PER_SECOND;
@@ -333,6 +426,7 @@ function clearWay(ctx: AntContext, i: number, nearTube: boolean): void {
   ants.hasDigSite[i] = 0;
   ants.grain[i] = grain.material;
   ants.grainMoisture[i] = grain.moisture;
+  ants.resume[i] = ants.state[i]!; // once the grain is dumped, it carries on out
   ants.state[i] = AntState.carrying;
   ants.timer[i] = 0;
   ants.carryOut[i] = 0;
@@ -387,7 +481,8 @@ function dropGrain(ctx: AntContext, i: number): void {
       placeGrain(farm, cx + dx, cy + dy, ants.grain[i]!, ants.grainMoisture[i]!);
       ants.grain[i] = 0;
       ants.grainMoisture[i] = 0;
-      ants.state[i] = AntState.wandering;
+      ants.state[i] = ants.resume[i] || AntState.wandering;
+      ants.resume[i] = 0;
       ants.timer[i] = 0;
       return;
     }
@@ -435,12 +530,11 @@ function unbury(ctx: AntContext, i: number): boolean {
   return true;
 }
 
+/** A forager back with food keeps it in its crop, to share with the nestmates that beg, and excites those it meets. */
 function arriveHome(ctx: AntContext, i: number): void {
-  const { ants, nest, params } = ctx;
-  if (ants.crop[i]! > 0) {
-    nest.stores += ants.crop[i]!;
-    ants.crop[i] = 0;
-    ants.recruiting[i] = Math.round(params.recruitTime * STEPS_PER_SECOND);
+  const { ants, params } = ctx;
+  if (ants.state[i] === AntState.returning) {
+    ants.recruiting[i] = Math.round(params.recruitTime * STEPS_PER_SECOND * Math.min(1, ants.cropQuality[i]! * 2));
   }
   ants.state[i] = AntState.wandering;
   ants.timer[i] = 0;

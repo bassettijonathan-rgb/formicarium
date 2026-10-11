@@ -43,6 +43,8 @@ export const Purpose = {
   sim: 2,
   /** Placing the first workers when a tank is set up. */
   ants: 3,
+  /** Each worker's inborn traits, such as its response thresholds. */
+  traits: 4,
   test: 99,
 } as const;
 

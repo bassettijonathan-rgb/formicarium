@@ -67,7 +67,8 @@ Each row has a recommendation. Approving the doc as written accepts all of them.
 | Walking speed | 10-30 mm/s, temperature dependent | Ant speed roughly doubles from 15 to 30 °C (Hurlbert et al. 2008) |
 | Sim step | 1/20 s of ant time | ants move ≤1.5 cells per step |
 | Load | 1 grain or 1 food item or 1 brood item | |
-| Crop (social stomach) | ~0.2 mg sugar water | |
+| Crop (social stomach) | ~0.2 µL sugar water | rough |
+| Sugar burnt | ~0.05 µL of 1 M sucrose per worker per tank day | rough, from resting metabolic rates; runs on the life clock (D6) |
 | Development at 25 °C | egg ~3 wk, larva ~3 wk, pupa ~2 wk | Lasius niger, rough; scaled by temperature |
 | Worker lifespan | ~1 year | queen ~15+ years (Lasius queens are famous for living 28) |
 
@@ -142,7 +143,9 @@ In the farm an ant also feels (M2):
 - **Path integrator:** a vector updated each step, with noise that grows with
   distance walked (Müller & Wehner 1988), so long excursions return less
   precisely and ants use trail and nest odour for the last stretch.
-- **Task thresholds** (D5), one per task.
+- **Task thresholds** (D5), one per task. M3 gives each worker its threshold
+  for foraging, fixed at birth; M4 lets thresholds drift with age and
+  experience.
 - Memory of where the last food was (a remembered vector, like real
   foragers' route fidelity).
 
@@ -177,6 +180,15 @@ strong or it touches a resting nestmate. Recruitment works by contact: a
 forager back with food excites the nestmates it touches for 30 s, and
 excited ants set off for the tube. The lab experiments of section 9.1 keep
 the M1 nest box.
+
+**M3: hunger and food sharing.** Each worker burns the sugar in its crop on
+the life clock and gets hungry. Workers with a low foraging threshold go out
+more the hungrier they are, and scout now and then even when fed; contact
+with a forager back with food (recruitment) raises the same urge. Workers
+with a high threshold mostly stay in. A hungry ant begs from the better-fed
+nestmates it touches, and they share (section 7.3). So a forager that cannot unload, because everyone at
+home is full, stays in, and a hungry colony sends out more foragers with no
+colony-level number involved.
 
 Each ant logs short events (born, first foraging trip, found food, died) so
 you can open any ant and read its life.
@@ -249,11 +261,40 @@ tank lets you choose a founding queen (slow, authentic) or a queen plus
 
 ### 7.3 Food flow
 
-Foragers fill their crops and share by trophallaxis. Food spreads through the
-colony as a contact network, not a global stockpile. Colony hunger is the sum
-of individual crops, and it drives foraging thresholds: a hungry colony sends
-more foragers. Protein goes mostly to larvae and the queen; sugar fuels
-workers.
+Food spreads through the colony as a contact network, not a global stockpile
+(`src/sim/farmAnts.ts`, M3):
+
+1. **Metabolism.** Every worker burns about 0.05 µL of sugar water a tank day
+   (life clock, D6), so a full crop lasts about four tank days.
+2. **Going out.** Each worker has its own threshold θ for foraging
+   (response thresholds, Bonabeau et al. 1996), spread log-uniformly from 1
+   to 20; its propensity to forage is 1 / (1 + θ⁴). A resting or wandering
+   worker sets off for the tube at up to one trip every 4 minutes times its
+   propensity, times a factor that rises in step with its hunger (how empty
+   its crop is) from a fifth when full to one when empty: Camponotus
+   foragers' trip rate rose linearly with how empty the colony was, and
+   well-fed ones still made about a fifth as many trips (Greenwald et al.
+   2018). So under a third of a starved colony goes out and the rest wait
+   to be fed, as in Lasius niger, where about 20% of workers forage
+   (Planckaert et al. 2019), and a fed colony still scouts and finds new
+   food before it is hungry. Recruitment by a forager back with food raises
+   the same rate.
+3. **Begging and sharing.** A hungry ant that touches a nestmate whose crop
+   is fuller by at least a fifth begs, more readily the bigger the
+   difference. Both stop and face each other. The fuller one regurgitates at
+   a rate set by the room left in the receiver's crop (exchanges fill a set
+   fraction of the receiver's free space whatever the donor holds: Greenwald
+   et al. 2018), never past the point where both hold the same. The exchange
+   ends at a constant rate per second, whatever is shared (Buffin et al.
+   2011): about 30 s on average.
+4. **Foragers.** A forager tops up its crop at the food and lays trail and
+   recruits by how much it drank. A forager from a hungry colony unloads at
+   home, so it drinks a full load next time and lays a strong trail; one from
+   a full colony goes out less and drinks less (Mailleux et al. 2000, 2006).
+
+There is no colony store: the colony's food is what is in its workers'
+crops, and the page shows that total. Protein, larvae and the queen come in
+M3b: protein goes mostly to larvae and the queen; sugar fuels workers.
 
 ### 7.4 Brood sorting and the midden
 
@@ -296,6 +337,10 @@ project. If one fails, we fix the model, not the test.
 5. **Brood sorting:** brood stages end up spatially separated.
 6. **Cemetery formation:** corpses end up clustered in one or a few piles
    (Theraulaz et al. 2002).
+7. **Food spread** (Planckaert et al. 2019): in a starved Lasius niger
+   colony given sugar, a minority of workers forage and the food reaches
+   most of the colony within an hour by trophallaxis. A well-fed colony
+   barely forages (Greenwald et al. 2018; Mailleux et al. 2006).
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -314,27 +359,61 @@ The occasional lock-in on the long branch is real ant behaviour too: when the
 long branch happens to be found first, trail reinforcement can keep a colony
 there.
 
-### 9.2 Results so far (M2, 3 farms per condition, 8 h of ant time each)
+### 9.2 Results so far (nest size; 3 farms per condition, 8 h of ant time each, re-run with M3's hunger and sharing)
 
 `npm run experiment -- nest --ants N --hours 8 --runs 3 [--no-crowd]`;
 `tests/science/nestVolume.test.ts` checks a shorter version. Area is what the
 colony dug out below the original surface, in mm² (the farm is a 2D slice).
+There is no food in these runs, so after a couple of hours the workers are
+hungry and the foragers among them come and go.
 
-| Colony | Nest after 8 h, crowding on | Per ant | Control: crowding off | Note |
+| Colony | Nest after 8 h, crowding on | Per ant | Control: crowding off | M2 (before hunger), crowding on |
 |---|---|---|---|---|
-| 20 workers | 1,640-2,190 (mean 1,920); by hours 6-8 digging is down to about a third of its rate in hours 2-4 | 96 | 5,050-5,360, still digging fast | crowding holds the nest to about a third |
-| 40 workers | 4,860-6,370 (mean 5,550) | 139 | 6,150-8,130 (mean 7,410) | |
-| 80 workers | 7,970-8,300 (mean 8,140) | 102 | 7,550-8,830 (mean 8,380) | the farm is full: spoil fills the headspace, on and off alike |
+| 20 workers | 1,800-2,990 (mean 2,590) | 129 | 4,830-5,860 (mean 5,420), still digging fast | 1,640-2,190 (mean 1,920) |
+| 40 workers | 4,660-6,410 (mean 5,530) | 138 | 7,390-7,820 (mean 7,620) | 4,860-6,370 (mean 5,550) |
+| 80 workers | 7,060-8,670 (mean 7,990) | 100 | 7,570-8,780 (mean 8,340) | 7,970-8,300 (mean 8,140) |
 
 What holds: tunnels, side branches and small chambers emerge with no shape
 coded; spoil ends up in heaps on the surface with the entrances kept open;
 a bigger colony digs a bigger nest, and per worker the nests are within about
-±20% of each other (96-139 mm²); without the crowding cue a small colony
-digs on and on. What is weaker than in Rasse & Deneubourg 2001: the nests
-are still growing slowly at 8 h rather than flat, and an 80-worker colony is
-stopped by the size of the farm, not by its own regulation. Groups of 5 dig
-much less per ant than groups of 40 (`tests/farmAnts.test.ts`), the social
-facilitation Chen 1937 described.
+±20% of each other (100-138 mm²); without the crowding cue a small colony
+digs about twice as much. What is weaker than in Rasse & Deneubourg 2001:
+the nests are still growing at 8 h rather than flat (in the 20-worker farms,
+hours 6-8 add about half as much as hours 2-4; one farm stopped at 1,800 mm²
+while another was still digging fast), and an 80-worker colony is stopped by
+the size of the farm, not by its own regulation. M3c replaces the crowding cue with one that should
+settle: brood and resting nestmates. Groups of 5 dig much less per ant than
+groups of 40 (`tests/farmAnts.test.ts`), the social facilitation Chen 1937
+described.
+
+### 9.3 Results so far (M3 food flow, 10 colonies of 50 workers per condition)
+
+`npm run experiment -- spread [--no-sharing] [--satiated]`;
+`tests/science/foodFlow.test.ts` checks seeds 1-3. Each colony digs for an
+hour, then every crop is emptied (standing in for the 4 days of starvation in
+Planckaert et al. 2019) and a drop of 1 M sucrose goes in the arena 6 cm from
+the tube. "Fed" means a worker has had at least a tenth of a crop since.
+
+| | Fed after 30 min | Fed after 60 min | Workers that went out | Departures in the hour |
+|---|---|---|---|---|
+| Starved, sharing | 22-96% (mean 55%) | 78-100% (mean 91%) | 24-40% (mean 29%) | 37-98 (mean 63) |
+| Control: no sharing | 2-20% (mean 10%) | 4-30% (mean 19%) | 18-34% (mean 25%) | 18-69 (mean 39) |
+| Control: well fed | | | 6-20% (mean 13%), scouts | 4-27 (mean 12) |
+| Planckaert et al. 2019 | about 58% (naive workers fall exponentially, mean 35 min) | about 82% (44 of 53 took part) | about 20% | |
+
+Food reaches the colony about as fast as in the real one, a little faster
+by the hour, and a few more workers go out (29% rather than about 20%): a
+minority forages, the rest are fed mouth to mouth, and without sharing four
+in five workers are still hungry after an hour. The colonies that start
+slowly are the ones whose first foragers take longest to find the drop. A
+well-fed colony sends out about a fifth as many workers as a starved one, all
+scouts, as Greenwald et al. 2018 measured. Over 4 hours a starved colony's
+crops level off at 40-70% full,
+where what it brings in matches what it burns: hunger regulating foraging,
+with nothing counting the colony's food. Greenwald et al. 2018 saw
+Camponotus colonies fill up and nearly stop within 3-4 hours; ours keeps
+foraging at 5-15 departures every 10 minutes because the life clock burns
+a tank day of sugar every hour.
 
 ---
 
@@ -365,7 +444,7 @@ Each milestone is one or a few small PRs, merged by Marco, with a link to play.
 | M0 | Skeleton: empty tank renders, CI, Pages deploy, determinism test |
 | M1 | Arena foraging: ants with path integration and trail pheromone find food and form trails. Double bridge and food choice tests pass |
 | M2 | Soil and digging: side-view farm, soil physics, ants dig tunnels and chambers that scale with colony size |
-| M3 | Colony life: queen, brood, development, trophallaxis, founding |
+| M3 | Colony life: queen, brood, development, trophallaxis, founding. In three PRs: M3a food flow (hunger, sharing, forager thresholds); M3b queen, brood and development; M3c brood and the resting nest as the digging cue |
 | M4 | Division of labour: response thresholds, age polyethism, brood sorting, midden |
 | M5 | Tending: temperature, humidity, mould, feeding tools, colony death |
 | M6 | Keeping it: saves, offline catch-up, ant inspector, graphs, timelapse |
@@ -381,14 +460,19 @@ parameters, I stop and report before changing the model.
 - Beckers, Deneubourg & Goss 1993. Modulation of trail laying in the ant *Lasius niger*. J. Insect Behav.
 - Bonabeau, Theraulaz & Deneubourg 1996. Quantitative study of the fixed threshold model for the regulation of division of labour in insect societies. Proc. R. Soc. B.
 - Bovet & Benhamou 1988. Spatial analysis of animals' movements using a correlated random walk model. J. Theor. Biol.
+- Buffin, Mailleux, Detrain & Deneubourg 2011. Trophallaxis in *Lasius niger*: a variable frequency and constant duration for three food types. Insectes Soc.
 - Buhl et al. 2004. Self-organized digging activity in ant colonies. Behav. Ecol. Sociobiol.
 - Chen 1937. Social modification of the activity of ants in nest-building. Physiol. Zool.
 - Charbonneau & Dornhaus 2015. When doing nothing is something. J. Bioecon.
 - Franks & Sendova-Franks 1992. Brood sorting by ants. Behav. Ecol. Sociobiol.
 - Goss, Aron, Deneubourg & Pasteels 1989. Self-organized shortcuts in the Argentine ant. Naturwissenschaften.
+- Greenwald, Eckmann & Feinerman 2018. Individual crop loads provide local control for collective food intake in ant colonies. eLife.
 - Hurlbert, Ballantyne & Powell 2008. Shaking a leg and hot to trot: the effects of body size and temperature on running speed in ants. Ecol. Entomol.
 - Khuong et al. 2016. Stigmergic construction and topochemical information shape ant nest architecture. PNAS.
+- Mailleux, Deneubourg & Detrain 2000. How do ants assess food volume? Anim. Behav.
+- Mailleux, Detrain & Deneubourg 2006. Starvation drives a threshold triggering communication. J. Exp. Biol.
 - Müller & Wehner 1988. Path integration in desert ants. PNAS.
+- Planckaert et al. 2019. A spatiotemporal analysis of the food dissemination process and the trophallactic network in the ant *Lasius niger*. Sci. Rep.
 - Rasse & Deneubourg 2001. Dynamics of nest excavation and nest size regulation of *Lasius niger*. J. Insect Behav.
 - Theraulaz et al. 2002. Spatial patterns in ant colonies. PNAS.
 - Wilson, Durlach & Roth 1958. Chemical releasers of necrophoric behavior in ants. Psyche.
