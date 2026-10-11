@@ -8,6 +8,7 @@ import { ARENA_GAP, ARENA_SIZE, FARM_HEIGHT, FARM_WIDTH, TUBE } from '../sim/tan
 import { Place } from '../sim/ants';
 import type { FarmSnapshot } from '../worker/protocol';
 import { AntLayer } from './antLayer';
+import { BroodLayer } from './broodLayer';
 import { ArenaLayer } from './arenaLayer';
 import { paintSoil } from './soilColors';
 
@@ -20,12 +21,15 @@ export class TankView {
   readonly arena: ArenaLayer;
   /** Ants in the farm: on the glass, in the tunnels and in the headspace. */
   readonly farmAnts: AntLayer;
+  /** Eggs, larvae and pupae lying in the nest. */
+  readonly brood = new BroodLayer();
   private readonly soil = new Sprite();
   private soilCanvas: HTMLCanvasElement | undefined;
 
   constructor(renderer: Renderer) {
     this.root.addChild(this.drawFarmFrame());
     this.root.addChild(this.soil);
+    this.root.addChild(this.brood.root);
     this.farmAnts = new AntLayer(renderer, Place.farm);
     this.root.addChild(this.farmAnts.root);
     this.root.addChild(this.drawGlass());

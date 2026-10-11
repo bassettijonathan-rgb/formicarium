@@ -3,12 +3,13 @@
  * the tests in tests/science/ and the `npm run experiment` command.
  * Each run returns the numbers the original papers report.
  */
-import { Place } from './ants';
+import { Caste, Place } from './ants';
+import { broodCounts } from './brood';
 import { excavatedArea } from './farm';
 import { doubleBridge, foodChoice, Tally } from './lab';
 import type { AntParams } from './params';
 import { STEPS_PER_SECOND } from './time';
-import { colonyCrop, createWorld, placeSugar, removeFood, step, type World } from './world';
+import { colonyCrop, createWorld, placeProtein, placeSugar, removeFood, step, type World } from './world';
 
 export interface RunOptions {
   seed: number;
@@ -193,4 +194,48 @@ function sum8(values: Uint8Array): number {
   let total = 0;
   for (const v of values) total += v;
   return total;
+}
+
+export interface GrowthDay {
+  day: number;
+  eggs: number;
+  larvae: number;
+  pupae: number;
+  workers: number;
+  /** The queen's protein reserve, µL. */
+  reserve: number;
+  /** How full the workers' crops are on average, 0 to 1. */
+  crops: number;
+}
+
+/**
+ * Colony growth (DESIGN.md section 7.1): a queen and her workers in the
+ * farm, with a keeper who tops up a sugar drop and, unless `protein` is
+ * false (the control), a crushed insect every tank day. Reports the brood
+ * and workers at the end of each day.
+ */
+export function runColonyGrowth(opts: RunOptions & { days: number; protein?: boolean }): GrowthDay[] {
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, queen: true, params: opts.params ?? {} });
+  const { params } = world;
+  const daySteps = Math.round(params.daySeconds * STEPS_PER_SECOND);
+  const out: GrowthDay[] = [];
+  const y = world.arena.entranceY;
+  for (let day = 1; day <= opts.days; day++) {
+    // The keeper's daily round: fresh sugar water and, in the protein runs, an insect.
+    world.food = [];
+    placeSugar(world, 60, y - 15, 40, 1);
+    if (opts.protein !== false) placeProtein(world, 60, y + 15, 10);
+    for (let s = 0; s < daySteps; s++) step(world);
+    let workers = 0;
+    let reserve = 0;
+    let crop = 0;
+    for (let i = 0; i < world.ants.count; i++) {
+      if (world.ants.caste[i] === Caste.worker) {
+        workers++;
+        crop += world.ants.crop[i]!;
+      } else reserve = world.ants.reserve[i]!;
+    }
+    out.push({ day, ...broodCounts(world.brood), workers, reserve, crops: crop / workers / params.cropLoad });
+  }
+  return out;
 }

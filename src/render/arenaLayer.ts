@@ -35,6 +35,13 @@ export class ArenaLayer {
     this.food.clear();
     for (const d of snapshot.food) {
       const r = dropRadius(d.volume);
+      if (d.protein > 0) {
+        // A crushed insect: a dark body with a glistening wet patch where the ants drink.
+        this.food.ellipse(d.x, d.y, r * 1.3, r * 0.8).fill({ color: 0x3a2418, alpha: 0.95 });
+        this.food.ellipse(d.x + r * 0.2, d.y, r * 0.7, r * 0.45).fill({ color: 0x8a4a2a, alpha: 0.8 });
+        this.food.circle(d.x - r * 0.4, d.y - r * 0.25, r * 0.2).fill({ color: 0xffffff, alpha: 0.35 });
+        continue;
+      }
       // A drop of sugar water: amber, richer sugar a deeper colour, with a highlight.
       const color = d.concentration >= 0.5 ? 0xd99a2b : 0xe8cf8a;
       this.food.circle(d.x, d.y, r + 0.3).fill({ color: 0x000000, alpha: 0.15 });

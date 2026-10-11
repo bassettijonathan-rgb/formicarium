@@ -1,5 +1,6 @@
 /**
- * Food in the arena (DESIGN.md sections 7.3 and 8). M1 has sugar drops only.
+ * Food in the arena (DESIGN.md sections 7.3 and 8): drops of sugar water and,
+ * from M3b, protein-rich food (insect juice: the keeper's crushed fly).
  */
 import type { AntParams } from './params';
 
@@ -9,8 +10,10 @@ export interface FoodDrop {
   y: number;
   /** Sugar water left, µL (1 µL = 1 mm³). */
   volume: number;
-  /** Sucrose concentration, mol/L. */
+  /** Sucrose concentration, mol/L; for protein food, how attractive it is on the same scale. */
   concentration: number;
+  /** Fraction of the drop that is protein-rich food (0 for sugar water, 1 for insect). */
+  protein: number;
 }
 
 /** Radius of a drop sitting on the floor as a hemisphere, mm. */

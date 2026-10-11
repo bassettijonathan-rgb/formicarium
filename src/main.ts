@@ -7,10 +7,13 @@ import { Camera } from './render/camera';
 import { ARENA_X, TankView } from './render/tankView';
 import { ARENA_SIZE } from './sim/tank';
 import { formatAntTime } from './sim/time';
-import type { FromWorker, ToWorker } from './worker/protocol';
+import { BroodStage } from './sim/brood';
+import { BROOD_STRIDE, type FromWorker, type ToWorker } from './worker/protocol';
 
 /** A keeper's sugar drop: 10 µL, about the size of a lentil. */
 const DROP_VOLUME = 10;
+/** A crushed fruit fly or a piece of mealworm: about 3 µL of juices the ants can drink (rough). */
+const INSECT_VOLUME = 3;
 
 async function start(): Promise<void> {
   const stage = document.getElementById('stage')!;
@@ -39,7 +42,12 @@ async function start(): Promise<void> {
       const now = performance.now();
       view.arena.ants.setAnts(msg, now);
       view.farmAnts.setAnts(msg, now);
-      status.textContent = `Tank ${seed} · ant time ${formatAntTime(msg.step)}`;
+      view.brood.setBrood(msg.brood);
+      const n = [0, 0, 0, 0];
+      for (let o = 2; o < msg.brood.length; o += BROOD_STRIDE) n[msg.brood[o]!]!++;
+      status.textContent =
+        `Tank ${seed} · ant time ${formatAntTime(msg.step)} · ` +
+        `brood: ${n[BroodStage.egg]} eggs, ${n[BroodStage.larva]} larvae, ${n[BroodStage.pupa]} pupae`;
     } else if (msg.type === 'arena') {
       view.arena.setArena(msg);
       counts.textContent =
@@ -55,20 +63,21 @@ async function start(): Promise<void> {
     view.farmAnts.update(now);
   });
 
-  // Feeding: tap the arena floor to put a drop there.
-  let concentration = 1;
+  // Feeding: tap the arena floor to put a drop (or an insect) there.
+  let food = '1';
   camera.onTap = (px, py) => {
     const p = view.root.toLocal({ x: px, y: py });
     const x = p.x - ARENA_X;
     const y = p.y;
     if (x > 2 && y > 2 && x < ARENA_SIZE - 2 && y < ARENA_SIZE - 2) {
-      send({ type: 'sugar', x, y, volume: DROP_VOLUME, concentration });
+      if (food === 'protein') send({ type: 'protein', x, y, volume: INSECT_VOLUME });
+      else send({ type: 'sugar', x, y, volume: DROP_VOLUME, concentration: Number(food) });
     }
   };
   const sugarButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-sugar]')];
   for (const button of sugarButtons) {
     button.addEventListener('click', () => {
-      concentration = Number(button.dataset.sugar);
+      food = button.dataset.sugar ?? '1';
       for (const b of sugarButtons) b.setAttribute('aria-pressed', String(b === button));
     });
   }

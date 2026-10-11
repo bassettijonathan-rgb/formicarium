@@ -5,7 +5,7 @@
  * the layer is put where the place is in the scene.
  */
 import { Container, Graphics, type Renderer, Sprite, type Texture } from 'pixi.js';
-import { AntState } from '../sim/ants';
+import { AntState, Caste } from '../sim/ants';
 import { ANT_STRIDE, type AntsSnapshot } from '../worker/protocol';
 import { ANT_SCALE, CROP, GAIT_FRAMES, STRIDE, makeAntTextures } from './antSprites';
 import { grainColor } from './soilColors';
@@ -73,6 +73,10 @@ export class AntLayer {
       ant.body.rotation = prev.ants[o + 2]! + dh * k;
       const frame = Math.floor(((walked % STRIDE) / STRIDE) * GAIT_FRAMES) % GAIT_FRAMES;
       ant.sprite.texture = this.textures[cur.full[i]!]![frame]!;
+      // A Lasius niger queen is about twice a worker's length, her gaster always swollen.
+      const queen = cur.caste[i] === Caste.queen;
+      ant.sprite.scale.set(queen ? 2 * ANT_SCALE : ANT_SCALE);
+      if (queen) ant.sprite.texture = this.textures[1]![frame]!;
       // What is at the mouth: a grain of soil (its material), a droplet being shared (-1), or nothing (0).
       const held = cur.ants[o + 3] === AntState.sharing ? -1 : cur.ants[o + 6]!;
       if (held !== ant.material) {

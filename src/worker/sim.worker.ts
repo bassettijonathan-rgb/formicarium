@@ -4,8 +4,9 @@
  * steps to run per real interval.
  */
 import { AntState, Place } from '../sim/ants';
+import { BroodStage } from '../sim/brood';
 import { STEPS_PER_SECOND } from '../sim/time';
-import { colonyCrop, createWorld, placeSugar, removeFood, step, type World } from '../sim/world';
+import { colonyCrop, createWorld, placeProtein, placeSugar, removeFood, step, type World } from '../sim/world';
 import { ANT_STRIDE, type FromWorker, type ToWorker } from './protocol';
 
 const INTERVAL_MS = 50;
@@ -52,7 +53,23 @@ function sendAnts(w: World): void {
     data[o + 6] = ants.state[i] === AntState.carrying ? ants.grain[i]! : 0;
     full[i] = ants.crop[i]! > 0.5 * w.params.cropLoad ? 1 : 0;
   }
-  post({ type: 'ants', step: w.step, ants: data, full }, [data.buffer, full.buffer]);
+  const caste = ants.caste.slice();
+  const { brood } = w;
+  const items: number[] = [];
+  for (let k = 0; k < brood.count; k++) {
+    const stage = brood.stage[k]!;
+    if (stage === BroodStage.none) continue;
+    // Sizes in mm: eggs ~0.5, larvae grow from ~1 to ~3.5, cocoons ~3.5 long.
+    const size = stage === BroodStage.egg ? 0.5 : stage === BroodStage.larva ? 1 + 2.5 * brood.progress[k]! : 3.5;
+    items.push(brood.x[k]!, brood.y[k]!, stage, size);
+  }
+  const broodData = Float32Array.from(items);
+  post({ type: 'ants', step: w.step, ants: data, full, caste, brood: broodData }, [
+    data.buffer,
+    full.buffer,
+    caste.buffer,
+    broodData.buffer,
+  ]);
 }
 
 function sendArena(w: World): void {
@@ -81,6 +98,7 @@ function applyPending(w: World): boolean {
   const any = pending.length > 0;
   for (const msg of pending.splice(0)) {
     if (msg.type === 'sugar') placeSugar(w, msg.x, msg.y, msg.volume, msg.concentration);
+    else if (msg.type === 'protein') placeProtein(w, msg.x, msg.y, msg.volume);
     else if (msg.type === 'clearFood') for (const d of [...w.food]) removeFood(w, d.id);
   }
   return any;
@@ -89,7 +107,7 @@ function applyPending(w: World): boolean {
 onmessage = (e: MessageEvent<ToWorker>) => {
   const msg = e.data;
   if (msg.type === 'start') {
-    world = createWorld(msg.seed);
+    world = createWorld(msg.seed, { queen: true });
     // A first sugar drop, so a new tank has something to find.
     placeSugar(world, 100, 55, 40, 1);
     sendFarm(world);

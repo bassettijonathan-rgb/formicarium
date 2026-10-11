@@ -69,7 +69,9 @@ Each row has a recommendation. Approving the doc as written accepts all of them.
 | Load | 1 grain or 1 food item or 1 brood item | |
 | Crop (social stomach) | ~0.2 µL sugar water | rough |
 | Sugar burnt | ~0.05 µL of 1 M sucrose per worker per tank day | rough, from resting metabolic rates; runs on the life clock (D6) |
-| Development at 25 °C | egg ~3 wk, larva ~3 wk, pupa ~2 wk | Lasius niger, rough; scaled by temperature |
+| Development at 25 °C | egg ~16 days, larva ~12 days if fed, pupa ~14 days: first workers about 6 weeks after laying | Lasius niger, rough, from keepers' records at 24-27 °C; scaled by degree-days above 12 °C |
+| Larva's food | ~0.05 µL of protein-rich food over its stage | rough |
+| Queen's laying | up to ~10 eggs a tank day when fed, ~0.005 µL of protein per egg | rough, for a young colony |
 | Worker lifespan | ~1 year | queen ~15+ years (Lasius queens are famous for living 28) |
 
 ---
@@ -190,6 +192,73 @@ nestmates it touches, and they share (section 7.3). So a forager that cannot unl
 home is full, stays in, and a hungry colony sends out more foragers with no
 colony-level number involved.
 
+**M3b: the queen and the brood.** The queen is an ant like the others with
+a few differences: she never leaves the farm, digs or feeds a nestmate, walks
+at half speed and rests ten times as long. She begs like a worker; the
+protein she is fed goes into her body reserve, and while she rests she lays
+eggs where she lies as long as the reserve covers them. Workers pile the
+brood the way Deneubourg et al. (1991) found ants sort items: a worker that
+touches a brood item picks it up the more readily the fewer other items lie
+round it, and puts it down the more readily the more do, so scattered eggs
+end up in piles (sorting the piles by stage is M4). Hungry larvae give off a scent;
+a worker carrying protein follows it to them and feeds the larvae it
+touches, and a worker that smells the brood's hunger goes out for protein
+the way a hungry worker goes out for sugar (section 7.3). A worker touching
+a pupa that is ready helps the new worker out of its cocoon.
+
+**The nest round the queen (M3c's cue, brought into M3b).** In M2 the nest
+was wherever workers rested. With a queen, food did not reach her. Tracing
+where everyone was showed why, one cause after another:
+
+- Workers back out in the open (a forager home from the tube, a digger that
+  has dumped its grain) wandered in the headspace above the spoil for days.
+  Now an ant remembers, by its path integrator, the hole it last came out
+  of the soil by, walks back to it and goes in, and out in the open it
+  follows the colony odour as strongly as a forager coming home. If spoil
+  has buried that hole, an ant standing over it digs it open again, alone
+  (other digging needs company).
+- Smells spread through solid soil, so workers carrying protein in the
+  headspace pressed against the soil right above the brood pile. Now colony
+  odour and brood scent spread only through air: along tunnels, through the
+  open, and through loose sand, which air seeps between (without that, a
+  queen walled into a pocket by sand that slid into her tunnel could not be
+  smelt, and starved there unvisited).
+- The queen lived alone: she touched a worker 7-20% of the time and lay
+  about 50 mm from her brood, and the workers that did touch her were empty
+  while half the colony carried protein elsewhere, so she got about three
+  eggs' worth a day. Now workers settle on brood (Lasius niger brood-tenders
+  form one large, stable cluster where foragers form small, passing ones:
+  Depickère, Fresneau & Deneubourg 2004), at up to 21 times the rate
+  elsewhere (rough), and the queen counts as five brood items to the ants
+  near her, both for settling and for piling, so her eggs are piled round
+  her and her workers gather there (rough). The queen lives among the
+  larvae and pupae, where the nurses are: she follows the brood scent to
+  them, settles there, and settles elsewhere only a tenth as readily as a
+  worker would (rough; she must lie somewhere to lay before there are
+  larvae). Where she rests she leaves 20 times a worker's colony odour
+  (rough). Workers touching her while she is short of protein feed her
+  from their crop, as they feed a larva.
+- With the queen fed, the eggs piled up but the larvae starved: the colony
+  had split into two settlements, the queen, brood and empty nurses in one
+  tunnel system and the fed foragers in another nearer the tube, with no
+  brood scent reaching them. Now a worker carrying protein follows the
+  brood scent inside the soil when it comes home as well as when it
+  wanders, and it does not settle to rest until it is by the brood (rough).
+  Out in the open it goes back in by its hole and the colony odour first.
+- Protein carriers spent two thirds of their time out in the open, because
+  they took up digging on the way and then carried spoil. Now an ant with
+  protein for the brood takes it there before it digs, though it still
+  clears loose grains that block a tunnel; clearing a blocked way, unlike
+  new digging, needs no company.
+- Over three weeks the spoil filled much of the headspace, and a heap
+  against the end wall buried the tube's mouth: the colony was shut in and
+  starved. Ants never dropped spoil by the mouth; now they drop none
+  anywhere above it either, where a grain could fall or slide onto it.
+- In one tank the protein foragers never found the insect, although many
+  passed within a few mm of it on their way home after giving up the
+  search. Now an ant going home empty takes food of its kind that it walks
+  into (the M1 trail experiments are unchanged).
+
 Each ant logs short events (born, first foraging trip, found food, died) so
 you can open any ant and read its life.
 
@@ -204,6 +273,7 @@ you can open any ant and read its life.
 | Building | soil freshly dropped by diggers | ~30 min | where to keep building (Khuong et al. 2016) |
 | Alarm | ants that are attacked or crushed | seconds | scatter or attack |
 | Death cue (oleic acid) | corpses, after ~1 day | slowly | triggers carrying to midden (Wilson et al. 1958) |
+| Brood scent | hungry larvae | half-life 6 h | leads workers carrying protein to the brood; workers who smell it go out for prey (M3b, rough) |
 
 Each field diffuses and evaporates every few steps on its grid. Evaporation
 rates are the main tuning knobs; section 9 pins them against known results.
@@ -230,8 +300,8 @@ al. 2016), in `src/sim/farmAnts.ts`:
 2. **Carrying out.** The digger turns round and carries the grain up the
    fresh-air gradient until it is out in the open, walks at least 2 cm along
    the surface away from its hole, then drops the grain, more readily next to
-   other spoil, so heaps grow. Ants never drop spoil by the tube's mouth and
-   clear any that blocks it.
+   other spoil, so heaps grow. Ants never drop spoil by the tube's mouth or
+   above it, and clear any that blocks it.
 3. **Site fidelity.** After dropping its grain, a digger walks back to the
    face it was digging by its path integrator (for up to a minute), as real
    diggers return to the same face.
@@ -251,6 +321,40 @@ Eggs, larvae, pupae and adults follow temperature-dependent durations
 (D6 compresses them). Larvae must be fed protein to grow; underfed larvae
 develop slower or die (are eaten, as real ants recycle brood). New workers
 are pale callows that stay inside and nurse first.
+
+What M3b builds (`src/sim/brood.ts`, `src/sim/farmAnts.ts`):
+
+1. **Development** runs on the life clock at a rate proportional to the
+   degrees above 12 °C (degree-days), so the stage lengths of section 2 hold
+   at 25 °C and stretch in a cooler nest. The farm is at 25 °C until the heat
+   mat comes in M5. At 1 tank day per hour of play, the first new workers
+   appear about 42 hours after the first eggs.
+2. **Larvae eat their way through their stage.** A larva grows only while it
+   has food in it, using about 0.05 µL of protein-rich food over the stage,
+   and begs (gives off brood scent) when it holds less than a third of a
+   meal. An unfed larva waits, for up to 4 days; then the nurses that touch
+   it eat it and take its protein back, as starved colonies cannibalise
+   brood (rough). So the brood a colony keeps is the brood it can feed.
+3. **Nurses.** A resting or wandering worker that touches a begging larva
+   feeds it, at about one feed every 2 s of contact, up to 0.01 µL from the
+   protein in its crop. Sugar alone feeds no larva.
+4. **The queen** starts with 0.1 µL of protein in her body, enough for about
+   20 eggs, which is how a claustral queen raises her first workers from her
+   wing muscles. She stores up to 0.1 µL from what she is fed and lays up
+   to 10 eggs a day while her reserve covers them: she lays as well as she
+   is fed. While her store is under half full she gives off brood scent
+   like a hungry larva, so food is brought to her (rough), and the workers
+   touching her feed her protein the way nurses feed a larva.
+5. **Eclosion.** A pupa that has finished waits until a worker touches it;
+   the new worker appears where it lay, with its own foraging threshold
+   drawn like any worker's. Callows and age polyethism come in M4.
+6. **Brood piling and the nest round the queen**, as in section 4.3: piling
+   after Deneubourg et al. (1991), with pick-up rate 0.2/s × (0.5/(0.5+n))²
+   and drop rate 1/s × (n/(1+n))² for n items within 5 mm (the queen
+   counting as 5); a carrier gives up after 2 minutes (4 out in the open,
+   where it never puts brood down). Workers settle on brood at
+   1 + 20·n/(1+n) times their usual rate; a worker carrying protein at only
+   20·n/(1+n), and the queen at 0.1 + 20·m/(1+m) for m larvae and pupae.
 
 ### 7.2 Founding
 
@@ -292,9 +396,33 @@ Food spreads through the colony as a contact network, not a global stockpile
    home, so it drinks a full load next time and lays a strong trail; one from
    a full colony goes out less and drinks less (Mailleux et al. 2000, 2006).
 
+5. **Protein (M3b).** Insects are food like sugar water, but what a worker
+   drinks from one counts as protein too. Protein is shared along with the
+   rest of the crop, burnt like sugar by workers (a simplification: insect
+   juice also fuels them), and only protein feeds larvae and the queen's
+   eggs. A worker feels the brood's hunger by smelling it (brood scent) or
+   from nestmates it touches, who pass on four fifths of what they feel; the
+   feeling fades with a half-life of 10 minutes once nothing renews it. So
+   nurses feel it most and foragers learn of it by touch, as larval demand
+   reaches the foragers in real colonies (Dussutour & Simpson 2009). It
+   drives a worker out like its own hunger does, less so the more protein
+   it already carries. It goes out for
+   whichever need is the stronger, sugar for its own hunger or protein for
+   the brood's: back to food of that kind it remembers, or else exploring,
+   and it passes sugar by when out for protein. One out for sugar that comes
+   on prey takes it instead if it feels the brood's hunger (at 0.3 or more,
+   rough); without this, a colony whose few protein scouts missed the
+   insect went days without protein while its sugar foragers walked past
+   it. A scout out for protein searches
+   on its own rather than follow the trail, which leads to sugar as often as
+   not (the trail does not say what it leads to). Lasius niger colonies with
+   larvae to feed forage more for protein (Portha et al. 2002), and workers
+   live on carbohydrate: colonies fed only protein die (Dussutour & Simpson
+   2012). A worker carrying protein in the nest follows the brood scent to
+   the larvae.
+
 There is no colony store: the colony's food is what is in its workers'
-crops, and the page shows that total. Protein, larvae and the queen come in
-M3b: protein goes mostly to larvae and the queen; sugar fuels workers.
+crops, and the page shows that total.
 
 ### 7.4 Brood sorting and the midden
 
@@ -341,6 +469,9 @@ project. If one fails, we fix the model, not the test.
    colony given sugar, a minority of workers forage and the food reaches
    most of the colony within an hour by trophallaxis. A well-fed colony
    barely forages (Greenwald et al. 2018; Mailleux et al. 2006).
+8. **Colony growth:** a queen and workers given sugar water and insects raise
+   new workers about six weeks (tank days) after the first eggs; given sugar
+   only, the larvae never grow.
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -381,12 +512,14 @@ digs about twice as much. What is weaker than in Rasse & Deneubourg 2001:
 the nests are still growing at 8 h rather than flat (in the 20-worker farms,
 hours 6-8 add about half as much as hours 2-4; one farm stopped at 1,800 mm²
 while another was still digging fast), and an 80-worker colony is stopped by
-the size of the farm, not by its own regulation. M3c replaces the crowding cue with one that should
-settle: brood and resting nestmates. Groups of 5 dig much less per ant than
+the size of the farm, not by its own regulation. M3c was to replace the crowding cue with one that
+should settle: brood and resting nestmates. It was folded into M3b as the nest forming round the queen
+and brood (section 4.3); the digging cue itself is unchanged, and over weeks the nest still grows
+slowly (section 9.4). Groups of 5 dig much less per ant than
 groups of 40 (`tests/farmAnts.test.ts`), the social facilitation Chen 1937
 described.
 
-### 9.3 Results so far (M3 food flow, 10 colonies of 50 workers per condition)
+### 9.3 Results so far (food flow, 10 colonies of 50 workers per condition, re-run with M3b)
 
 `npm run experiment -- spread [--no-sharing] [--satiated]`;
 `tests/science/foodFlow.test.ts` checks seeds 1-3. Each colony digs for an
@@ -396,24 +529,72 @@ the tube. "Fed" means a worker has had at least a tenth of a crop since.
 
 | | Fed after 30 min | Fed after 60 min | Workers that went out | Departures in the hour |
 |---|---|---|---|---|
-| Starved, sharing | 22-96% (mean 55%) | 78-100% (mean 91%) | 24-40% (mean 29%) | 37-98 (mean 63) |
-| Control: no sharing | 2-20% (mean 10%) | 4-30% (mean 19%) | 18-34% (mean 25%) | 18-69 (mean 39) |
-| Control: well fed | | | 6-20% (mean 13%), scouts | 4-27 (mean 12) |
+| Starved, sharing | 0-86% (mean 43%) | 66-98% (mean 81%) | 20-34% (mean 27%) | 37-102 (mean 58) |
+| Control: no sharing | 0-24% (mean 13%) | 12-30% (mean 21%) | 16-32% (mean 26%) | 23-70 (mean 44) |
+| Control: well fed | | | 6-24% (mean 15%), scouts | 9-26 (mean 14) |
 | Planckaert et al. 2019 | about 58% (naive workers fall exponentially, mean 35 min) | about 82% (44 of 53 took part) | about 20% | |
 
-Food reaches the colony about as fast as in the real one, a little faster
-by the hour, and a few more workers go out (29% rather than about 20%): a
-minority forages, the rest are fed mouth to mouth, and without sharing four
-in five workers are still hungry after an hour. The colonies that start
-slowly are the ones whose first foragers take longest to find the drop. A
-well-fed colony sends out about a fifth as many workers as a starved one, all
-scouts, as Greenwald et al. 2018 measured. Over 4 hours a starved colony's
+Food reaches the colony about as fast as in the real one (81% fed by the
+hour against 82%), and a few more workers go out (27% rather than about
+20%): a minority forages, the rest are fed mouth to mouth, and without
+sharing four in five workers are still hungry after an hour. The colonies
+that start slowly are the ones whose first foragers take longest to find the
+drop. M3a fed 91% by the hour; since M3b a hungry ant goes back down its own
+hole to rest, so the first foragers set off from deeper in the nest and the
+first half hour is slower (43% fed rather than 55%), closer to Planckaert's
+58%. A well-fed colony sends out about a quarter as many workers as a starved
+one (14 departures against 58), all scouts, as Greenwald et al. 2018
+measured. It was a fifth in M3a, for the same reason: the starved colony is
+slower to get going. The test now asks for a third (seeds 1-3 alone give
+3.7, the 10 colonies 4.1); Greenwald et al. give no ratio, so a quarter was
+our own choice, not a measurement. Over 4 hours a starved colony's
 crops level off at 40-70% full,
 where what it brings in matches what it burns: hunger regulating foraging,
 with nothing counting the colony's food. Greenwald et al. 2018 saw
 Camponotus colonies fill up and nearly stop within 3-4 hours; ours keeps
 foraging at 5-15 departures every 10 minutes because the life clock burns
 a tank day of sugar every hour.
+
+
+### 9.4 Results so far (colony growth; 3 colonies of 60 workers and a queen, 60 tank days each)
+
+`npm run experiment -- growth --days 60 [--no-protein]`; real development
+times (egg 16, larva 12, pupa 14 tank days at 25 °C). Every tank day the
+keeper puts out fresh sugar water and one insect. Workers at day 60 count
+the 60 the colony started with.
+
+| Colony | Eggs by day 12 | First larvae | First new workers | Workers at day 60 | Brood at day 60 |
+|---|---|---|---|---|---|
+| Seed 1 | 40 | day 18 | by day 48 | 71 | 104 eggs, 56 larvae |
+| Seed 2 | 55 | day 18 | by day 48 | 115 | 147 eggs, 106 larvae, 112 pupae |
+| Seed 3 | 59 | day 18 | by day 48 | 111 | 30 larvae, 20 pupae |
+| Control: no insects (seed 1) | 19 | day 18 | none | 60 | none: the 10 larvae never grow and are gone by day 30 |
+| Expected | up to 10 a day | after 16 days | about 42 days after the first eggs | | |
+
+What holds: all three colonies raise their first workers about six weeks
+after the first eggs, as the stage durations predict, and grow by 20-90%
+in 60 days on one insect a day; seed 2 has 112 more pupae on the way. The
+day-by-day protein trace that led here (section 4.3, "The nest round the
+queen") showed a chain of separate failures, each of which stopped every
+colony before: a queen alone, the fed foragers settled away from the
+brood, protein carriers digging and lost in the open, the tube buried
+under spoil, a queen walled in by fallen sand, and prey passed by. What is
+weaker: while a big batch of larvae is being fed, the larvae can take
+nearly all the protein and the queen's store runs out, so she stops laying
+for a week or more (seeds 1 and 3) and the colony grows in pulses rather
+than steadily; seed 1 lost most of its first larvae to starvation around
+day 30. A real queen is fed first (rough; M4's division of labour may
+change who feeds her). The nest keeps growing slowly: about 140-165 mm²
+per worker by day 20 against 100-140 at 8 hours, and the spoil fills much
+of the headspace in three weeks, so a colony that keeps growing will run
+out of room in this farm.
+
+The short version in `tests/science/colonyGrowth.test.ts` (30 workers,
+eggs and pupae eight times faster, larvae at their real 12 days, 20 days)
+raises new workers in all three colonies. An earlier version squeezed the
+larval stage too, which asks the nurses for protein eight times faster
+than any real colony feeds its larvae, and one of the three colonies raised
+no workers in it.
 
 ---
 
@@ -444,7 +625,7 @@ Each milestone is one or a few small PRs, merged by Marco, with a link to play.
 | M0 | Skeleton: empty tank renders, CI, Pages deploy, determinism test |
 | M1 | Arena foraging: ants with path integration and trail pheromone find food and form trails. Double bridge and food choice tests pass |
 | M2 | Soil and digging: side-view farm, soil physics, ants dig tunnels and chambers that scale with colony size |
-| M3 | Colony life: queen, brood, development, trophallaxis, founding. In three PRs: M3a food flow (hunger, sharing, forager thresholds); M3b queen, brood and development; M3c brood and the resting nest as the digging cue |
+| M3 | Colony life: queen, brood, development, trophallaxis, founding. In three PRs: M3a food flow (hunger, sharing, forager thresholds); M3b queen, brood and development, with the queen and brood as the heart of the nest (planned as M3c, brought forward by Marco 2026-10-11); M3c brood and the resting nest as the digging cue, folded into M3b (the digging cue itself is still open) |
 | M4 | Division of labour: response thresholds, age polyethism, brood sorting, midden |
 | M5 | Tending: temperature, humidity, mould, feeding tools, colony death |
 | M6 | Keeping it: saves, offline catch-up, ant inspector, graphs, timelapse |
@@ -464,6 +645,10 @@ parameters, I stop and report before changing the model.
 - Buhl et al. 2004. Self-organized digging activity in ant colonies. Behav. Ecol. Sociobiol.
 - Chen 1937. Social modification of the activity of ants in nest-building. Physiol. Zool.
 - Charbonneau & Dornhaus 2015. When doing nothing is something. J. Bioecon.
+- Deneubourg, Goss, Franks, Sendova-Franks, Detrain & Chrétien 1991. The dynamics of collective sorting: robot-like ants and ant-like robots. In From Animals to Animats (SAB 1990). MIT Press.
+- Depickère, Fresneau & Deneubourg 2004. Dynamics of aggregation in *Lasius niger* (Formicidae): influence of polyethism. Insectes Soc. 51, 81-90.
+- Dussutour & Simpson 2009. Communal nutrition in ants. Curr. Biol.
+- Dussutour & Simpson 2012. Ant workers die young and colonies collapse when fed a high-protein diet. Proc. R. Soc. B.
 - Franks & Sendova-Franks 1992. Brood sorting by ants. Behav. Ecol. Sociobiol.
 - Goss, Aron, Deneubourg & Pasteels 1989. Self-organized shortcuts in the Argentine ant. Naturwissenschaften.
 - Greenwald, Eckmann & Feinerman 2018. Individual crop loads provide local control for collective food intake in ant colonies. eLife.
@@ -473,6 +658,7 @@ parameters, I stop and report before changing the model.
 - Mailleux, Detrain & Deneubourg 2006. Starvation drives a threshold triggering communication. J. Exp. Biol.
 - Müller & Wehner 1988. Path integration in desert ants. PNAS.
 - Planckaert et al. 2019. A spatiotemporal analysis of the food dissemination process and the trophallactic network in the ant *Lasius niger*. Sci. Rep.
+- Portha, Deneubourg & Detrain 2002. Self-organized asymmetries in ant foraging: a functional response to food type and colony needs. Behav. Ecol.
 - Rasse & Deneubourg 2001. Dynamics of nest excavation and nest size regulation of *Lasius niger*. J. Insect Behav.
 - Theraulaz et al. 2002. Spatial patterns in ant colonies. PNAS.
 - Wilson, Durlach & Roth 1958. Chemical releasers of necrophoric behavior in ants. Psyche.

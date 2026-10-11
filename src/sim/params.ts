@@ -51,6 +51,11 @@ export interface AntParams {
 
   /** An ant smells a food drop and walks to it from this far, mm. */
   foodSenseRange: number;
+  /**
+   * A forager out for sugar that comes on prey takes it instead if its
+   * feeling for the brood's hunger is at least this (rough).
+   */
+  preyNeed: number;
   /** Time to fill the crop at a sugar drop, seconds (rough: about a minute). */
   feedTime: number;
   /** Sugar water taken per visit, µL (rough). */
@@ -141,6 +146,23 @@ export interface AntParams {
   restRate: number;
   /** Extra settling per unit of colony odour: ants rest where nestmates rest. */
   restOdourGain: number;
+  /**
+   * Extra settling next to brood, times n/(n + `broodDropHalf`) for n brood
+   * items within `broodSenseRadius`: workers gather on the brood, so the nest
+   * forms round it. Lasius niger brood-tenders form one large, stable cluster
+   * (Depickère, Fresneau & Deneubourg 2004); the gain is rough.
+   */
+  broodRestGain: number;
+  /**
+   * The queen counts as this many brood items to the ants near her, both for
+   * piling and for settling: her eggs are kept round her and her workers
+   * gather there (rough).
+   */
+  queenBroodWeight: number;
+  /** How readily the queen settles where there is no brood, relative to a worker (she seeks her brood). */
+  queenSettleAlone: number;
+  /** How much more colony odour the resting queen leaves than a resting worker (rough). */
+  queenOdourGain: number;
   /** Mean length of a rest, seconds. */
   restLength: number;
   /** Time for a forager to walk through the tube, seconds. */
@@ -210,6 +232,81 @@ export interface AntParams {
    * ones (Greenwald et al. 2018), so a fed colony keeps a few scouts out.
    */
   scoutShare: number;
+
+  // --- Queen and brood (M3b) ---
+
+  /**
+   * Temperature in the nest, °C. Fixed until M5 brings the heat mat and a
+   * temperature field; development rates scale with it.
+   */
+  nestTemperature: number;
+  /**
+   * Below this temperature, °C, brood does not develop. Development speed
+   * rises in a straight line above it (the degree-day model used for ant
+   * brood by Kipyatkov & Lopatina; rough value for Lasius niger).
+   */
+  developmentZero: number;
+  /**
+   * Days each stage takes at 25 °C, on the life clock (rough, from Lasius
+   * niger kept at 24-27 °C: eggs hatch after about 2 weeks and the first
+   * workers appear 5-6 weeks after laying). Larvae take this long only when
+   * fed enough.
+   */
+  eggDays: number;
+  larvaDays: number;
+  pupaDays: number;
+  /** Protein a larva eats over its whole stage, µL of protein-rich food (rough). */
+  larvaFood: number;
+  /** A larva begs while it holds less than this fraction of `larvaFood`. */
+  larvaBegBelow: number;
+  /**
+   * Days a larva survives without food; then the nurses that touch it eat it
+   * and take its protein back (rough: starved colonies cannibalise brood).
+   */
+  larvaStarveDays: number;
+  /**
+   * Brood piling (Deneubourg et al. 1991): a resting or wandering worker
+   * touching a brood item picks it up at `broodPickRate` per second times
+   * (k/(k+n))², where n is the other brood within `broodSenseRadius` and k is
+   * `broodPickHalf`; a carrier puts it down at `broodDropRate` times
+   * (n/(k+n))² with k = `broodDropHalf`, or after `broodCarryMax` seconds.
+   */
+  broodPickRate: number;
+  broodPickHalf: number;
+  broodDropRate: number;
+  broodDropHalf: number;
+  broodSenseRadius: number;
+  broodCarryMax: number;
+  /** Chance per second that a worker touching a begging larva feeds it, if it has protein in its crop. */
+  nurseRate: number;
+  /** Protein food passed to a larva in one feed, µL at most. */
+  nurseLoad: number;
+  /** Most eggs a well-fed queen lays per day (rough for a young Lasius niger colony). */
+  layRate: number;
+  /** Protein a queen spends on one egg, µL of protein-rich food (rough). */
+  eggCost: number;
+  /** Protein a queen starts with in her body (wing muscles and fat), µL, enough for her first eggs. */
+  queenReserve: number;
+  /** Most protein a queen's body stores, µL (rough): beyond it what she is fed stays in her crop. */
+  queenReserveMax: number;
+  /** Colony odour a brood item gives off per second, like `odourDeposit` for a resting worker. */
+  broodOdour: number;
+  /** Scent a hungry larva gives off, per second (field units; only its gradient matters). */
+  broodScentDeposit: number;
+  /** Half-life of the brood scent, seconds. */
+  broodScentHalfLife: number;
+  /** How fast the brood scent spreads through the nest, mm² per second (capped by the field update). */
+  broodScentDiffusion: number;
+  /** Brood scent at which a worker feels the brood's need for protein half as strongly as it can. */
+  broodNeedScent: number;
+  /** Fraction of a nestmate's feeling for the brood's hunger an ant takes on when they touch. */
+  needRelay: number;
+  /** Half-life of an ant's feeling for the brood's hunger once nothing renews it, seconds. */
+  needHalfLife: number;
+  /** Turning towards stronger brood scent by a wandering worker carrying protein, radians per second. */
+  nurseTurn: number;
+  /** How fast a queen walks, as a fraction of a worker's speed. */
+  queenSpeed: number;
 }
 
 export const DEFAULT_ANT_PARAMS: AntParams = {
@@ -231,6 +328,7 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   piNoise: 0.15,
 
   foodSenseRange: 4,
+  preyNeed: 0.3,
   feedTime: 60,
   cropLoad: 0.2,
   qualityHalf: 0.25,
@@ -272,6 +370,10 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
 
   restRate: 0.05,
   restOdourGain: 0.5,
+  broodRestGain: 20,
+  queenBroodWeight: 5,
+  queenSettleAlone: 0.1,
+  queenOdourGain: 20,
   restLength: 60,
   tubeTime: 7,
 
@@ -288,4 +390,34 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   forageSteepness: 4,
   forageRate: 1 / 240,
   scoutShare: 0.2,
+
+  nestTemperature: 25,
+  developmentZero: 12,
+  eggDays: 16,
+  larvaDays: 12,
+  pupaDays: 14,
+  larvaFood: 0.05,
+  larvaBegBelow: 0.3,
+  larvaStarveDays: 4,
+  broodPickRate: 0.2,
+  broodPickHalf: 0.5,
+  broodDropRate: 1,
+  broodDropHalf: 1,
+  broodSenseRadius: 5,
+  broodCarryMax: 120,
+  nurseRate: 0.5,
+  nurseLoad: 0.01,
+  layRate: 10,
+  eggCost: 0.005,
+  queenReserve: 0.1,
+  queenReserveMax: 0.1,
+  broodOdour: 1,
+  broodScentDeposit: 1,
+  broodScentHalfLife: 6 * 3600,
+  broodScentDiffusion: 1,
+  broodNeedScent: 5,
+  needRelay: 0.8,
+  needHalfLife: 600,
+  nurseTurn: 4,
+  queenSpeed: 0.5,
 };

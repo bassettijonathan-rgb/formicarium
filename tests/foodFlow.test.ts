@@ -53,7 +53,9 @@ describe('food flow in the farm', () => {
       w.ants.crop.fill(crop);
       w.ants.forageThreshold.fill(w.params.forageThresholdMin);
       let out = 0;
-      for (let s = 0; s < 600 * STEPS_PER_SECOND; s++) {
+      // 15 minutes: since M3b, ants that come out into the open go back down their hole, so a hungry
+      // ant sets off from inside the nest and takes a little longer to reach the tube.
+      for (let s = 0; s < 900 * STEPS_PER_SECOND; s++) {
         step(w);
         for (let i = 0; i < w.ants.count; i++) if (w.ants.place[i] !== Place.farm) out |= 1 << i;
       }
