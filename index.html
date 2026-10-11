@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Formicarium</title>
+    <link rel="icon" href="data:," />
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #111317; color: #d8dde3;
+        font: 14px/1.4 system-ui, sans-serif; }
+      #stage { position: fixed; inset: 0; touch-action: none; cursor: grab; }
+      #stage:active { cursor: grabbing; }
+      #hud { position: fixed; top: 12px; left: 12px; padding: 10px 12px; border-radius: 8px;
+        background: rgba(17, 19, 23, 0.82); max-width: calc(100vw - 48px); }
+      #hud h1 { font-size: 16px; margin: 0 0 4px; font-weight: 600; }
+      #hud p { margin: 2px 0; color: #9aa4b1; }
+      #hud .row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+      #hud button { background: #262b33; color: #d8dde3; border: 1px solid #3a404a; border-radius: 5px;
+        padding: 3px 9px; font: inherit; cursor: pointer; }
+      #hud button[aria-pressed='true'] { background: #3d4a5c; border-color: #6d84a3; }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="hud">
+      <h1>Formicarium</h1>
+      <p id="status">Setting up the tank…</p>
+      <p>M0: the tank is set up. No ants yet; they arrive in M1.</p>
+      <div class="row">
+        <button data-speed="0">Pause</button>
+        <button data-speed="1" aria-pressed="true">1×</button>
+        <button data-speed="4">4×</button>
+        <button data-speed="16">16×</button>
+        <button id="fit">Fit view</button>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
