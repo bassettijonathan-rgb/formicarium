@@ -6,10 +6,19 @@
  *   npm run experiment -- nest [--ants 40] [--hours 12] [--no-crowd]
  *   npm run experiment -- spread [--ants 50] [--minutes 60] [--no-sharing] [--satiated]
  *   npm run experiment -- growth [--days 50] [--no-protein]
+ *   npm run experiment -- division [--days 4] [--after 6] [--no-fat]
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
  */
 import type { AntParams } from '../src/sim/params';
-import { runColonyGrowth, runDoubleBridge, runFoodChoice, runFoodSpread, runNestVolume, runTrailDecay } from '../src/sim/experiments';
+import {
+  runColonyGrowth,
+  runDivision,
+  runDoubleBridge,
+  runFoodChoice,
+  runFoodSpread,
+  runNestVolume,
+  runTrailDecay,
+} from '../src/sim/experiments';
 
 const [name, ...rest] = process.argv.slice(2);
 let runs = 10;
@@ -18,7 +27,8 @@ let ants = 0;
 let hours = 12;
 let minutes = 60;
 let satiated = false;
-let days = 50;
+let days = 0;
+let after = 6;
 let protein = true;
 const params: Partial<AntParams> = {};
 for (let i = 0; i < rest.length; i++) {
@@ -33,6 +43,8 @@ for (let i = 0; i < rest.length; i++) {
   else if (rest[i] === '--satiated') satiated = true;
   else if (rest[i] === '--days') days = Number(rest[++i]);
   else if (rest[i] === '--no-protein') protein = false;
+  else if (rest[i] === '--after') after = Number(rest[++i]);
+  else if (rest[i] === '--no-fat') params.fatDrift = false;
   else if (rest[i] === '--param') {
     // --param name=value: any ant parameter, for trying values out.
     const [key, value] = rest[++i]!.split('=');
@@ -71,14 +83,32 @@ for (let seed = first; seed < first + runs; seed++) {
         `departures per 10 min ${per10.join(' ')}; crops ${r.cropByMinute.at(-1)!.toFixed(2)} µL`,
     );
   } else if (name === 'growth') {
-    const r = runColonyGrowth({ seed, ants: ants || 60, days, protein, params });
-    const every = Math.max(1, Math.round(days / 10));
-    const rows = r.filter((d) => d.day % every === 0 || d.day === days);
+    const length = days || 50;
+    const r = runColonyGrowth({ seed, ants: ants || 60, days: length, protein, params });
+    const every = Math.max(1, Math.round(length / 10));
+    const rows = r.filter((d) => d.day % every === 0 || d.day === length);
     console.log(
       `seed ${seed}: ` +
         rows.map((d) => `d${d.day} ${d.eggs}e ${d.larvae}l ${d.pupae}p ${d.workers}w q${d.reserve.toFixed(2)} c${Math.round(100 * d.crops)}%`).join(' | '),
     );
+  } else if (name === 'division') {
+    const r = runDivision({ seed, ants: ants || 60, days: days || 4, afterDays: after, removeShare: 0.2, params });
+    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
+    const removed = new Set(r.removed);
+    const kept = r.tripsBefore.map((_, n) => n).filter((n) => !removed.has(n));
+    const busiest = [...kept].sort((a, b) => r.tripsAfter[b]! - r.tripsAfter[a]! || a - b);
+    const top = busiest.slice(0, r.removed.length);
+    const rest = busiest.slice(r.removed.length);
+    const tripsAfter = mean(kept.map((n) => r.tripsAfter[n]!)) * kept.length;
+    const newcomers = kept.filter((n) => r.tripsBefore[n] === 0).reduce((a, n) => a + r.tripsAfter[n]!, 0);
+    console.log(
+      `seed ${seed}: trips by day ${r.tripsByDay.join(' ')}; crops by day ${r.cropsByDay.map(pct).join(' ')}\n` +
+        `  before: busiest fifth fat ${mean(r.removed.map((n) => r.fatBefore[n]!)).toFixed(2)}, ` +
+        `the rest ${mean(kept.map((n) => r.fatBefore[n]!)).toFixed(2)}\n` +
+        `  after: new busiest fifth fat ${mean(top.map((n) => r.fatAfter[n]!)).toFixed(2)}, the rest ` +
+        `${mean(rest.map((n) => r.fatAfter[n]!)).toFixed(2)}; trips by workers that had made none ${pct(newcomers / Math.max(1, tripsAfter))}`,
+    );
   } else {
-    throw new Error('Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread or growth');
+    throw new Error('Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth or division');
   }
 }

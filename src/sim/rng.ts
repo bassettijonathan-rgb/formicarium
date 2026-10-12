@@ -45,6 +45,8 @@ export const Purpose = {
   ants: 3,
   /** Each worker's inborn traits, such as its response thresholds. */
   traits: 4,
+  /** The ages of the workers the keeper starts with. */
+  ages: 5,
   test: 99,
 } as const;
 

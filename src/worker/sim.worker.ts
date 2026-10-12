@@ -3,7 +3,7 @@
  * The simulation itself never sees real time; this loop decides how many
  * steps to run per real interval.
  */
-import { AntState, Place } from '../sim/ants';
+import { AntState, Caste, Place } from '../sim/ants';
 import { BroodStage } from '../sim/brood';
 import { STEPS_PER_SECOND } from '../sim/time';
 import { colonyCrop, createWorld, placeProtein, placeSugar, removeFood, step, type World } from '../sim/world';
@@ -42,6 +42,7 @@ function sendAnts(w: World): void {
   const { ants } = w;
   const data = new Float32Array(ants.count * ANT_STRIDE);
   const full = new Uint8Array(ants.count);
+  const callow = new Uint8Array(ants.count);
   for (let i = 0; i < ants.count; i++) {
     const o = i * ANT_STRIDE;
     data[o] = ants.x[i]!;
@@ -52,6 +53,7 @@ function sendAnts(w: World): void {
     data[o + 5] = ants.place[i]!;
     data[o + 6] = ants.state[i] === AntState.carrying ? ants.grain[i]! : 0;
     full[i] = ants.crop[i]! > 0.5 * w.params.cropLoad ? 1 : 0;
+    callow[i] = ants.caste[i] === Caste.worker && ants.age[i]! < w.params.callowDays ? 1 : 0;
   }
   const caste = ants.caste.slice();
   const { brood } = w;
@@ -64,10 +66,11 @@ function sendAnts(w: World): void {
     items.push(brood.x[k]!, brood.y[k]!, stage, size);
   }
   const broodData = Float32Array.from(items);
-  post({ type: 'ants', step: w.step, ants: data, full, caste, brood: broodData }, [
+  post({ type: 'ants', step: w.step, ants: data, full, caste, callow, brood: broodData }, [
     data.buffer,
     full.buffer,
     caste.buffer,
+    callow.buffer,
     broodData.buffer,
   ]);
 }
@@ -76,7 +79,7 @@ function sendArena(w: World): void {
   const trail = Float32Array.from(w.arena.trail);
   const wall = w.arena.wall.slice();
   let out = 0;
-  for (let i = 0; i < w.ants.count; i++) if (w.ants.place[i] !== Place.farm) out++;
+  for (let i = 0; i < w.ants.count; i++) if (w.ants.place[i] === Place.arena || w.ants.place[i] === Place.tube) out++;
   post(
     {
       type: 'arena',

@@ -14,11 +14,13 @@ import { grainColor } from './soilColors';
 const GRAIN_AHEAD = 2.6;
 
 let shared: Texture[][] | undefined;
+let sharedPale: Texture[][] | undefined;
 
 export class AntLayer {
   readonly root = new Container();
   private readonly ants: { body: Container; sprite: Sprite; grain: Graphics; material: number }[] = [];
   private readonly textures: Texture[][];
+  private readonly pale: Texture[][];
 
   /** The two latest snapshots and when the newer one arrived. */
   private previous: AntsSnapshot | undefined;
@@ -32,6 +34,7 @@ export class AntLayer {
     private readonly place: number,
   ) {
     this.textures = shared ??= makeAntTextures(renderer);
+    this.pale = sharedPale ??= makeAntTextures(renderer, true);
   }
 
   setAnts(snapshot: AntsSnapshot, now: number): void {
@@ -72,7 +75,8 @@ export class AntLayer {
       ant.body.position.set(x, y);
       ant.body.rotation = prev.ants[o + 2]! + dh * k;
       const frame = Math.floor(((walked % STRIDE) / STRIDE) * GAIT_FRAMES) % GAIT_FRAMES;
-      ant.sprite.texture = this.textures[cur.full[i]!]![frame]!;
+      const textures = cur.callow[i] ? this.pale : this.textures;
+      ant.sprite.texture = textures[cur.full[i]!]![frame]!;
       // A Lasius niger queen is about twice a worker's length, her gaster always swollen.
       const queen = cur.caste[i] === Caste.queen;
       ant.sprite.scale.set(queen ? 2 * ANT_SCALE : ANT_SCALE);

@@ -146,8 +146,8 @@ In the farm an ant also feels (M2):
   distance walked (Müller & Wehner 1988), so long excursions return less
   precisely and ants use trail and nest odour for the last stretch.
 - **Task thresholds** (D5), one per task. M3 gives each worker its threshold
-  for foraging, fixed at birth; M4 lets thresholds drift with age and
-  experience.
+  for foraging, fixed at birth; M4 lets it drift with the worker's fat body,
+  which follows its age and what it does (section 7.5).
 - Memory of where the last food was (a remembered vector, like real
   foragers' route fidelity).
 
@@ -244,7 +244,7 @@ where everyone was showed why, one cause after another:
   brood scent reaching them. Now a worker carrying protein follows the
   brood scent inside the soil when it comes home as well as when it
   wanders, and it does not settle to rest until it is by the brood (rough).
-  Out in the open it goes back in by its hole and the colony odour first.
+  Since M4a it follows the brood scent out in the open too (section 7.5).
 - Protein carriers spent two thirds of their time out in the open, because
   they took up digging on the way and then carried spoil. Now an ant with
   protein for the brood takes it there before it digs, though it still
@@ -347,7 +347,7 @@ What M3b builds (`src/sim/brood.ts`, `src/sim/farmAnts.ts`):
    touching her feed her protein the way nurses feed a larva.
 5. **Eclosion.** A pupa that has finished waits until a worker touches it;
    the new worker appears where it lay, with its own foraging threshold
-   drawn like any worker's. Callows and age polyethism come in M4.
+   drawn like any worker's, aged 0 and with a full fat body (section 7.5).
 6. **Brood piling and the nest round the queen**, as in section 4.3: piling
    after Deneubourg et al. (1991), with pick-up rate 0.2/s × (0.5/(0.5+n))²
    and drop rate 1/s × (n/(1+n))² for n items within 5 mm (the queen
@@ -432,6 +432,54 @@ corpses to an outside pile. Food left inside too long grows **mould** that
 spreads in damp soil and kills brood. Overfeeding is a real ant-keeping
 mistake, and the sim should punish it the same way.
 
+### 7.5 Who does what: fat, age and foraging (M4a)
+
+Nothing assigns a worker a job. Each has its own foraging threshold θ (M3a)
+and a **fat body** F, from 0 to 1, and the threshold it acts on is
+θ·F/0.8: lean workers forage, fat ones stay in. In ants and bees, foragers
+are the lean workers and nest workers the fat ones (Blanchard et al. 2000),
+the workers that take up foraging when a colony needs more food are the
+leaner ones whatever their age (Robinson et al. 2009), and making a worker
+lean makes it forage, while foragers that go back to nursing grow fat again
+(Bernadou et al. 2020).
+
+What `src/sim/ants.ts` and `farmAnts.ts` do (`AntParams.fatGain` and the
+rest; all rough):
+
+1. **Fat follows food and work.** In the farm a worker builds fat at
+   0.5 × crop fullness × (1 − F) per tank day. Every worker spends 0.05 a
+   day, and 3 a day more while it is out of the farm. So a worker that stays
+   in with a half-full crop settles at F = 0.8; four days without food take
+   off only 0.2, so a starved colony does not turn every worker into a
+   forager (Planckaert et al. 2019's starved colonies still sent out a fifth
+   of their workers); and a worker out a tenth of its time runs empty within
+   a few days. The fat is a measure of the body, not a store the model
+   draws on: `burnRate` already charges the crop for all metabolism.
+2. **So foragers specialise.** A worker that goes out grows lean, which makes
+   it go out more: the same loop as threshold reinforcement in models of
+   division of labour (Theraulaz et al. 1998), but through the body. A
+   forager that stays home well fed grows fat again and stops.
+3. **Age.** A worker emerges from its cocoon with F = 1 and spends its first
+   7 days as a pale **callow** that never leaves the nest (in Lasius niger
+   too, young workers mostly work inside and older ones outside: Quque et
+   al. 2023; Mersch et al. 2013 in Camponotus). After that only its fat matters, so here a young
+   worker turns forager within a couple of weeks if it goes out at all: age
+   polyethism is weaker than in real colonies, where nursing lasts weeks
+   to months. The keeper's starting workers are 14-200 days old, with
+   F = 0.8.
+4. **Protein goes to the brood first.** Lean foragers, keen to go out,
+   carried the insect's juice back and forth: in the short growth test the
+   colonies' workers held 3-5 µL of protein while the larvae starved, and
+   one colony raised no workers at all. Now a worker carrying protein for the
+   brood does not go out again until it has given it away, and it follows
+   the scent of hungry larvae in the open as well as in the soil, so it finds
+   brood in another part of the nest (one colony had dug a second tunnel
+   system by the tube, with no way through underground). With both, the
+   queen stays fed and the short test's colonies raise about 30 workers each
+   in 20 days, where M3b's raised 1-11.
+5. **Trips** out of the farm are counted per worker, for the experiments and
+   the ant inspector (M6).
+
 ---
 
 ## 8. Your role
@@ -472,6 +520,10 @@ project. If one fails, we fix the model, not the test.
 8. **Colony growth:** a queen and workers given sugar water and insects raise
    new workers about six weeks (tank days) after the first eggs; given sugar
    only, the larvae never grow.
+9. **Division of labour** (Blanchard et al. 2000; Robinson et al. 2009):
+   foragers are lean and nest workers fat; when the busiest foragers are
+   taken out, others take over and grow lean, and the colony goes on
+   feeding itself.
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -519,7 +571,7 @@ slowly (section 9.4). Groups of 5 dig much less per ant than
 groups of 40 (`tests/farmAnts.test.ts`), the social facilitation Chen 1937
 described.
 
-### 9.3 Results so far (food flow, 10 colonies of 50 workers per condition, re-run with M3b)
+### 9.3 Results so far (food flow, 10 colonies of 50 workers per condition, re-run with M4a)
 
 `npm run experiment -- spread [--no-sharing] [--satiated]`;
 `tests/science/foodFlow.test.ts` checks seeds 1-3. Each colony digs for an
@@ -529,26 +581,36 @@ the tube. "Fed" means a worker has had at least a tenth of a crop since.
 
 | | Fed after 30 min | Fed after 60 min | Workers that went out | Departures in the hour |
 |---|---|---|---|---|
-| Starved, sharing | 0-86% (mean 43%) | 66-98% (mean 81%) | 20-34% (mean 27%) | 37-102 (mean 58) |
-| Control: no sharing | 0-24% (mean 13%) | 12-30% (mean 21%) | 16-32% (mean 26%) | 23-70 (mean 44) |
-| Control: well fed | | | 6-24% (mean 15%), scouts | 9-26 (mean 14) |
+| Starved, sharing | 56-100% (mean 74%) | 72-100% (mean 91%) | 24-38% (mean 31%) | 105-184 (mean 149) |
+| Control: no sharing | 18-34% (mean 24%) | 18-46% (mean 31%) | 22-46% (mean 32%) | 67-187 (mean 119) |
+| Control: well fed | | | 16-26% (mean 19%), scouts | 30-67 (mean 49) |
+| M3b, starved | 0-86% (mean 43%) | 66-98% (mean 81%) | 20-34% (mean 27%) | 37-102 (mean 58) |
+| M3b, well fed | | | 6-24% (mean 15%) | 9-26 (mean 14) |
 | Planckaert et al. 2019 | about 58% (naive workers fall exponentially, mean 35 min) | about 82% (44 of 53 took part) | about 20% | |
 
-Food reaches the colony about as fast as in the real one (81% fed by the
-hour against 82%), and a few more workers go out (27% rather than about
-20%): a minority forages, the rest are fed mouth to mouth, and without
-sharing four in five workers are still hungry after an hour. The colonies
-that start slowly are the ones whose first foragers take longest to find the
-drop. M3a fed 91% by the hour; since M3b a hungry ant goes back down its own
-hole to rest, so the first foragers set off from deeper in the nest and the
-first half hour is slower (43% fed rather than 55%), closer to Planckaert's
-58%. A well-fed colony sends out about a quarter as many workers as a starved
-one (14 departures against 58), all scouts, as Greenwald et al. 2018
-measured. It was a fifth in M3a, for the same reason: the starved colony is
-slower to get going. The test now asks for a third (seeds 1-3 alone give
-3.7, the 10 colonies 4.1); Greenwald et al. give no ratio, so a quarter was
-our own choice, not a measurement. Over 4 hours a starved colony's
-crops level off at 40-70% full,
+Food reaches the colony a little faster than in the real one (91% fed by
+the hour against 82%), and a few more workers go out (31% rather than
+about 20%): a minority forages, the rest are fed mouth to mouth, and
+without sharing seven in ten workers are still hungry after an hour. The
+colonies that start slowly are the ones whose first foragers take longest
+to find the drop.
+
+M4a changed these numbers. The workers that went out while the colony dug
+for its first hour have grown lean (section 7.5), and a lean forager goes
+out as readily as its threshold allows: the colony makes two to three
+times as many trips as in M3b, and food reaches it faster (74% fed at 30
+minutes rather than 43%). A well-fed colony now sends out about a third as
+many workers as a starved one (49 departures against 149), all scouts; in
+M3a it was a fifth, in M3b a quarter. Each fed forager still sets off a
+fifth as often as a hungry one, as Greenwald et al. 2018 measured, but the
+lean scouts that find the drop go back to it again and again, so a fed
+colony's departures climb through the hour (2-8 per 10 minutes at first,
+8-19 at the end). The test asks for a third, which seeds 1-3 pass by a
+small margin (135 against 41); a quarter was our own choice in M3a, not a
+measured ratio, and whether fed lean foragers should keep revisiting a
+drop they cannot drink from is open.
+
+In M3a, over 4 hours a starved colony's crops levelled off at 40-70% full,
 where what it brings in matches what it burns: hunger regulating foraging,
 with nothing counting the colony's food. Greenwald et al. 2018 saw
 Camponotus colonies fill up and nearly stop within 3-4 hours; ours keeps
@@ -556,7 +618,7 @@ foraging at 5-15 departures every 10 minutes because the life clock burns
 a tank day of sugar every hour.
 
 
-### 9.4 Results so far (colony growth; 3 colonies of 60 workers and a queen, 60 tank days each)
+### 9.4 Results so far (colony growth; 3 colonies of 60 workers and a queen, 60 tank days each, re-run with M4a)
 
 `npm run experiment -- growth --days 60 [--no-protein]`; real development
 times (egg 16, larva 12, pupa 14 tank days at 25 °C). Every tank day the
@@ -565,36 +627,72 @@ the 60 the colony started with.
 
 | Colony | Eggs by day 12 | First larvae | First new workers | Workers at day 60 | Brood at day 60 |
 |---|---|---|---|---|---|
-| Seed 1 | 40 | day 18 | by day 48 | 71 | 104 eggs, 56 larvae |
-| Seed 2 | 55 | day 18 | by day 48 | 115 | 147 eggs, 106 larvae, 112 pupae |
-| Seed 3 | 59 | day 18 | by day 48 | 111 | 30 larvae, 20 pupae |
+| Seed 1 | 57 | day 18 | by day 48 | 139 | 128 eggs, 82 larvae, 103 pupae |
+| Seed 2 | 39 | day 18 | by day 48 | 95 | 86 eggs, 76 larvae, 72 pupae |
+| Seed 3 | 64 | day 18 | by day 48 | 156 | 117 eggs, 119 larvae, 100 pupae |
 | Control: no insects (seed 1) | 19 | day 18 | none | 60 | none: the 10 larvae never grow and are gone by day 30 |
 | Expected | up to 10 a day | after 16 days | about 42 days after the first eggs | | |
+| M3b, before the fixes of section 7.5 | 40-59 | day 18 | by day 48 | 71-115 | |
 
 What holds: all three colonies raise their first workers about six weeks
-after the first eggs, as the stage durations predict, and grow by 20-90%
-in 60 days on one insect a day; seed 2 has 112 more pupae on the way. The
-day-by-day protein trace that led here (section 4.3, "The nest round the
-queen") showed a chain of separate failures, each of which stopped every
-colony before: a queen alone, the fed foragers settled away from the
-brood, protein carriers digging and lost in the open, the tube buried
-under spoil, a queen walled in by fallen sand, and prey passed by. What is
-weaker: while a big batch of larvae is being fed, the larvae can take
-nearly all the protein and the queen's store runs out, so she stops laying
-for a week or more (seeds 1 and 3) and the colony grows in pulses rather
-than steadily; seed 1 lost most of its first larvae to starvation around
-day 30. A real queen is fed first (rough; M4's division of labour may
-change who feeds her). The nest keeps growing slowly: about 140-165 mm²
-per worker by day 20 against 100-140 at 8 hours, and the spoil fills much
-of the headspace in three weeks, so a colony that keeps growing will run
-out of room in this farm.
+after the first eggs, as the stage durations predict, and grow by 60-160%
+in 60 days on one insect a day, with 70-100 more pupae on the way. Since
+M4a sends protein to the brood before its carriers go out again (section
+7.5), the queen's store stays at or near full and growth is steady; in M3b she
+ran out for a week or more while big batches of larvae were fed, and the
+colonies grew in pulses. The day-by-day protein trace that led here
+(section 4.3, "The nest round the queen") showed a chain of separate
+failures, each of which stopped every colony before: a queen alone, the
+fed foragers settled away from the brood, protein carriers digging and
+lost in the open, the tube buried under spoil, a queen walled in by fallen
+sand, and prey passed by.
+
+What is weaker: once the brood is large, the workers' crops run low (10-15%
+full from about day 30, against 40-60% in the first weeks), although sugar
+is left over every day. Feeding a large brood may tie up workers that hold
+a little protein and so no longer go out (rough; to look at with M4b). The
+nest keeps growing slowly: about 140-165 mm² per worker by day 20 (M3b)
+against 100-140 at 8 hours, and the spoil fills much of the headspace in
+three weeks, so a colony that keeps growing will run out of room in this
+farm.
 
 The short version in `tests/science/colonyGrowth.test.ts` (30 workers,
 eggs and pupae eight times faster, larvae at their real 12 days, 20 days)
-raises new workers in all three colonies. An earlier version squeezed the
+raises new workers in all three colonies: about 30 each with M4a, 1-11
+with M3b. An earlier version squeezed the
 larval stage too, which asks the nurses for protein eight times faster
 than any real colony feeds its larvae, and one of the three colonies raised
 no workers in it.
+
+### 9.5 Results so far (division of labour, M4a; 3 colonies of 60 workers, a queen and brood per condition)
+
+`npm run experiment -- division [--no-fat]`; `tests/science/division.test.ts`
+checks seeds 1-3. Each tank day the keeper puts out sugar water and an
+insect. After 4 days the keeper takes out the fifth of the workers that made
+the most trips out of the farm, and the colony runs 6 days more.
+
+| | Fat: busiest fifth / the rest, day 4 | After removal: new busiest fifth / the rest | Crops, last 2 days against days 3-4 | Trips, last 3 days against days 2-4 |
+|---|---|---|---|---|
+| Seed 1 | 0.15 / 0.74 | 0.35 / 0.62 | 30% / 44% (0.67) | 45% |
+| Seed 2 | 0.09 / 0.76 | 0.31 / 0.74 | 47% / 67% (0.71) | 43% |
+| Seed 3 | 0.17 / 0.71 | 0.35 / 0.60 | 25% / 55% (0.45) | 24% |
+| Control: fat held (seeds 1-3) | 0.80 / 0.80 | 0.80 / 0.80 | 0.32, 0.62, 0.37 | 21-32% |
+
+Foragers are lean and the workers that stay in are not, as Blanchard et
+al. 2000 found: nothing in the model says who forages beyond each worker's
+threshold, and the fifth that forages most ends up with a fifth of the fat
+of the rest. When they are taken out, others take up the foraging and grow
+lean in their turn (Robinson et al. 2009), and the colony goes on feeding
+itself at about two thirds of its crop level before; with fat held at its
+start (the control, thresholds fixed as in M3), two of three colonies sink
+to a third of it. Trips do not come back to what they were: before the
+removal the lean specialists made two to three times the trips the
+colony needed (crops 44-67% full against 33-58% in the control), and the
+colony settles at fewer trips and emptier crops. Who takes over is set as
+much by each worker's own threshold as by its fat, so the new foragers are
+mostly ones that had already gone out now and then (19-77% of trips after
+the removal were by workers that had made none before).
+Age polyethism is weak, as section 7.5 says: only callows are kept in.
 
 ---
 
@@ -626,7 +724,7 @@ Each milestone is one or a few small PRs, merged by Marco, with a link to play.
 | M1 | Arena foraging: ants with path integration and trail pheromone find food and form trails. Double bridge and food choice tests pass |
 | M2 | Soil and digging: side-view farm, soil physics, ants dig tunnels and chambers that scale with colony size |
 | M3 | Colony life: queen, brood, development, trophallaxis, founding. In three PRs: M3a food flow (hunger, sharing, forager thresholds); M3b queen, brood and development, with the queen and brood as the heart of the nest (planned as M3c, brought forward by Marco 2026-10-11); M3c brood and the resting nest as the digging cue, folded into M3b (the digging cue itself is still open) |
-| M4 | Division of labour: response thresholds, age polyethism, brood sorting, midden |
+| M4 | Division of labour: response thresholds, age polyethism, brood sorting, midden. In three PRs: M4a fat, age and who forages (thresholds drift with each worker's fat; callows; protein delivered before going out); M4b brood sorting by stage; M4c corpses and the midden |
 | M5 | Tending: temperature, humidity, mould, feeding tools, colony death |
 | M6 | Keeping it: saves, offline catch-up, ant inspector, graphs, timelapse |
 | M7 | Optional extras: second colony and war, other species, nuptial flights |
@@ -639,6 +737,8 @@ parameters, I stop and report before changing the model.
 ## 12. References
 
 - Beckers, Deneubourg & Goss 1993. Modulation of trail laying in the ant *Lasius niger*. J. Insect Behav.
+- Bernadou, Hoffacker, Pable & Heinze 2020. Lipid content influences division of labour in a clonal ant. J. Exp. Biol. 223, jeb219238.
+- Blanchard, Orledge, Reynolds & Franks 2000. Division of labour and seasonality in the ant *Leptothorax albipennis*: worker corpulence and its influence on behaviour. Anim. Behav. 59, 723-738.
 - Bonabeau, Theraulaz & Deneubourg 1996. Quantitative study of the fixed threshold model for the regulation of division of labour in insect societies. Proc. R. Soc. B.
 - Bovet & Benhamou 1988. Spatial analysis of animals' movements using a correlated random walk model. J. Theor. Biol.
 - Buffin, Mailleux, Detrain & Deneubourg 2011. Trophallaxis in *Lasius niger*: a variable frequency and constant duration for three food types. Insectes Soc.
@@ -656,10 +756,14 @@ parameters, I stop and report before changing the model.
 - Khuong et al. 2016. Stigmergic construction and topochemical information shape ant nest architecture. PNAS.
 - Mailleux, Deneubourg & Detrain 2000. How do ants assess food volume? Anim. Behav.
 - Mailleux, Detrain & Deneubourg 2006. Starvation drives a threshold triggering communication. J. Exp. Biol.
+- Mersch, Crespi & Keller 2013. Tracking individuals shows spatial fidelity is a key regulator of ant social organization. Science 340, 1090-1093.
 - Müller & Wehner 1988. Path integration in desert ants. PNAS.
 - Planckaert et al. 2019. A spatiotemporal analysis of the food dissemination process and the trophallactic network in the ant *Lasius niger*. Sci. Rep.
 - Portha, Deneubourg & Detrain 2002. Self-organized asymmetries in ant foraging: a functional response to food type and colony needs. Behav. Ecol.
+- Quque et al. 2023. Both age and social environment shape the phenotype of ant workers. Sci. Rep. 13, 186.
 - Rasse & Deneubourg 2001. Dynamics of nest excavation and nest size regulation of *Lasius niger*. J. Insect Behav.
+- Robinson, Feinerman & Franks 2009. Flexible task allocation and the organization of work in ants. Proc. R. Soc. B 276, 4373-4380.
+- Theraulaz, Bonabeau & Deneubourg 1998. Response threshold reinforcement and division of labour in insect societies. Proc. R. Soc. B 265, 327-332.
 - Theraulaz et al. 2002. Spatial patterns in ant colonies. PNAS.
 - Wilson, Durlach & Roth 1958. Chemical releasers of necrophoric behavior in ants. Psyche.
 

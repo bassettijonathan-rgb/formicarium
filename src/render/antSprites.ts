@@ -13,9 +13,10 @@ export const GAIT_FRAMES = 8;
 /** Distance walked per full stride, mm (one cycle of the gait). */
 export const STRIDE = 2.4;
 
-const BODY = 0x2a1c15;
-const LEG = 0x3b2a20;
-const SHINE = 0x6b5446;
+/** A hardened worker's colours, and a callow's: pale brown for its first days out of the cocoon. */
+const DARK = { body: 0x2a1c15, leg: 0x3b2a20, shine: 0x6b5446 };
+const PALE = { body: 0x8c6c52, leg: 0x9c7d62, shine: 0xc9ae94 };
+type Palette = typeof DARK;
 export const CROP = 0xd9a441;
 
 /** Leg attachment and resting foot positions (left side, y < 0); the right side mirrors them. */
@@ -25,11 +26,11 @@ const LEGS: { base: [number, number]; knee: [number, number]; foot: [number, num
   { base: [0, -2], knee: [-8, -12], foot: [-17, -18] },
 ];
 
-/** Textures indexed [crop full ? 1 : 0][gait frame]. */
-export function makeAntTextures(renderer: Renderer): Texture[][] {
+/** Textures indexed [crop full ? 1 : 0][gait frame]; `pale` draws a callow. */
+export function makeAntTextures(renderer: Renderer, pale = false): Texture[][] {
   return [0, 1].map((full) =>
     Array.from({ length: GAIT_FRAMES }, (_, f) => {
-      const g = drawAnt((f / GAIT_FRAMES) * 2 * Math.PI, full === 1);
+      const g = drawAnt((f / GAIT_FRAMES) * 2 * Math.PI, full === 1, pale ? PALE : DARK);
       const texture = renderer.generateTexture({ target: g, frame: new Rectangle(-40, -26, 80, 52), resolution: 4 });
       g.destroy();
       return texture;
@@ -37,7 +38,7 @@ export function makeAntTextures(renderer: Renderer): Texture[][] {
   );
 }
 
-function drawAnt(phase: number, full: boolean): Graphics {
+function drawAnt(phase: number, full: boolean, { body: BODY, leg: LEG, shine: SHINE }: Palette): Graphics {
   const g = new Graphics();
   // Legs: tripod A = left front, right middle, left hind; tripod B the others.
   const swing = 0.35 * Math.sin(phase);

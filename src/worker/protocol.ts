@@ -27,6 +27,8 @@ export interface AntsSnapshot {
   full: Uint8Array;
   /** Each ant's `Caste`. */
   caste: Uint8Array;
+  /** 1 for a callow: a worker in its first days out of the cocoon, still pale. */
+  callow: Uint8Array;
   /** Brood in the farm, `BROOD_STRIDE` numbers each: x, y (mm), `BroodStage`, size (mm). */
   brood: Float32Array;
 }
