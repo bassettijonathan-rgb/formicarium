@@ -4,7 +4,8 @@
  * M2: the colony lives in the sand farm, digs its nest, and forages in the
  * arena through the tube. Lab experiments use a simple lab nest instead.
  */
-import { type Ants, AntState, Caste, type Nest, type NestMode, Place, addAnt, createAnts, stepAnts } from './ants';
+import { type AntContext, type Ants, AntState, Caste, type Nest, type NestMode, Place, addAnt, createAnts, stepAnts } from './ants';
+import { die, drawLifespan, dropCorpse } from './corpses';
 import { type Brood, createBrood, scentBrood, stepBrood } from './brood';
 import { type Arena, createArena, evaporateTrail } from './arena';
 import { type Farm, createFarm, updateField, updateFresh } from './farm';
@@ -19,7 +20,7 @@ export type { Farm } from './farm';
 /** Sugar water in all the workers' crops, µL: in the farm this is the colony's store. */
 export function colonyCrop(world: World): number {
   let total = 0;
-  for (let i = 0; i < world.ants.count; i++) if (world.ants.place[i] !== Place.gone) total += world.ants.crop[i]!;
+  for (let i = 0; i < world.ants.count; i++) if (world.ants.place[i] !== Place.gone) total += world.ants.crop[i]!; // the dead hold none
   return total;
 }
 
@@ -96,6 +97,7 @@ function giveTraits(ants: Ants, params: AntParams, seed: number): void {
     ants.forageThreshold[i] = params.forageThresholdMin * Math.pow(ratio, rng.float());
     ants.age[i] = ages.range(params.startAgeMin, params.startAgeMax);
     ants.fat[i] = params.fatRef;
+    ants.lifespan[i] = drawLifespan(seed, i, ants.age[i]!, params);
   }
 }
 
@@ -136,6 +138,7 @@ const FARM_TRAIL_EVERY = 5 * STEPS_PER_SECOND;
 export function step(world: World): void {
   const rng = Rng.over(world.rng);
   stepAnts({
+    seed: world.seed,
     ants: world.ants,
     arena: world.arena,
     farm: world.farm,
@@ -206,9 +209,54 @@ export function removeAnt(world: World, i: number): void {
     brood.y[k] = ants.y[i]!;
     ants.broodHeld[i] = -1;
   }
+  if (ants.corpseHeld[i]! >= 0) dropCorpse(ctx(world), i);
+  const carrier = ants.carriedBy[i]!;
+  // A corpse taken out of its carrier's mandibles: the carrier goes on as if it had put it down.
+  if (carrier >= 0) dropCorpse(ctx(world), carrier);
   ants.grain[i] = 0;
   ants.foodId[i] = -1;
   ants.place[i] = Place.gone;
+  ants.corpseVersion++;
+}
+
+/** A worker dies where it is (an experiment with the dead). */
+export function killAnt(world: World, i: number): void {
+  die(ctx(world), i);
+}
+
+/** The ants' view of the world, for calling ant rules from outside a step. */
+function ctx(world: World): AntContext {
+  return {
+    seed: world.seed,
+    ants: world.ants,
+    arena: world.arena,
+    farm: world.farm,
+    food: world.food,
+    brood: world.brood,
+    nest: world.nest,
+    nestMode: world.nestMode,
+    params: world.params,
+    rng: Rng.over(world.rng),
+  };
+}
+
+/**
+ * Puts a worker's corpse down in the arena or the farm, dead `deadFor` tank
+ * days (for experiments with the dead, as Theraulaz et al. 2002 put out
+ * corpses). Returns its id.
+ */
+export function addCorpse(world: World, place: Place, x: number, y: number, deadFor: number, heading = 0): number {
+  const { ants } = world;
+  const k = addAnt(ants);
+  ants.caste[k] = Caste.worker;
+  ants.place[k] = place;
+  ants.state[k] = AntState.dead;
+  ants.x[k] = x;
+  ants.y[k] = y;
+  ants.heading[k] = heading;
+  ants.deadFor[k] = deadFor;
+  ants.corpseVersion++;
+  return k;
 }
 
 /** Takes a drop away (the keeper cleaning up, or an experiment removing food). */

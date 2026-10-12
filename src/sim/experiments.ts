@@ -5,13 +5,14 @@
  */
 import { AntState, Caste, Place } from './ants';
 import { BroodStage, addBrood, broodCounts } from './brood';
+import { isLiveWorker } from './corpses';
 import { excavatedArea } from './farm';
 import { Material } from './materials';
 import { Purpose, Rng } from './rng';
 import { doubleBridge, foodChoice, Tally } from './lab';
 import type { AntParams } from './params';
 import { STEPS_PER_SECOND } from './time';
-import { colonyCrop, createWorld, placeProtein, placeSugar, removeAnt, removeFood, step, type World } from './world';
+import { addCorpse, colonyCrop, createWorld, killAnt, placeProtein, placeSugar, removeAnt, removeFood, step, type World } from './world';
 
 export interface RunOptions {
   seed: number;
@@ -204,6 +205,9 @@ export interface GrowthDay {
   larvae: number;
   pupae: number;
   workers: number;
+  /** Workers dead of old age so far, and how many of their corpses lie in the farm (the rest are out). */
+  dead: number;
+  deadInFarm: number;
   /** The queen's protein reserve, µL. */
   reserve: number;
   /** How full the workers' crops are on average, 0 to 1. */
@@ -231,13 +235,18 @@ export function runColonyGrowth(opts: RunOptions & { days: number; protein?: boo
     let workers = 0;
     let reserve = 0;
     let crop = 0;
+    let dead = 0;
+    let deadInFarm = 0;
     for (let i = 0; i < world.ants.count; i++) {
-      if (world.ants.caste[i] === Caste.worker) {
+      if (isLiveWorker(world.ants, i)) {
         workers++;
         crop += world.ants.crop[i]!;
-      } else reserve = world.ants.reserve[i]!;
+      } else if (world.ants.state[i] === AntState.dead) {
+        dead++;
+        if (world.ants.place[i] === Place.farm) deadInFarm++;
+      } else if (world.ants.caste[i] === Caste.queen) reserve = world.ants.reserve[i]!;
     }
-    out.push({ day, ...broodCounts(world.brood), workers, reserve, crops: crop / workers / params.cropLoad });
+    out.push({ day, ...broodCounts(world.brood), workers, dead, deadInFarm, reserve, crops: crop / workers / params.cropLoad });
   }
   return out;
 }
@@ -290,14 +299,14 @@ export function runDivision(
     let crop = 0;
     let workers = 0;
     for (let i = 0; i < ants.count; i++) {
-      if (ants.caste[i] !== Caste.worker || ants.place[i] === Place.gone) continue;
+      if (!isLiveWorker(ants, i)) continue;
       crop += ants.crop[i]!;
       workers++;
     }
     cropsByDay.push(crop / workers / params.cropLoad);
   };
   for (let d = 0; d < opts.days; d++) day();
-  const workers = [...Array(ants.count).keys()].filter((i) => ants.caste[i] === Caste.worker);
+  const workers = [...Array(ants.count).keys()].filter((i) => isLiveWorker(ants, i));
   const tripsBefore = workers.map((i) => ants.trips[i]!);
   const fatBefore = workers.map((i) => ants.fat[i]!);
   const busiest = [...workers].sort((a, b) => ants.trips[b]! - ants.trips[a]! || a - b);
@@ -441,5 +450,141 @@ export function runBroodSorting(opts: RunOptions & { hours: number; perStage?: n
     purityBefore: before.purity,
     purityAfter: after.purity,
     piles: after.piles,
+  };
+}
+
+/**
+ * Corpses closer than `link` mm, directly or through others, are one pile.
+ * Returns the number of piles of at least `min` corpses and the share of
+ * all corpses that lie in them.
+ */
+export function corpsePiles(xs: number[], ys: number[], link = 5, min = 5): { piles: number; inPiles: number } {
+  const n = xs.length;
+  const pile = new Int32Array(n).fill(-1);
+  let piles = 0;
+  let inPiles = 0;
+  let next = 0;
+  for (let a = 0; a < n; a++) {
+    if (pile[a] !== -1) continue;
+    const members = [a];
+    pile[a] = next;
+    for (let m = 0; m < members.length; m++) {
+      const p = members[m]!;
+      for (let b = 0; b < n; b++) {
+        if (pile[b] !== -1 || (xs[b]! - xs[p]!) ** 2 + (ys[b]! - ys[p]!) ** 2 > link * link) continue;
+        pile[b] = next;
+        members.push(b);
+      }
+    }
+    next++;
+    if (members.length >= min) {
+      piles++;
+      inPiles += members.length;
+    }
+  }
+  return { piles, inPiles: n > 0 ? inPiles / n : 0 };
+}
+
+export interface CemeteryResult {
+  /** Piles of 5 or more corpses at the end of each hour (hour 0 is the start). */
+  pilesByHour: number[];
+  /** Share of the corpses lying in those piles, at the end of each hour. */
+  inPilesByHour: number[];
+  /** Mean distance of the corpses from the nest entrance at the start and the end, mm. */
+  distanceBefore: number;
+  distanceAfter: number;
+}
+
+/**
+ * Cemetery formation (Theraulaz et al. 2002): corpses strewn at random over
+ * the arena, and a colony in a lab nest behind the entrance whose workers
+ * come out to search, as Theraulaz et al. put Messor sancta corpses out in
+ * an arena next to the nest. The workers gather the corpses into piles.
+ */
+export function runCemetery(opts: RunOptions & { hours: number; corpses: number }): CemeteryResult {
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 40, nest: 'lab', params: opts.params ?? {} });
+  const { arena, ants } = world;
+  const rng = new Rng(opts.seed, Purpose.test);
+  for (let c = 0; c < opts.corpses; c++) {
+    addCorpse(world, Place.arena, rng.range(3, arena.width - 3), rng.range(3, arena.height - 3), 10, rng.range(-Math.PI, Math.PI));
+  }
+  const measure = () => {
+    const xs: number[] = [];
+    const ys: number[] = [];
+    let distance = 0;
+    for (let i = 0; i < ants.count; i++) {
+      if (ants.state[i] !== AntState.dead) continue;
+      xs.push(ants.x[i]!);
+      ys.push(ants.y[i]!);
+      distance += Math.hypot(ants.x[i]! - arena.entranceX, ants.y[i]! - arena.entranceY);
+    }
+    return { ...corpsePiles(xs, ys), distance: distance / xs.length };
+  };
+  const start = measure();
+  const pilesByHour = [start.piles];
+  const inPilesByHour = [start.inPiles];
+  const hourSteps = 3600 * STEPS_PER_SECOND;
+  let end = start;
+  for (let h = 0; h < opts.hours; h++) {
+    for (let s = 0; s < hourSteps; s++) step(world);
+    end = measure();
+    pilesByHour.push(end.piles);
+    inPilesByHour.push(end.inPiles);
+  }
+  return { pilesByHour, inPilesByHour, distanceBefore: start.distance, distanceAfter: end.distance };
+}
+
+export interface MiddenResult {
+  /** At the end of each hour after the deaths: corpses still in the farm, and out in the arena (lying or carried). */
+  inFarmByHour: number[];
+  inArenaByHour: number[];
+  /** Mean distance from the arena's entrance of the corpses out there at the end, mm (-1 if none). */
+  arenaDistance: number;
+  /** Piles of 3 or more corpses in the arena at the end. */
+  piles: number;
+}
+
+/**
+ * The midden: a farm colony settles in for `settleHours`, then `deaths` of
+ * its resting workers die where they lie, inside the nest. Over the next
+ * `hours` the workers carry their dead out through the tube into the arena.
+ */
+export function runMidden(opts: RunOptions & { settleHours: number; hours: number; deaths: number }): MiddenResult {
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, params: opts.params ?? {} });
+  const { ants, arena } = world;
+  const hourSteps = 3600 * STEPS_PER_SECOND;
+  for (let s = 0; s < opts.settleHours * hourSteps; s++) step(world);
+  let killed = 0;
+  for (let i = 0; i < ants.count && killed < opts.deaths; i++) {
+    if (ants.state[i] !== AntState.resting || ants.caste[i] !== Caste.worker) continue;
+    killAnt(world, i);
+    killed++;
+  }
+  const inFarmByHour: number[] = [];
+  const inArenaByHour: number[] = [];
+  const where = (place: number) => {
+    let n = 0;
+    for (let i = 0; i < ants.count; i++) if (ants.state[i] === AntState.dead && ants.place[i] === place) n++;
+    return n;
+  };
+  for (let h = 0; h < opts.hours; h++) {
+    for (let s = 0; s < hourSteps; s++) step(world);
+    inFarmByHour.push(where(Place.farm));
+    inArenaByHour.push(where(Place.arena));
+  }
+  const xs: number[] = [];
+  const ys: number[] = [];
+  let distance = 0;
+  for (let i = 0; i < ants.count; i++) {
+    if (ants.state[i] !== AntState.dead || ants.place[i] !== Place.arena) continue;
+    xs.push(ants.x[i]!);
+    ys.push(ants.y[i]!);
+    distance += Math.hypot(ants.x[i]! - arena.entranceX, ants.y[i]! - arena.entranceY);
+  }
+  return {
+    inFarmByHour,
+    inArenaByHour,
+    arenaDistance: xs.length > 0 ? distance / xs.length : -1,
+    piles: corpsePiles(xs, ys, 5, 3).piles,
   };
 }

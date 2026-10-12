@@ -25,6 +25,7 @@ import {
   wrapAngle,
 } from './ants';
 import { BroodStage, addBrood, broodLike, broodNear, larvaHungry, larvaStarved } from './brood';
+import { drawLifespan, dropCorpse, tryPickUpCorpse } from './corpses';
 import { addToField, cellSolid, isBlockedFarm, isSoil, openAbove, sampleField, type Farm } from './farm';
 import { placeGrain, removeGrain } from './soil';
 import { STEPS_PER_SECOND } from './time';
@@ -73,7 +74,7 @@ export function computeContacts(ctx: AntContext): void {
   start.fill(0);
   bucketOf.fill(-1);
   for (let i = 0; i < ants.count; i++) {
-    if (ants.place[i] !== Place.farm) continue;
+    if (ants.place[i] !== Place.farm || ants.state[i] === AntState.dead) continue;
     const b = Math.min(bh - 1, Math.max(0, Math.floor(ants.y[i]! / BUCKET))) * bw +
       Math.min(bw - 1, Math.max(0, Math.floor(ants.x[i]! / BUCKET)));
     bucketOf[i] = b;
@@ -298,6 +299,7 @@ function eclose(ctx: AntContext, k: number): void {
   ants.forageThreshold[i] = params.forageThresholdMin * Math.pow(ratio, rng.float());
   // A new worker comes out of its cocoon with a full fat body, built from what it was fed as a larva.
   ants.fat[i] = 1;
+  ants.lifespan[i] = drawLifespan(ctx.seed, i, 0, params);
   brood.stage[k] = BroodStage.none;
 }
 
@@ -388,7 +390,9 @@ function share(ctx: AntContext, i: number): void {
 
 export function stepFarmAnt(ctx: AntContext, i: number): void {
   if (cellSolid(ctx.farm, Math.floor(ctx.ants.x[i]!), Math.floor(ctx.ants.y[i]!)) && unbury(ctx, i)) return;
-  const state = ctx.ants.state[i];
+  const state = ctx.ants.state[i]!;
+  // A worker resting or about the nest that touches a corpse smelling of death may carry it out.
+  if ((state === AntState.resting || state === AntState.wandering) && tryPickUpCorpse(ctx, i)) return;
   if (state === AntState.resting) rest(ctx, i);
   else if (state === AntState.sharing) share(ctx, i);
   else walkFarm(ctx, i);
@@ -480,7 +484,9 @@ function smellBroodNeed(ctx: AntContext, i: number): number {
 function walkFarm(ctx: AntContext, i: number): void {
   const { ants, farm, params, rng } = ctx;
   const state = ants.state[i]!;
-  const outbound = isOutbound(state);
+  // A corpse carrier makes for the tube the way a forager does.
+  const undertaker = state === AntState.carryingCorpse;
+  const outbound = isOutbound(state) || undertaker;
   const inbound = state === AntState.returning || state === AntState.homing;
   const x = ants.x[i]!;
   const y = ants.y[i]!;
@@ -655,7 +661,8 @@ function walkFarm(ctx: AntContext, i: number): void {
   } else if (outbound) {
     const dTube = Math.hypot(nx - farm.tubeX, ny - farm.tubeY);
     if (dTube < 3) enterTube(ctx, i);
-    else clearWay(ctx, i, dTube < TUBE_CLEAR);
+    else if (!undertaker) clearWay(ctx, i, dTube < TUBE_CLEAR);
+    else if (++ants.timer[i]! > params.corpseCarryMax * STEPS_PER_SECOND) dropCorpse(ctx, i); // lost: it gives up
   } else if (inbound) {
     if (state === AntState.returning && params.trailLaying) {
       depositTrail(farm, nx, ny, params.trailDeposit * params.speed * DT * ants.cropQuality[i]!);
@@ -827,7 +834,8 @@ function unbury(ctx: AntContext, i: number): boolean {
       return true;
     }
   }
-  if (ants.state[i] === AntState.carrying || ants.state[i] === AntState.carryingBrood || ants.caste[i] === Caste.queen || !isSoil(farm, cx, cy)) return true;
+  const busy = ants.state[i] === AntState.carrying || ants.state[i] === AntState.carryingBrood || ants.state[i] === AntState.carryingCorpse;
+  if (busy || ants.caste[i] === Caste.queen || !isSoil(farm, cx, cy)) return true;
   const grain = removeGrain(farm, cx, cy);
   ants.grain[i] = grain.material;
   ants.grainMoisture[i] = grain.moisture;

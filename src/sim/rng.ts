@@ -47,6 +47,8 @@ export const Purpose = {
   traits: 4,
   /** The ages of the workers the keeper starts with. */
   ages: 5,
+  /** Each worker's lifespan, from (tank seed, Purpose.lifespan, ant id). */
+  lifespan: 6,
   test: 99,
 } as const;
 

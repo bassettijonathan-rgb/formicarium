@@ -38,6 +38,32 @@ export function makeAntTextures(renderer: Renderer, pale = false): Texture[][] {
   );
 }
 
+/**
+ * A dead worker: legs and antennae drawn in tight under the body, as a dead
+ * ant's curl, and the gloss gone dull.
+ */
+export function makeDeadTexture(renderer: Renderer): Texture {
+  const g = new Graphics();
+  for (const side of [-1, 1]) {
+    LEGS.forEach((leg) => {
+      const [bx, by] = leg.base;
+      g.moveTo(bx, by * -side)
+        .lineTo(bx + 2, (by - 6) * -side)
+        .lineTo(bx - 3, (by - 4) * -side);
+    });
+    g.moveTo(21, 2.5 * side).lineTo(24, 6 * side).lineTo(20, 7 * side);
+  }
+  g.stroke({ color: DARK.leg, width: 1.3, cap: 'round', join: 'round' });
+  g.ellipse(-17, 0, 11, 8).fill(DARK.body);
+  g.ellipse(-5, 0, 2.6, 2.6).fill(DARK.body);
+  g.ellipse(4, 0, 8, 3.8).fill(DARK.body);
+  g.ellipse(16, 0, 6, 5.5).fill(DARK.body);
+  g.ellipse(-18, -2, 5, 2).fill({ color: DARK.shine, alpha: 0.15 });
+  const texture = renderer.generateTexture({ target: g, frame: new Rectangle(-40, -26, 80, 52), resolution: 4 });
+  g.destroy();
+  return texture;
+}
+
 function drawAnt(phase: number, full: boolean, { body: BODY, leg: LEG, shine: SHINE }: Palette): Graphics {
   const g = new Graphics();
   // Legs: tripod A = left front, right middle, left hind; tripod B the others.
