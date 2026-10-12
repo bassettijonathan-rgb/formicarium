@@ -10,6 +10,7 @@
  * range, or where food is beyond smelling range.
  */
 import { type Arena, depositTrail, isBlocked, sampleTrail } from './arena';
+import type { Brood } from './brood';
 import type { Farm } from './farm';
 import { computeContacts, stepFarmAnt } from './farmAnts';
 import { type FoodDrop, dropRadius, foodQuality } from './food';
@@ -39,6 +40,8 @@ export const AntState = {
   carrying: 8,
   /** Mouth to mouth with a nestmate, passing food (trophallaxis). */
   sharing: 9,
+  /** Carrying a brood item to where other brood lies (M3b). */
+  carryingBrood: 10,
 } as const;
 
 export type AntState = (typeof AntState)[keyof typeof AntState];
@@ -55,6 +58,14 @@ export const Place = {
 } as const;
 
 export type Place = (typeof Place)[keyof typeof Place];
+
+/** Which kind of ant. Stored in saves, so append-only. */
+export const Caste = {
+  worker: 0,
+  queen: 1,
+} as const;
+
+export type Caste = (typeof Caste)[keyof typeof Caste];
 
 /** All workers, as parallel arrays indexed by ant id. */
 export interface Ants {
@@ -79,6 +90,13 @@ export interface Ants {
   memX: Float64Array;
   memY: Float64Array;
   hasMemory: Uint8Array;
+  /** 1 if the remembered food was protein (an insect), 0 if sugar water. */
+  memoryProtein: Uint8Array;
+  /**
+   * What a forager is out for, set when it leaves the farm (M3b): 1 for
+   * protein, 0 for sugar water. It passes the other kind of food by.
+   */
+  seekProtein: Uint8Array;
   /** Id of the drop the ant is drinking from, or -1. */
   foodId: Int32Array;
   /**
@@ -97,10 +115,24 @@ export interface Ants {
   encounters: Float64Array;
   /** Urge to go foraging, raised by meeting foragers just back with food. */
   excitement: Float64Array;
+  /**
+   * How strongly the ant feels the brood's hunger for protein, 0 to 1: from
+   * smelling hungry brood, or passed on by nestmates it touches (M3b).
+   */
+  broodNeed: Float64Array;
   /** Steps left during which this forager, just back with food, excites the ants it meets. */
   recruiting: Int32Array;
   /** 1 once the ant has come in through the tube, so its farm path integrator points to the tube. */
   knowsTube: Uint8Array;
+  /**
+   * Where the ant last came out of the soil into the open, in path-integration
+   * coordinates, if `hasHole`: its way back into the nest (M3b).
+   */
+  holeX: Float64Array;
+  holeY: Float64Array;
+  hasHole: Uint8Array;
+  /** The brood item the ant is carrying, or -1. */
+  broodHeld: Int32Array;
   /**
    * Where the ant last dug, in path-integration coordinates, if `hasDigSite`:
    * after dumping its grain a digger walks back to the same face (site fidelity).
@@ -116,6 +148,12 @@ export interface Ants {
   partner: Int32Array;
   /** How hungry the ant must be to go out foraging (see `AntParams.forageThresholdMin`). */
   forageThreshold: Float64Array;
+  /** A `Caste`. */
+  caste: Uint8Array;
+  /** The protein-rich part of the crop's contents, µL (the rest is sugar water). */
+  cropProtein: Float64Array;
+  /** Queens: protein held in the body for making eggs, µL. */
+  reserve: Float64Array;
 }
 
 export function createAnts(count: number): Ants {
@@ -132,6 +170,8 @@ export function createAnts(count: number): Ants {
     memX: new Float64Array(count),
     memY: new Float64Array(count),
     hasMemory: new Uint8Array(count),
+    memoryProtein: new Uint8Array(count),
+    seekProtein: new Uint8Array(count),
     foodId: new Int32Array(count).fill(-1),
     crop: new Float64Array(count),
     cropQuality: new Float64Array(count),
@@ -140,8 +180,13 @@ export function createAnts(count: number): Ants {
     grainMoisture: new Uint8Array(count),
     encounters: new Float64Array(count),
     excitement: new Float64Array(count),
+    broodNeed: new Float64Array(count),
     recruiting: new Int32Array(count),
     knowsTube: new Uint8Array(count),
+    holeX: new Float64Array(count),
+    holeY: new Float64Array(count),
+    hasHole: new Uint8Array(count),
+    broodHeld: new Int32Array(count).fill(-1),
     digX: new Float64Array(count),
     digY: new Float64Array(count),
     hasDigSite: new Uint8Array(count),
@@ -149,7 +194,30 @@ export function createAnts(count: number): Ants {
     resume: new Uint8Array(count),
     partner: new Int32Array(count).fill(-1),
     forageThreshold: new Float64Array(count),
+    caste: new Uint8Array(count),
+    cropProtein: new Float64Array(count),
+    reserve: new Float64Array(count),
   };
+}
+
+/** Array fields whose empty value is -1 rather than 0. */
+const MINUS_ONE: ReadonlySet<string> = new Set(['broodHeld', 'foodId', 'partner']);
+
+/** Adds one ant at the end (a new worker eclosing) and returns its id. Every field starts empty. */
+export function addAnt(ants: Ants): number {
+  const id = ants.count;
+  const record = ants as unknown as Record<string, unknown>;
+  for (const key of Object.keys(record).sort()) {
+    const old = record[key];
+    if (!(old instanceof Float64Array || old instanceof Int32Array || old instanceof Uint8Array)) continue;
+    const Ctor = old.constructor as new (n: number) => Float64Array | Int32Array | Uint8Array;
+    const grown = new Ctor(id + 1);
+    grown.set(old);
+    if (MINUS_ONE.has(key)) grown[id] = -1;
+    record[key] = grown;
+  }
+  ants.count = id + 1;
+  return id;
 }
 
 /** What the nest holds as a whole. */
@@ -182,6 +250,7 @@ export interface AntContext {
   arena: Arena;
   farm: Farm;
   food: FoodDrop[];
+  brood: Brood;
   nest: Nest;
   nestMode: NestMode;
   params: AntParams;
@@ -196,7 +265,11 @@ export function stepAnts(ctx: AntContext): void {
   // Every worker burns the sugar in its crop on the life clock (D6); the lab nest has no metabolism.
   const burn = ctx.nestMode === 'farm' ? (params.burnRate / params.daySeconds) * DT : 0;
   for (let i = 0; i < ants.count; i++) {
-    if (burn > 0 && ants.crop[i]! > 0) ants.crop[i] = Math.max(0, ants.crop[i]! - burn);
+    if (burn > 0 && ants.crop[i]! > 0) {
+      // Sugar is burnt first; protein only once the sugar is gone.
+      ants.crop[i] = Math.max(0, ants.crop[i]! - burn);
+      if (ants.cropProtein[i]! > ants.crop[i]!) ants.cropProtein[i] = ants.crop[i]!;
+    }
     const place = ants.place[i]!;
     const state = ants.state[i]!;
     if (place === Place.tube) walkTube(ctx, i);
@@ -214,6 +287,12 @@ export function isOutbound(state: number): boolean {
 
 /** Starts walking through the tube; `outbound` ants come out in the arena, the others in the farm. */
 export function enterTube(ctx: AntContext, i: number): void {
+  const { ants } = ctx;
+  if (ants.place[i] === Place.farm) {
+    // Path integration restarts at the tube mouth when the ant comes back: keep its hole relative to the mouth.
+    ants.holeX[i]! -= ants.piX[i]!;
+    ants.holeY[i]! -= ants.piY[i]!;
+  }
   ctx.ants.place[i] = Place.tube;
   ctx.ants.timer[i] = Math.round(ctx.params.tubeTime * STEPS_PER_SECOND);
 }
@@ -274,10 +353,12 @@ function feed(ctx: AntContext, i: number): void {
     const take = Math.min(Math.max(0, params.cropLoad - ants.crop[i]!), drop.volume);
     drop.volume -= take;
     ants.crop[i]! += take;
+    ants.cropProtein[i]! += take * drop.protein;
     ants.cropQuality[i] = foodQuality(drop.concentration, params) * (take / params.cropLoad);
     ants.memX[i] = ants.piX[i]!;
     ants.memY[i] = ants.piY[i]!;
     ants.hasMemory[i] = 1;
+    ants.memoryProtein[i] = drop.protein > 0 ? 1 : 0;
     ants.state[i] = AntState.returning;
   } else {
     // The drop was used up while drinking: nothing to carry, nothing to remember.
@@ -308,7 +389,9 @@ function walk(ctx: AntContext, i: number): void {
   const trailL = sampleTrail(arena, lx, ly);
   const trailR = sampleTrail(arena, rx, ry);
   const trailSum = trailL + trailR;
-  if (trailSum > params.trailThreshold) turn += params.trailTurn * DT * ((trailR - trailL) / trailSum);
+  // A scout out for protein with no insect in mind searches on its own: the trail leads to sugar as often as not.
+  const scouting = state === AntState.exploring && ants.seekProtein[i] === 1;
+  if (!scouting && trailSum > params.trailThreshold) turn += params.trailTurn * DT * ((trailR - trailL) / trailSum);
 
   // 3. Goals from path integration.
   const piDist = Math.hypot(ants.piX[i]!, ants.piY[i]!);
@@ -353,7 +436,7 @@ function walk(ctx: AntContext, i: number): void {
 
   // 4. Food within smelling range pulls a searching ant straight to it.
   if (ants.state[i] === AntState.exploring || ants.state[i] === AntState.toFood) {
-    const near = nearestDrop(ctx, x, y, params.foodSenseRange);
+    const near = nearestDrop(ctx, i, x, y, params.foodSenseRange);
     if (near) turn = angleDiff(Math.atan2(near.y - y, near.x - x), heading);
   }
 
@@ -372,13 +455,15 @@ function walk(ctx: AntContext, i: number): void {
   }
 
   // 8. Arrivals and decisions.
-  if (now === AntState.returning || now === AntState.homing) {
-    if (Math.hypot(nx - arena.entranceX, ny - arena.entranceY) < HOME_RADIUS) {
+  const home = Math.hypot(nx - arena.entranceX, ny - arena.entranceY) < HOME_RADIUS;
+  if (now === AntState.returning || (now === AntState.homing && home)) {
+    if (home) {
       if (ctx.nestMode === 'lab') enterNest(ctx, i);
       else enterTube(ctx, i);
     }
   } else {
-    const drop = nearestDrop(ctx, nx, ny, 1);
+    // A searching ant, or one giving up and going home empty, takes food of its kind that it walks into.
+    const drop = nearestDrop(ctx, i, nx, ny, 1);
     if (drop) {
       ants.state[i] = AntState.feeding;
       ants.foodId[i] = drop.id;
@@ -395,6 +480,7 @@ function enterNest(ctx: AntContext, i: number): void {
     nest.stores += ants.crop[i]!;
     nest.excitement += params.recruitPerReturn * ants.cropQuality[i]!;
     ants.crop[i] = 0;
+    ants.cropProtein[i] = 0;
   }
   ants.state[i] = AntState.inNest;
   ants.timer[i] = Math.round(params.restTime * STEPS_PER_SECOND);
@@ -452,12 +538,18 @@ export function moveAnt(
   return true;
 }
 
-/** The first drop (in id order) whose edge is within `range` mm of (x, y). */
-function nearestDrop(ctx: AntContext, x: number, y: number, range: number): FoodDrop | undefined {
+/** The nearest drop of the kind the ant is after (`protein` 1 for insects, 0 for sugar water) within `range`. */
+function nearestDrop(ctx: AntContext, i: number, x: number, y: number, range: number): FoodDrop | undefined {
+  const { ants, params } = ctx;
+  // An ant takes the kind of food it set out for. One out for sugar that comes on prey takes that
+  // instead if it feels the brood's hunger; one out for protein passes sugar by.
+  const seek = ants.seekProtein[i]!;
+  const preyToo = seek === 0 && ants.broodNeed[i]! >= params.preyNeed;
   let best: FoodDrop | undefined;
   let bestGap = range;
   for (const drop of ctx.food) {
-    if (drop.volume <= 0) continue;
+    const protein = drop.protein > 0 ? 1 : 0;
+    if (drop.volume <= 0 || (protein !== seek && !(protein === 1 && preyToo))) continue;
     const gap = Math.hypot(drop.x - x, drop.y - y) - dropRadius(drop.volume);
     if (gap <= bestGap) {
       best = drop;

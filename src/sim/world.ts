@@ -4,7 +4,8 @@
  * M2: the colony lives in the sand farm, digs its nest, and forages in the
  * arena through the tube. Lab experiments use a simple lab nest instead.
  */
-import { type Ants, AntState, type Nest, type NestMode, Place, createAnts, stepAnts } from './ants';
+import { type Ants, AntState, Caste, type Nest, type NestMode, Place, addAnt, createAnts, stepAnts } from './ants';
+import { type Brood, createBrood, scentBrood, stepBrood } from './brood';
 import { type Arena, createArena, evaporateTrail } from './arena';
 import { type Farm, createFarm, updateField, updateFresh } from './farm';
 import type { FoodDrop } from './food';
@@ -33,8 +34,10 @@ export interface World {
   ants: Ants;
   nest: Nest;
   nestMode: NestMode;
-  /** Sugar drops in the arena, in the order they were placed. */
+  /** Food drops in the arena, in the order they were placed. */
   food: FoodDrop[];
+  /** Eggs, larvae and pupae in the farm. */
+  brood: Brood;
   nextFoodId: number;
   params: AntParams;
 }
@@ -42,6 +45,8 @@ export interface World {
 export interface WorldOptions {
   /** Number of workers (default 60). */
   ants?: number;
+  /** A queen comes with the workers (farm only; default false, as in most lab experiments on workers). */
+  queen?: boolean;
   /** Where the colony lives: the sand farm (default) or a lab nest behind the arena entrance. */
   nest?: NestMode;
   /** Changes to the default ant parameters, e.g. `{ trailLaying: false }` for a control. */
@@ -54,7 +59,11 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
   const farm = createFarm(new Rng(seed, Purpose.soil));
   const ants = createAnts(options.ants ?? 60);
   giveTraits(ants, params, new Rng(seed, Purpose.traits));
-  if (nestMode === 'farm') pourAnts(ants, farm, params, new Rng(seed, Purpose.ants));
+  if (nestMode === 'farm') {
+    const pour = new Rng(seed, Purpose.ants);
+    pourAnts(ants, farm, params, pour);
+    if (options.queen) addQueen(ants, farm, params, pour);
+  }
   return {
     seed,
     step: 0,
@@ -65,6 +74,7 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
     nest: { stores: 0, excitement: 0 },
     nestMode,
     food: [],
+    brood: createBrood(),
     nextFoodId: 1,
     params,
   };
@@ -92,6 +102,20 @@ function pourAnts(ants: Ants, farm: Farm, params: AntParams, rng: Rng): void {
   }
 }
 
+/** The queen goes in last, onto the same spot; she has her body's reserve to start laying. */
+function addQueen(ants: Ants, farm: Farm, params: AntParams, rng: Rng): void {
+  const q = addAnt(ants);
+  const x = rng.range(farm.width / 2 - POUR_SPREAD, farm.width / 2 + POUR_SPREAD);
+  ants.caste[q] = Caste.queen;
+  ants.place[q] = Place.farm;
+  ants.state[q] = AntState.wandering;
+  ants.x[q] = x;
+  ants.y[q] = farm.surface[Math.floor(x)]! - 1.5;
+  ants.heading[q] = rng.range(-Math.PI, Math.PI);
+  ants.crop[q] = params.startCrop * params.cropLoad;
+  ants.reserve[q] = params.queenReserve;
+}
+
 /** Arena trail evaporates once per second of ant time; finer steps would change nothing visible. */
 const EVAPORATE_EVERY = STEPS_PER_SECOND;
 /** The farm's chemical fields update every few seconds; they change slowly. */
@@ -106,6 +130,7 @@ export function step(world: World): void {
     arena: world.arena,
     farm: world.farm,
     food: world.food,
+    brood: world.brood,
     nest: world.nest,
     nestMode: world.nestMode,
     params: world.params,
@@ -121,9 +146,12 @@ export function step(world: World): void {
     stepSoil(farm, rng);
     if (world.step % FARM_FIELDS_EVERY === 0) {
       const seconds = FARM_FIELDS_EVERY / STEPS_PER_SECOND;
-      updateField(farm, farm.odour, seconds, params.odourHalfLife, params.odourDiffusion);
+      updateField(farm, farm.odour, seconds, params.odourHalfLife, params.odourDiffusion, true);
       updateField(farm, farm.digMark, seconds, params.digMarkHalfLife, 0);
       updateFresh(farm);
+      stepBrood(world.brood, params, seconds);
+      scentBrood(world.brood, farm, params, seconds);
+      updateField(farm, farm.broodScent, seconds, params.broodScentHalfLife, params.broodScentDiffusion, true);
     }
     if (world.step % FARM_TRAIL_EVERY === 0) {
       evaporateTrail(farm, FARM_TRAIL_EVERY / STEPS_PER_SECOND, params.trailHalfLife);
@@ -134,7 +162,17 @@ export function step(world: World): void {
 /** Puts a drop of sugar water on the arena floor. Returns its id. */
 export function placeSugar(world: World, x: number, y: number, volume: number, concentration: number): number {
   const id = world.nextFoodId++;
-  world.food.push({ id, x, y, volume, concentration });
+  world.food.push({ id, x, y, volume, concentration, protein: 0 });
+  return id;
+}
+
+/**
+ * Puts protein-rich food on the arena floor: a crushed insect, which ants
+ * drink like a drop (Lasius niger take the juices of prey). Returns its id.
+ */
+export function placeProtein(world: World, x: number, y: number, volume: number): number {
+  const id = world.nextFoodId++;
+  world.food.push({ id, x, y, volume, concentration: 1, protein: 1 });
   return id;
 }
 

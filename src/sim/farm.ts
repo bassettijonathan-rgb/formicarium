@@ -36,6 +36,8 @@ export interface Farm {
   odour: Float64Array;
   /** Short-lived mark left where a grain was dug out; it draws more digging there. */
   digMark: Float64Array;
+  /** Scent of hungry larvae: it draws workers carrying protein to the brood (M3b). */
+  broodScent: Float64Array;
   /**
    * Fresh air: 1 in the open headspace, fading along the tunnels the deeper
    * in they lead (by `FRESH_KEEP` per field cell). Underground, ants find the
@@ -100,6 +102,7 @@ export function createFarm(rng: Rng): Farm {
     fieldHeight,
     odour: new Float64Array(fieldWidth * fieldHeight),
     digMark: new Float64Array(fieldWidth * fieldHeight),
+    broodScent: new Float64Array(fieldWidth * fieldHeight),
     fresh: new Float64Array(fieldWidth * fieldHeight),
     trail: new Float64Array(width * height),
     tubeX: width - 1.5,
@@ -177,28 +180,54 @@ export function addToField(farm: Farm, field: Float64Array, x: number, y: number
  * spread to neighbouring cells (explicit scheme; stable while
  * diffusion * seconds / FIELD_CELL² ≤ 0.25).
  */
-export function updateField(farm: Farm, field: Float64Array, seconds: number, halfLife: number, diffusion: number): void {
+export function updateField(
+  farm: Farm,
+  field: Float64Array,
+  seconds: number,
+  halfLife: number,
+  diffusion: number,
+  throughAir = false,
+): void {
   const keep = Math.pow(0.5, seconds / halfLife);
   const w = farm.fieldWidth;
   const h = farm.fieldHeight;
   const k = Math.min(0.25, (diffusion * seconds) / (FIELD_CELL * FIELD_CELL));
   const src = k > 0 ? field.slice() : field;
+  // A smell carried in the air spreads along tunnels, through the open and through loose sand, not through
+  // firm soil.
+  const air = throughAir ? airCells(farm) : undefined;
   for (let cy = 0; cy < h; cy++) {
     for (let cx = 0; cx < w; cx++) {
       const i = cy * w + cx;
+      if (air && !air[i]) {
+        field[i] = 0;
+        continue;
+      }
       let v = src[i]!;
       if (k > 0) {
-        // Zero-flux edges: a missing neighbour counts as this cell.
-        const l = cx > 0 ? src[i - 1]! : v;
-        const r = cx < w - 1 ? src[i + 1]! : v;
-        const u = cy > 0 ? src[i - w]! : v;
-        const d = cy < h - 1 ? src[i + w]! : v;
+        // Zero-flux edges: a missing neighbour (or soil, for a smell in the air) counts as this cell.
+        const open = (j: number, ok: boolean) => ok && (!air || air[j] === 1);
+        const l = open(i - 1, cx > 0) ? src[i - 1]! : v;
+        const r = open(i + 1, cx < w - 1) ? src[i + 1]! : v;
+        const u = open(i - w, cy > 0) ? src[i - w]! : v;
+        const d = open(i + w, cy < h - 1) ? src[i + w]! : v;
         v += k * (l + r + u + d - 4 * v);
       }
       v *= keep;
       field[i] = v < 1e-6 ? 0 : v;
     }
   }
+}
+
+/** Scratch: 1 for field cells air can pass through (see `hasAir`). */
+let air = new Uint8Array(0);
+
+function airCells(farm: Farm): Uint8Array {
+  const w = farm.fieldWidth;
+  const h = farm.fieldHeight;
+  if (air.length !== w * h) air = new Uint8Array(w * h);
+  for (let fy = 0; fy < h; fy++) for (let fx = 0; fx < w; fx++) air[fy * w + fx] = hasAir(farm, fx, fy, true) ? 1 : 0;
+  return air;
 }
 
 /** How much fresher air is per field cell nearer the open, along a tunnel. */
@@ -249,10 +278,15 @@ export function updateFresh(farm: Farm): void {
   sweep(w * h - 1, -1, -1);
 }
 
-function hasAir(farm: Farm, fx: number, fy: number): boolean {
+/**
+ * True if a field cell holds any open air, or, when `seep`, loose grains, which a smell seeps between
+ * (the way out an ant follows is open air only).
+ */
+function hasAir(farm: Farm, fx: number, fy: number, seep = false): boolean {
   for (let dy = 0; dy < FIELD_CELL; dy++) {
     for (let dx = 0; dx < FIELD_CELL; dx++) {
-      if (farm.material[(fy * FIELD_CELL + dy) * farm.width + fx * FIELD_CELL + dx] === Material.air) return true;
+      const c = (fy * FIELD_CELL + dy) * farm.width + fx * FIELD_CELL + dx;
+      if (farm.material[c] === Material.air || (seep && farm.loose[c])) return true;
     }
   }
   return false;

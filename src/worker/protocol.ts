@@ -6,6 +6,8 @@ export type ToWorker =
   | { type: 'speed'; value: number }
   /** The keeper puts a sugar drop in the arena, at arena coordinates in mm. */
   | { type: 'sugar'; x: number; y: number; volume: number; concentration: number }
+  /** The keeper puts a crushed insect (protein) in the arena. */
+  | { type: 'protein'; x: number; y: number; volume: number }
   /** The keeper removes all food from the arena. */
   | { type: 'clearFood' };
 
@@ -23,7 +25,14 @@ export interface AntsSnapshot {
   ants: Float32Array;
   /** 1 where the ant's crop is more than half full (its gaster is stretched). */
   full: Uint8Array;
+  /** Each ant's `Caste`. */
+  caste: Uint8Array;
+  /** Brood in the farm, `BROOD_STRIDE` numbers each: x, y (mm), `BroodStage`, size (mm). */
+  brood: Float32Array;
 }
+
+/** Numbers per brood item in `AntsSnapshot.brood`. */
+export const BROOD_STRIDE = 4;
 
 export interface ArenaSnapshot {
   type: 'arena';
@@ -33,7 +42,7 @@ export interface ArenaSnapshot {
   trail: Float32Array;
   /** 1 where the floor is blocked (only lab setups have inner walls). */
   wall: Uint8Array;
-  food: { id: number; x: number; y: number; volume: number; concentration: number }[];
+  food: { id: number; x: number; y: number; volume: number; concentration: number; protein: number }[];
   /** All workers; those out foraging (in the arena or the tube); sugar water in the colony's crops (µL). */
   ants: number;
   out: number;

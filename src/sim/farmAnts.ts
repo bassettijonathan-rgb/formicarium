@@ -15,14 +15,17 @@ import { sampleTrail, depositTrail } from './arena';
 import {
   type AntContext,
   AntState,
+  Caste,
   DT,
   Place,
+  addAnt,
   enterTube,
   isOutbound,
   moveAnt,
   wrapAngle,
 } from './ants';
-import { addToField, cellSolid, isBlockedFarm, isSoil, openAbove, sampleField } from './farm';
+import { BroodStage, addBrood, broodNear, larvaHungry, larvaStarved } from './brood';
+import { addToField, cellSolid, isBlockedFarm, isSoil, openAbove, sampleField, type Farm } from './farm';
 import { placeGrain, removeGrain } from './soil';
 import { STEPS_PER_SECOND } from './time';
 
@@ -37,6 +40,8 @@ const TUBE_CLEAR = 15;
 
 /** Scratch, rebuilt every step: whether each ant is touching a resting nestmate. */
 let touchingRest = new Uint8Array(0);
+/** Scratch, rebuilt every step: the queens in the farm. */
+const queens: number[] = [];
 /** Scratch for bucketing ants by position: bucket starts, fill pointers, each ant's bucket, ants by bucket. */
 let start = new Int32Array(0);
 let fill = new Int32Array(0);
@@ -51,6 +56,8 @@ export function computeContacts(ctx: AntContext): void {
   const { ants, farm, params } = ctx;
   if (touchingRest.length !== ants.count) touchingRest = new Uint8Array(ants.count);
   touchingRest.fill(0);
+  queens.length = 0;
+  for (let i = 0; i < ants.count; i++) if (ants.place[i] === Place.farm && ants.caste[i] === Caste.queen) queens.push(i);
 
   // Bucket the ants in the farm by position (a counting sort, so order is by id within a bucket).
   const bw = Math.ceil(farm.width / BUCKET);
@@ -78,6 +85,7 @@ export function computeContacts(ctx: AntContext): void {
 
   const memory = Math.exp(-DT / params.encounterMemory);
   const excitementKeep = Math.pow(0.5, DT / params.excitementHalfLife);
+  const needKeep = Math.pow(0.5, DT / params.needHalfLife);
   const r2 = params.contactRadius * params.contactRadius;
   for (let i = 0; i < ants.count; i++) {
     if (ants.recruiting[i]! > 0) ants.recruiting[i]!--;
@@ -88,6 +96,7 @@ export function computeContacts(ctx: AntContext): void {
     const by = (b - bx) / bw;
     let touching = 0;
     let recruiters = 0;
+    let need = 0;
     for (let y = Math.max(0, by - 1); y <= Math.min(bh - 1, by + 1); y++) {
       for (let x = Math.max(0, bx - 1); x <= Math.min(bw - 1, bx + 1); x++) {
         const cell = y * bw + x;
@@ -99,14 +108,184 @@ export function computeContacts(ctx: AntContext): void {
           if (dx * dx + dy * dy > r2) continue;
           touching++;
           if (ants.recruiting[j]! > 0) recruiters++;
+          if (ants.broodNeed[j]! > need) need = ants.broodNeed[j]!;
           if (ants.state[j] === AntState.resting) touchingRest[i] = 1;
         }
       }
     }
     ants.encounters[i] = ants.encounters[i]! * memory + touching * (1 - memory);
     ants.excitement[i]! += params.recruitPerContact * recruiters * DT;
+    // The brood's hunger, smelt here or passed on by touch, fading when nobody renews it.
+    ants.broodNeed[i] = Math.max(ants.broodNeed[i]! * needKeep, smellBroodNeed(ctx, i), params.needRelay * need);
     if (params.sharing && canShare(ants.state[i]!)) beg(ctx, i, bx, by, bw, bh);
   }
+  tendBrood(ctx);
+  feedQueen(ctx);
+  pickUpBrood(ctx);
+}
+
+/**
+ * Workers touching a queen short of protein feed her from their crop, as
+ * they feed a begging larva: she is fed by her workers, and lays as well as
+ * she is fed.
+ */
+function feedQueen(ctx: AntContext): void {
+  const { ants, params, rng } = ctx;
+  const r2 = params.contactRadius * params.contactRadius;
+  for (const q of queens) {
+    for (let i = 0; i < ants.count; i++) {
+      if (ants.reserve[q]! + ants.cropProtein[q]! >= params.queenReserveMax / 2) break;
+      if (ants.place[i] !== Place.farm || ants.caste[i] !== Caste.worker || !canShare(ants.state[i]!)) continue;
+      if (ants.cropProtein[i]! <= 0 || ants.crop[q]! >= params.cropLoad) continue;
+      const dx = ants.x[q]! - ants.x[i]!;
+      const dy = ants.y[q]! - ants.y[i]!;
+      if (dx * dx + dy * dy > r2 || !rng.chance(params.nurseRate * DT)) continue;
+      const meal = Math.min(params.nurseLoad, ants.cropProtein[i]!, params.cropLoad - ants.crop[q]!);
+      ants.cropProtein[i]! -= meal;
+      ants.crop[i] = Math.max(0, ants.crop[i]! - meal);
+      ants.cropProtein[q]! += meal;
+      ants.crop[q]! += meal;
+    }
+  }
+}
+
+/**
+ * Brood piling (Deneubourg et al. 1991): a resting or wandering worker that
+ * touches a brood item picks it up, more readily the less other brood lies
+ * round it. Carriers put it down where brood lies thick (`carryBrood`), so
+ * scattered eggs and larvae end up in piles that nurses keep together.
+ */
+function pickUpBrood(ctx: AntContext): void {
+  const { ants, brood, params, rng } = ctx;
+  if (brood.count === 0) return;
+  const r2 = params.contactRadius * params.contactRadius;
+  const count = ants.count;
+  for (let i = 0; i < count; i++) {
+    if (ants.place[i] !== Place.farm || ants.caste[i] !== Caste.worker || !canShare(ants.state[i]!)) continue;
+    for (let k = 0; k < brood.count; k++) {
+      if (brood.stage[k] === BroodStage.none || brood.carried[k]) continue;
+      const dx = brood.x[k]! - ants.x[i]!;
+      const dy = brood.y[k]! - ants.y[i]!;
+      if (dx * dx + dy * dy > r2) continue;
+      const n = broodAround(ctx, brood.x[k]!, brood.y[k]!, i, k);
+      const alone = params.broodPickHalf / (params.broodPickHalf + n);
+      if (rng.chance(params.broodPickRate * alone * alone * DT)) {
+        ants.broodHeld[i] = k;
+        brood.carried[k] = 1;
+        ants.state[i] = AntState.carryingBrood;
+        ants.timer[i] = 0;
+        ants.hasDigSite[i] = 0;
+      }
+      break;
+    }
+  }
+}
+
+/**
+ * How much brood an ant senses round (x, y): the brood items within
+ * `broodSenseRadius` (but `skip`), plus the queen if she is that close,
+ * counted as `queenBroodWeight` items. The queen's eggs are piled round her
+ * and her workers gather there, so she weighs like a pile of brood.
+ */
+function broodAround(ctx: AntContext, x: number, y: number, self: number, skip = -1): number {
+  const { ants, brood, params } = ctx;
+  const r = params.broodSenseRadius;
+  let n = brood.count > 0 ? broodNear(brood, x, y, r, skip) : 0;
+  for (const q of queens) {
+    if (q === self) continue;
+    const dx = ants.x[q]! - x;
+    const dy = ants.y[q]! - y;
+    if (dx * dx + dy * dy <= r * r) n += params.queenBroodWeight;
+  }
+  return n;
+}
+
+/** A brood carrier after each step: the item goes where it goes, and it puts it down where brood lies thick. */
+function carryBrood(ctx: AntContext, i: number, outside: boolean): void {
+  const { ants, brood, params, rng } = ctx;
+  const k = ants.broodHeld[i]!;
+  brood.x[k] = ants.x[i]!;
+  brood.y[k] = ants.y[i]!;
+  const carried = ++ants.timer[i]! / STEPS_PER_SECOND;
+  const n = broodAround(ctx, ants.x[i]!, ants.y[i]!, i);
+  const thick = n / (params.broodDropHalf + n);
+  const tired = carried > (outside ? 2 : 1) * params.broodCarryMax;
+  if (tired || (!outside && rng.chance(params.broodDropRate * thick * thick * DT))) {
+    brood.carried[k] = 0;
+    ants.broodHeld[i] = -1;
+    ants.state[i] = AntState.wandering;
+    ants.timer[i] = 0;
+  }
+}
+
+/**
+ * Workers and brood they touch: a worker with protein in its crop feeds a
+ * begging larva, and a worker touching a pupa that is ready helps the new
+ * worker out of its cocoon. The brood is few compared with the ants, so each
+ * worker checks the items that need something; new workers are added after
+ * the loop, so the ants' arrays don't change under it.
+ */
+function tendBrood(ctx: AntContext): void {
+  const { ants, brood, params, rng } = ctx;
+  needy.length = 0;
+  for (let k = 0; k < brood.count; k++) {
+    if (brood.carried[k]) continue;
+    const ready = brood.stage[k] === BroodStage.pupa && brood.progress[k]! >= 1;
+    if (ready || larvaHungry(brood, k, params)) needy.push(k);
+  }
+  if (needy.length === 0) return;
+  const r2 = params.contactRadius * params.contactRadius;
+  const count = ants.count;
+  for (let i = 0; i < count; i++) {
+    if (ants.place[i] !== Place.farm || ants.caste[i] !== Caste.worker || !canShare(ants.state[i]!)) continue;
+    for (const k of needy) {
+      if (brood.stage[k] === BroodStage.none) continue;
+      const dx = brood.x[k]! - ants.x[i]!;
+      const dy = brood.y[k]! - ants.y[i]!;
+      if (dx * dx + dy * dy > r2) continue;
+      if (brood.stage[k] === BroodStage.pupa) {
+        eclose(ctx, k);
+        break;
+      }
+      if (larvaStarved(brood, k, params)) {
+        // Brood that cannot be raised is eaten, and its protein goes back into the colony.
+        const back = Math.min(brood.progress[k]! * params.larvaFood, Math.max(0, params.cropLoad - ants.crop[i]!));
+        ants.crop[i]! += back;
+        ants.cropProtein[i]! += back;
+        brood.stage[k] = BroodStage.none;
+        break;
+      }
+      if (ants.cropProtein[i]! <= 0 || !larvaHungry(brood, k, params) || !rng.chance(params.nurseRate * DT)) continue;
+      const meal = Math.min(params.nurseLoad, ants.cropProtein[i]!, params.larvaFood - brood.food[k]!);
+      ants.cropProtein[i]! -= meal;
+      ants.crop[i] = Math.max(0, ants.crop[i]! - meal);
+      brood.food[k]! += meal;
+      break;
+    }
+  }
+}
+
+/** Scratch: brood items that need a worker this step. */
+const needy: number[] = [];
+
+/**
+ * A pupa ready to emerge, helped out by a worker: a new worker appears where
+ * it lay. Callows start hungry and resting; their foraging threshold is drawn
+ * like any worker's.
+ */
+function eclose(ctx: AntContext, k: number): void {
+  const { ants, brood, params, rng } = ctx;
+  const i = addAnt(ants);
+  ants.caste[i] = Caste.worker;
+  ants.place[i] = Place.farm;
+  ants.state[i] = AntState.resting;
+  ants.timer[i] = Math.round(params.restLength * STEPS_PER_SECOND);
+  ants.x[i] = brood.x[k]!;
+  ants.y[i] = brood.y[k]!;
+  ants.heading[i] = rng.range(-Math.PI, Math.PI);
+  const ratio = params.forageThresholdMax / params.forageThresholdMin;
+  ants.forageThreshold[i] = params.forageThresholdMin * Math.pow(ratio, rng.float());
+  brood.stage[k] = BroodStage.none;
 }
 
 /** Resting and wandering ants can stop to exchange food; ants busy carrying, travelling or sharing can't. */
@@ -134,7 +313,8 @@ function beg(ctx: AntContext, i: number, bx: number, by: number, bw: number, bh:
       const cell = y * bw + x;
       for (let k = start[cell]!; k < start[cell + 1]!; k++) {
         const j = members[k]!;
-        if (j === i || !canShare(ants.state[j]!)) continue;
+        // The queen begs but is never begged from.
+        if (j === i || !canShare(ants.state[j]!) || ants.caste[j] === Caste.queen) continue;
         const gap = hi - hunger(ctx, j);
         if (gap < params.begMargin) continue;
         const dx = ants.x[j]! - ants.x[i]!;
@@ -174,8 +354,12 @@ function share(ctx: AntContext, i: number): void {
   if (!done && ants.crop[i]! < ants.crop[j]!) {
     const room = params.cropLoad - ants.crop[i]!;
     const flow = Math.min(params.shareFlow * room * DT, (ants.crop[j]! - ants.crop[i]!) / 2);
+    // What flows is the donor's crop as it is: sugar and protein in the same proportion.
+    const protein = (flow * ants.cropProtein[j]!) / ants.crop[j]!;
     ants.crop[i]! += flow;
     ants.crop[j]! -= flow;
+    ants.cropProtein[i]! += protein;
+    ants.cropProtein[j] = Math.min(ants.crop[j]!, Math.max(0, ants.cropProtein[j]! - protein));
     if (room - flow < 0.02 * params.cropLoad || ants.crop[j]! - ants.crop[i]! < 0.02 * params.cropLoad) done = true;
   }
   if (!done) return;
@@ -199,9 +383,34 @@ export function stepFarmAnt(ctx: AntContext, i: number): void {
 
 function rest(ctx: AntContext, i: number): void {
   const { ants, farm, params } = ctx;
-  addToField(farm, farm.odour, ants.x[i]!, ants.y[i]!, params.odourDeposit * DT);
+  const queen = ants.caste[i] === Caste.queen;
+  // The queen's scent marks where she lies far more strongly than a worker's: the nest gathers round her.
+  addToField(farm, farm.odour, ants.x[i]!, ants.y[i]!, params.odourDeposit * (queen ? params.queenOdourGain : 1) * DT);
+  if (queen) layEggs(ctx, i);
   if (setOffToForage(ctx, i)) return;
   if (--ants.timer[i]! <= 0) ants.state[i] = AntState.wandering;
+}
+
+/**
+ * A resting queen turns the protein in her crop into body reserve (up to `queenReserveMax`) and lays
+ * an egg where she lies whenever the reserve covers one, up to `layRate`
+ * eggs a day: a queen lays as well as she is fed.
+ */
+function layEggs(ctx: AntContext, i: number): void {
+  const { ants, brood, params, rng } = ctx;
+  const take = Math.min(ants.cropProtein[i]!, params.queenReserveMax - ants.reserve[i]!);
+  if (take > 0) {
+    ants.reserve[i]! += take;
+    ants.crop[i] = Math.max(0, ants.crop[i]! - take);
+    ants.cropProtein[i]! -= take;
+  }
+  // A queen short of protein begs the way hungry larvae do: her scent draws food to her (rough).
+  if (ants.reserve[i]! < params.queenReserveMax / 2) {
+    addToField(ctx.farm, ctx.farm.broodScent, ants.x[i]!, ants.y[i]!, params.broodScentDeposit * DT);
+  }
+  if (ants.reserve[i]! < params.eggCost || !rng.chance((params.layRate / params.daySeconds) * DT)) return;
+  ants.reserve[i]! -= params.eggCost;
+  addBrood(brood, BroodStage.egg, ants.x[i]!, ants.y[i]!);
 }
 
 /**
@@ -209,21 +418,44 @@ function rest(ctx: AntContext, i: number): void {
  * true if it does. Only workers with a low threshold go out much, and they
  * go out more the emptier their own crop: a forager that could unload its
  * crop at home goes back to the food; one that could not, because its
- * nestmates are full, mostly stays in and only scouts now and then.
+ * nestmates are full, mostly stays in and only scouts now and then. The
+ * smell of hungry larvae drives it the same way. It goes out for whichever
+ * need is the stronger, sugar for its own hunger or protein for the brood's,
+ * back to food of that kind it remembers or else exploring, and passes the
+ * other kind of food by.
  */
 function setOffToForage(ctx: AntContext, i: number): boolean {
   const { ants, params, rng } = ctx;
-  const own = ants.hasMemory[i] ? params.returnToFoodRate : params.forageRate;
+  if (ants.caste[i] === Caste.queen) return false; // a queen never leaves the nest
+  const hungry = hunger(ctx, i);
+  // An ant already carrying protein has some for the brood: it feels the need to fetch more less.
+  const need = ants.broodNeed[i]! * Math.max(0, 1 - ants.cropProtein[i]! / params.cropLoad);
+  const forProtein = need > hungry;
+  const remembers = ants.hasMemory[i] === 1 && ants.memoryProtein[i] === (forProtein ? 1 : 0);
+  const own = remembers ? params.returnToFoodRate : params.forageRate;
   // How readily this worker forages at all (its threshold against the strongest stimulus, Bonabeau et
-  // al. 1996), times how hungry it is: trips rise in step with hunger (Greenwald et al. 2018).
+  // al. 1996), times how hungry it or the brood is: trips rise in step with hunger (Greenwald et al. 2018).
   const propensity = 1 / (1 + Math.pow(ants.forageThreshold[i]!, params.forageSteepness));
-  const response = propensity * (params.scoutShare + (1 - params.scoutShare) * hunger(ctx, i));
+  const response = propensity * (params.scoutShare + (1 - params.scoutShare) * Math.max(hungry, need));
   const rate = (own + params.recruitRate * ants.excitement[i]!) * response;
   if (!rng.chance(rate * DT)) return false;
-  ants.state[i] = ants.hasMemory[i] ? AntState.toFood : AntState.exploring;
+  ants.state[i] = remembers ? AntState.toFood : AntState.exploring;
+  ants.seekProtein[i] = forProtein ? 1 : 0;
   ants.timer[i] = 0;
   ants.hasDigSite[i] = 0;
   return true;
+}
+
+/**
+ * How strongly an ant smells hungry brood where it is, 0 to 1. Nurses smell
+ * it; foragers mostly learn of it from nestmates they touch (`computeContacts`),
+ * as ant colonies pass larval demand on to their foragers (Dussutour & Simpson
+ * 2009). Lasius niger colonies with larvae to feed forage more for protein
+ * (Portha et al. 2002).
+ */
+function smellBroodNeed(ctx: AntContext, i: number): number {
+  const s = sampleField(ctx.farm, ctx.farm.broodScent, ctx.ants.x[i]!, ctx.ants.y[i]!);
+  return s / (s + ctx.params.broodNeedScent);
 }
 
 function walkFarm(ctx: AntContext, i: number): void {
@@ -250,15 +482,31 @@ function walkFarm(ctx: AntContext, i: number): void {
     if (tl + tr > params.trailThreshold) turn += params.trailTurn * DT * ((tr - tl) / (tl + tr));
   }
 
-  // Colony odour: going home follows it strongly; wandering ants keep near it.
-  if (inbound || state === AntState.wandering) {
+  const outside = openAbove(farm, x, y) && enclosure(ctx, x, y) < INSIDE;
+  // A worker with protein to give, coming home or about the nest, follows the scent of hungry larvae to
+  // the brood, as does the queen, and inside the soil, while it smells them, that call outweighs the colony odour. Out in
+  // the open it goes back in by the colony odour and its hole first.
+  let toBrood = false;
+  const queen = ants.caste[i] === Caste.queen;
+  if ((inbound || state === AntState.wandering) && !outside && (queen || ants.cropProtein[i]! >= params.nurseLoad)) {
+    const bl = sampleField(farm, farm.broodScent, lx, ly);
+    const br = sampleField(farm, farm.broodScent, rx, ry);
+    if (bl + br > 1e-3) {
+      turn += params.nurseTurn * DT * ((br - bl) / (bl + br));
+      toBrood = true;
+    }
+  }
+  // Colony odour: going home follows it strongly, and so does a wandering ant out in the open (it goes
+  // back in); wandering ants inside keep near it.
+  if (!toBrood && (inbound || state === AntState.wandering || state === AntState.carryingBrood)) {
     const ol = sampleField(farm, farm.odour, lx, ly);
     const or = sampleField(farm, farm.odour, rx, ry);
-    const gain = inbound ? params.odourTurn : params.odourTurn / 4;
+    // The queen keeps to where the colony is thickest, as a queen stays among her workers.
+    const strong = inbound || outside || queen || state === AntState.carryingBrood;
+    const gain = strong ? params.odourTurn : params.odourTurn / 4;
     if (ol + or > 1e-3) turn += gain * DT * ((or - ol) / (ol + or));
   }
   // Underground, ants heading out (or carrying soil out) follow the fresh air towards the open.
-  const outside = openAbove(farm, x, y) && enclosure(ctx, x, y) < INSIDE;
   if ((outbound || state === AntState.carrying) && !outside) {
     const fl = sampleField(farm, farm.fresh, lx, ly);
     const fr = sampleField(farm, farm.fresh, rx, ry);
@@ -277,13 +525,20 @@ function walkFarm(ctx: AntContext, i: number): void {
     // Back to the face it was digging, by its path integrator.
     goal = Math.atan2(ants.digY[i]! - ants.piY[i]!, ants.digX[i]! - ants.piX[i]!);
     strength = params.goalTurn;
-  } else if (state === AntState.wandering) {
+  } else if (state === AntState.wandering && outside && ants.hasHole[i]) {
+    // Out in the open with nothing to do: back to the hole it came out of, by its path integrator.
+    goal = Math.atan2(ants.holeY[i]! - ants.piY[i]!, ants.holeX[i]! - ants.piX[i]!);
+    strength = params.goalTurn;
+  } else if (state === AntState.wandering && ants.caste[i] === Caste.worker) {
     goal = Math.PI / 2; // nest-building ants are drawn downwards, into the soil
     strength = params.geotaxis;
   } else if (state === AntState.carrying) {
     if (!outside) {
       goal = -Math.PI / 2; // up, towards the open
       strength = params.geotaxis;
+    } else if (aboveTube(farm, x, y)) {
+      goal = x < farm.tubeX ? Math.PI : 0; // no spoil goes over the tube: away from it
+      strength = params.goalTurn;
     } else {
       // Out in the open: along the surface, away from the hole, by its path integrator.
       goal = ants.piX[i]! >= ants.digX[i]! ? 0 : Math.PI;
@@ -317,34 +572,57 @@ function walkFarm(ctx: AntContext, i: number): void {
     }
   }
 
-  moveAnt(ctx, i, wrapAngle(heading + turn), params.speed * DT, (px, py) => isBlockedFarm(farm, px, py));
+  const speed = ants.caste[i] === Caste.queen ? params.speed * params.queenSpeed : params.speed;
+  moveAnt(ctx, i, wrapAngle(heading + turn), speed * DT, (px, py) => isBlockedFarm(farm, px, py));
   const nx = ants.x[i]!;
   const ny = ants.y[i]!;
 
-  if (state === AntState.wandering) {
+  // Coming out of the soil into the open: remember the hole, until the ant is back inside.
+  const outsideNow = openAbove(farm, nx, ny) && enclosure(ctx, nx, ny) < INSIDE;
+  if (!outside && outsideNow) {
+    ants.holeX[i] = ants.piX[i]!;
+    ants.holeY[i] = ants.piY[i]!;
+    ants.hasHole[i] = 1;
+  } else if (!outsideNow && ants.hasHole[i] && Math.hypot(ants.holeX[i]! - ants.piX[i]!, ants.holeY[i]! - ants.piY[i]!) < 3) {
+    ants.hasHole[i] = 0;
+  }
+
+  if (state === AntState.carryingBrood) {
+    carryBrood(ctx, i, outsideNow);
+  } else if (state === AntState.wandering) {
     if (ants.hasDigSite[i]) {
       const near = Math.hypot(ants.digX[i]! - ants.piX[i]!, ants.digY[i]! - ants.piY[i]!) < 2;
       if (near || ++ants.timer[i]! > params.digReturnTime * STEPS_PER_SECOND) ants.hasDigSite[i] = 0;
     }
     if (setOffToForage(ctx, i)) return;
-    if (tryDig(ctx, i)) return;
+    if (ants.caste[i] === Caste.worker && tryDig(ctx, i)) return;
     const enclosed = enclosure(ctx, nx, ny);
     const odour = sampleField(farm, farm.odour, nx, ny);
     const nestLike = odour / (odour + params.homeOdour);
-    if (rng.chance(params.restRate * enclosed * (1 + params.restOdourGain * nestLike) * DT)) {
+    // The queen settles among the larvae (and pupae), where the nurses are; her eggs are carried there.
+    const n = queen
+      ? broodNear(ctx.brood, nx, ny, params.broodSenseRadius, -1, BroodStage.larva)
+      : broodAround(ctx, nx, ny, i);
+    // A worker with protein for the brood does not settle until it is by the brood. The queen, who lives
+    // among her brood, settles away from it only reluctantly (she must lie somewhere to lay the first eggs).
+    const alone = queen ? params.queenSettleAlone : ants.cropProtein[i]! >= params.nurseLoad ? 0 : 1;
+    const onBrood = alone + (params.broodRestGain * n) / (n + params.broodDropHalf);
+    if (rng.chance(params.restRate * enclosed * (1 + params.restOdourGain * nestLike) * onBrood * DT)) {
       ants.state[i] = AntState.resting;
       ants.hasDigSite[i] = 0;
-      ants.timer[i] = Math.max(1, Math.round(-Math.log(1 - rng.float()) * params.restLength * STEPS_PER_SECOND));
+      // A queen rests ten times as long: she spends her life lying in the nest, laying.
+      const length = params.restLength * (ants.caste[i] === Caste.queen ? 10 : 1);
+      ants.timer[i] = Math.max(1, Math.round(-Math.log(1 - rng.float()) * length * STEPS_PER_SECOND));
     }
   } else if (state === AntState.carrying) {
     const carried = ++ants.timer[i]! / STEPS_PER_SECOND;
-    if (carried >= params.maxCarryTime) {
+    if (carried >= params.maxCarryTime && !aboveTube(farm, nx, ny)) {
       dropGrain(ctx, i);
     } else if (!(openAbove(farm, nx, ny) && enclosure(ctx, nx, ny) < INSIDE)) {
       ants.carryOut[i] = 0;
     } else if (
       ++ants.carryOut[i]! * params.speed * DT >= params.spoilDistance &&
-      Math.hypot(nx - farm.tubeX, ny - farm.tubeY) >= TUBE_CLEAR
+      !aboveTube(farm, nx, ny)
     ) {
       // Spoil goes on heaps, away from where digging is going on.
       const pile = looseNeighbours(ctx, nx, ny);
@@ -383,13 +661,24 @@ function tryDig(ctx: AntContext, i: number): boolean {
   if (face < 0) face = touchedAhead(ctx, i);
   if (face < 0) return false;
   const hemmed = enclosure(ctx, x, y);
-  // Out in the open, loose grains are spoil already dug: leave the heaps be.
-  // Inside the soil, loose grains are debris that fell in: clear them like the face.
-  if (farm.loose[face] && hemmed < INSIDE) return false;
+  // Out in the open, loose grains are spoil already dug: leave the heaps be, except where they bury the
+  // hole the ant came out by, which it digs open again. Inside the soil, loose grains are debris that
+  // fell in: clear them like the face.
+  const atHole =
+    hemmed < INSIDE && ants.hasHole[i] === 1 && Math.hypot(ants.holeX[i]! - ants.piX[i]!, ants.holeY[i]! - ants.piY[i]!) < 5;
+  if (farm.loose[face] && hemmed < INSIDE && !atHole) return false;
+  // Past here, loose grains block a way: debris in a tunnel, or spoil over the ant's own hole.
+  const clearing = farm.loose[face] === 1;
+  // An ant with protein for the brood takes it there before taking up digging, but clears its way.
+  const errand = ants.cropProtein[i]! >= params.nurseLoad;
+  if (errand && !clearing) return false;
   const cx = face % farm.width;
   const cy = (face - cx) / farm.width;
   const e = ants.encounters[i]!;
-  const crowd = params.crowdControl ? (e * e) / (e * e + params.crowdHalf * params.crowdHalf) : 0.5;
+  // Digging is done in company (Chen 1937), but an ant shut out of its nest, or one on its way to the
+  // brood, clears what blocks it alone, as ants heading out clear the way to the tube.
+  const alone = atHole || (errand && clearing);
+  const crowd = alone ? 1 : params.crowdControl ? (e * e) / (e * e + params.crowdHalf * params.crowdHalf) : 0.5;
   const mark = sampleField(farm, farm.digMark, cx + 0.5, cy + 0.5);
   // Debris is cleared wherever it lies in a tunnel; new digging is mostly at dead ends.
   const where = farm.loose[face] ? 1 : Math.pow(hemmed, params.hemmedPower);
@@ -517,7 +806,7 @@ function unbury(ctx: AntContext, i: number): boolean {
       return true;
     }
   }
-  if (ants.state[i] === AntState.carrying || !isSoil(farm, cx, cy)) return true;
+  if (ants.state[i] === AntState.carrying || ants.state[i] === AntState.carryingBrood || ants.caste[i] === Caste.queen || !isSoil(farm, cx, cy)) return true;
   const grain = removeGrain(farm, cx, cy);
   ants.grain[i] = grain.material;
   ants.grainMoisture[i] = grain.moisture;
@@ -574,6 +863,14 @@ function looseNeighbours(ctx: AntContext, x: number, y: number): number {
 }
 
 /** The tube's draught at a point: strongest at its mouth. */
+/**
+ * True over the tube's mouth or anywhere above it, where a dropped grain could
+ * fall or slide onto the mouth and bury the colony's only way out.
+ */
+function aboveTube(farm: Farm, x: number, y: number): boolean {
+  return Math.abs(x - farm.tubeX) < TUBE_CLEAR && y < farm.tubeY + TUBE_CLEAR;
+}
+
 function tubeScent(ctx: AntContext, x: number, y: number): number {
   const d = Math.hypot(x - ctx.farm.tubeX, y - ctx.farm.tubeY);
   return Math.exp(-d / (ctx.params.nestScentRange / 3));
