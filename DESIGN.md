@@ -510,6 +510,42 @@ rest; all rough):
 5. **Trips** out of the farm are counted per worker, for the experiments and
    the ant inspector (M6).
 
+### 7.6 Warmth (M5a)
+
+What M5a builds (`src/sim/heat.ts`):
+
+1. **The farm's temperature** is a field on the 2 mm grid. The room is at
+   one temperature (25 °C in the experiments, 22 °C on the page). The heat
+   mat lies under part of the farm's bottom edge and holds the soil it
+   touches at 33 °C (rough: a keeper's mat warms the glass about 8 °C above
+   the room). Heat spreads through the farm at 0.5 mm²/s, the diffusivity of
+   damp sandy soil, and leaks out through the glass to the room (its excess
+   halves in 20 minutes; rough). Between two panes a few mm apart the glass
+   wins, so the mat makes a warm patch reaching about 3 cm up, not a warm
+   farm: 28 °C some 15 mm above it, room temperature 10 cm up. The patch
+   builds within the hour after the mat goes on. The arena and the tube are
+   at room temperature. The keeper moves the mat (left, middle, right, off)
+   and can show the temperatures as an overlay.
+2. **Brood develops at the temperature where it lies**, on the degree-days
+   of section 7.1, so brood on the warm patch develops faster than brood in
+   the cool soil above.
+3. **Ants walk faster where it is warm**, twice as fast every 15 °C
+   (Hurlbert et al. 2008); the speeds of section 2 are at 25 °C.
+4. **Nurses keep brood warm, but not too warm.** A worker feels the
+   temperature at its antennae and body and notices differences of 0.2 °C
+   (Roces & Núñez 1995). Brood lying more than 1 °C from 28 °C (rough:
+   Camponotus mus nurses move brood to 27.5-30.8 °C, Roces & Núñez 1989;
+   keepers raise Lasius niger brood at 25-28 °C) is picked up up to 5 times
+   as readily where the nurse feels which way is better; a carrier turns
+   towards the better side and puts its load down up to 10 times less
+   readily while it still feels a better temperature ahead. Where the farm
+   is all one temperature none of this does anything, whatever that
+   temperature is: at an even 25 °C the colony behaves exactly as it did
+   before M5a (checked bit for bit).
+
+Metabolism does not yet depend on temperature, and nothing yet dies of heat
+or cold; overheating comes with colony death in M5c.
+
 ---
 
 ## 8. Your role
@@ -554,6 +590,8 @@ project. If one fails, we fix the model, not the test.
    foragers are lean and nest workers fat; when the busiest foragers are
    taken out, others take over and grow lean, and the colony goes on
    feeding itself.
+10. **Brood thermotaxis** (Roces & Núñez 1989): in a temperature gradient,
+   nurses carry the brood to the temperature they keep it at.
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -799,6 +837,35 @@ Old age is slow at this scale: in the three 60-day colonies of section 9.4,
 re-run with M4c, 2, 4 and 3 workers died, every corpse was carried out to
 the arena, and the colonies still grew (157, 95 and 130 workers on day 60).
 
+### 9.8 Results so far (brood thermotaxis, M5a; 3 chambers of 30 workers)
+
+`npm run experiment -- warmth [--no-thermo]`; `tests/science/warmth.test.ts`
+checks seeds 1-3. The closed chamber of section 9.6 is held at 16 °C at
+one end and 32 °C at the other (temperatures fixed), with 15 eggs, 15
+larvae and 15 pupae strewn through it.
+
+| | Mean temperature of the brood, start → 1 h → 3 h | Within 2 °C of 28 °C, start → 1 h → 3 h |
+|---|---|---|
+| Seed 1 | 23.8 → 28.6 → 28.6 °C | 13% → 100% → 100% |
+| Seed 2 | 23.8 → 27.9 → 27.9 °C | 22% → 100% → 100% |
+| Seed 3 | 23.3 → 27.8 → 27.8 °C | 24% → 100% → 100% |
+| Control: nurses ignore temperature | 23.3-23.8 → 19.2-23.3 → 19.4-23.4 °C | 13-24% → 0% → 0% |
+
+Within an hour the nurses have the brood where it is as warm as they keep
+it. Without thermotaxis the brood piles up towards the cold end in two of
+three chambers, probably because ants walk slower in the cold, so carriers
+linger there and put more of their loads down (nobody built that in).
+
+On the page's terms, a room at 22 °C, the mat helps but less than it
+could. Two of section 9.4's colonies, given 60 tank days at 22 °C, had 58
+and 77 workers on day 60 (their first new workers came about day 57); with
+the mat under the middle of the farm they had 117 and 86. But their brood
+lay at 22-24 °C on average: the nest is dug near the surface, and the mat's
+warmth reaches only the bottom few cm, too far below for nurses to feel
+which way is warmer. Real colonies nest down onto a mat's warmth; here the
+colony would have to dig down to it first. Whether the patch should reach
+further (a warmer mat, or slower loss through the glass) is open.
+
 ---
 
 ## 10. Architecture
@@ -830,7 +897,7 @@ Each milestone is one or a few small PRs, merged by Marco, with a link to play.
 | M2 | Soil and digging: side-view farm, soil physics, ants dig tunnels and chambers that scale with colony size |
 | M3 | Colony life: queen, brood, development, trophallaxis, founding. In three PRs: M3a food flow (hunger, sharing, forager thresholds); M3b queen, brood and development, with the queen and brood as the heart of the nest (planned as M3c, brought forward by Marco 2026-10-11); M3c brood and the resting nest as the digging cue, folded into M3b (the digging cue itself is still open) |
 | M4 | Division of labour: response thresholds, age polyethism, brood sorting, midden. In three PRs: M4a fat, age and who forages (thresholds drift with each worker's fat; callows; protein delivered before going out); M4b brood sorting by stage; M4c corpses and the midden |
-| M5 | Tending: temperature, humidity, mould, feeding tools, colony death |
+| M5 | Tending: temperature, humidity, mould, feeding tools, colony death. In parts: M5a warmth (heat mat, temperature field, brood thermotaxis); M5b water and mould; M5c colony death and the keeper's tools |
 | M6 | Keeping it: saves, offline catch-up, ant inspector, graphs, timelapse |
 | M7 | Optional extras: second colony and war, other species, nuptial flights |
 
@@ -869,6 +936,8 @@ parameters, I stop and report before changing the model.
 - Quque et al. 2023. Both age and social environment shape the phenotype of ant workers. Sci. Rep. 13, 186.
 - Rasse & Deneubourg 2001. Dynamics of nest excavation and nest size regulation of *Lasius niger*. J. Insect Behav.
 - Robinson, Feinerman & Franks 2009. Flexible task allocation and the organization of work in ants. Proc. R. Soc. B 276, 4373-4380.
+- Roces & Núñez 1989. Brood translocation and circadian variation of temperature preference in the ant *Camponotus mus*. Oecologia 81.
+- Roces & Núñez 1995. Thermal sensitivity during brood care in workers of two Camponotus ant species: circadian variation and its ecological correlates. J. Insect Physiol. 41, 659-669.
 - Theraulaz, Bonabeau & Deneubourg 1998. Response threshold reinforcement and division of labour in insect societies. Proc. R. Soc. B 265, 327-332.
 - Theraulaz et al. 2002. Spatial patterns in ant colonies. PNAS.
 - Wilson, Durlach & Roth 1958. Chemical releasers of necrophoric behavior in ants. Psyche.

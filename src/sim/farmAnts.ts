@@ -27,6 +27,8 @@ import {
 import { BroodStage, addBrood, broodLike, broodNear, larvaHungry, larvaStarved } from './brood';
 import { drawLifespan, dropCorpse, tryPickUpCorpse } from './corpses';
 import { addToField, cellSolid, isBlockedFarm, isSoil, openAbove, sampleField, type Farm } from './farm';
+import { speedAt, temperatureAt } from './heat';
+import type { AntParams } from './params';
 import { placeGrain, removeGrain } from './soil';
 import { STEPS_PER_SECOND } from './time';
 
@@ -158,7 +160,7 @@ function feedQueen(ctx: AntContext): void {
  * in piles of their own stage, side by side (M4b).
  */
 function pickUpBrood(ctx: AntContext): void {
-  const { ants, brood, params, rng } = ctx;
+  const { ants, brood, farm, params, rng } = ctx;
   if (brood.count === 0) return;
   const r2 = params.contactRadius * params.contactRadius;
   const count = ants.count;
@@ -171,7 +173,9 @@ function pickUpBrood(ctx: AntContext): void {
       if (dx * dx + dy * dy > r2) continue;
       const n = broodAround(ctx, brood.x[k]!, brood.y[k]!, i, k, brood.stage[k] as BroodStage);
       const alone = params.broodPickHalf / (params.broodPickHalf + n);
-      if (rng.chance(params.broodPickRate * alone * alone * DT)) {
+      // Brood lying too cold or too warm, where the ant feels which way is better, is picked up sooner.
+      const thermal = 1 + params.thermoPick * thermalPull(ctx, farm, i);
+      if (rng.chance(params.broodPickRate * alone * alone * thermal * DT)) {
         ants.broodHeld[i] = k;
         brood.carried[k] = 1;
         ants.state[i] = AntState.carryingBrood;
@@ -222,7 +226,9 @@ function carryBrood(ctx: AntContext, i: number, outside: boolean): void {
   const n = broodAround(ctx, ants.x[i]!, ants.y[i]!, i, -1, brood.stage[k] as BroodStage);
   const thick = n / (params.broodDropHalf + n);
   const tired = carried > (outside ? 2 : 1) * params.broodCarryMax;
-  if (tired || (!outside && rng.chance(params.broodDropRate * thick * thick * DT))) {
+  // A carrier that still feels a better temperature ahead holds on to its load.
+  const hold = 1 + params.thermoHold * thermalPull(ctx, ctx.farm, i);
+  if (tired || (!outside && rng.chance((params.broodDropRate * thick * thick * DT) / hold))) {
     brood.carried[k] = 0;
     ants.broodHeld[i] = -1;
     ants.state[i] = AntState.wandering;
@@ -275,6 +281,34 @@ function tendBrood(ctx: AntContext): void {
       break;
     }
   }
+}
+
+/** +1 if brood at `celsius` is too cold for nurses, -1 if too warm, 0 if within their tolerance. */
+function thermalWant(params: AntParams, celsius: number): number {
+  const off = params.broodPreferred - celsius;
+  return Math.abs(off) <= params.broodTolerance ? 0 : Math.sign(off);
+}
+
+/**
+ * How strongly ant `i` feels that brood here should be moved, 0 to 1: the
+ * temperature where it stands is outside what nurses keep brood at, and it
+ * feels a difference across its antennae, or between them and its body, of
+ * at least `thermoSense` (in proportion below that). Where the farm is all
+ * one temperature it feels nothing, whatever that temperature is.
+ */
+function thermalPull(ctx: AntContext, farm: Farm, i: number): number {
+  const { ants, params } = ctx;
+  if (!params.thermotaxis) return 0;
+  const x = ants.x[i]!;
+  const y = ants.y[i]!;
+  const here = temperatureAt(farm, x, y);
+  if (thermalWant(params, here) === 0) return 0;
+  const h = ants.heading[i]!;
+  const reach = params.antennaReach;
+  const left = temperatureAt(farm, x + reach * Math.cos(h - params.antennaAngle), y + reach * Math.sin(h - params.antennaAngle));
+  const right = temperatureAt(farm, x + reach * Math.cos(h + params.antennaAngle), y + reach * Math.sin(h + params.antennaAngle));
+  const felt = Math.max(Math.abs(right - left), Math.abs((left + right) / 2 - here));
+  return Math.min(1, felt / params.thermoSense);
 }
 
 /** Scratch: brood items that need a worker this step. */
@@ -599,7 +633,19 @@ function walkFarm(ctx: AntContext, i: number): void {
     }
   }
 
-  const speed = ants.caste[i] === Caste.queen ? params.speed * params.queenSpeed : params.speed;
+  // Brood carriers feel which way it gets warmer (or cooler) across their antennae and carry the brood
+  // towards the temperature nurses keep it at (M5a).
+  if (state === AntState.carryingBrood && params.thermotaxis) {
+    const want = thermalWant(params, temperatureAt(farm, x, y));
+    if (want !== 0) {
+      const across = (temperatureAt(farm, rx, ry) - temperatureAt(farm, lx, ly)) * want;
+      turn += params.thermoTurn * DT * Math.max(-1, Math.min(1, across / params.thermoSense));
+    }
+  }
+
+  // Ants walk faster where it is warm (Hurlbert et al. 2008).
+  const walking = speedAt(params, temperatureAt(farm, x, y));
+  const speed = ants.caste[i] === Caste.queen ? walking * params.queenSpeed : walking;
   moveAnt(ctx, i, wrapAngle(heading + turn), speed * DT, (px, py) => isBlockedFarm(farm, px, py));
   const nx = ants.x[i]!;
   const ny = ants.y[i]!;

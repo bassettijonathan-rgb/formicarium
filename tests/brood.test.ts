@@ -13,26 +13,27 @@ function run(w: World, seconds: number): void {
 }
 
 const params = (p: Partial<AntParams> = {}): AntParams => ({ ...DEFAULT_ANT_PARAMS, ...p });
+/** A farm at 25 °C throughout, for brood developing outside a world. */
+const FARM = createWorld(1, { ants: 0 }).farm;
 
 describe('brood development', () => {
   it('runs on degree-days: the stated days at 25 °C, twice as long halfway to the development zero, none below it', () => {
     const p = params();
-    expect(stageRate(p.eggDays, p) * p.eggDays).toBeCloseTo(1, 12);
-    const half = params({ nestTemperature: (25 + p.developmentZero) / 2 });
-    expect(stageRate(p.eggDays, half)).toBeCloseTo(stageRate(p.eggDays, p) / 2, 12);
-    expect(stageRate(p.eggDays, params({ nestTemperature: p.developmentZero - 1 }))).toBe(0);
+    expect(stageRate(p.eggDays, p, 25) * p.eggDays).toBeCloseTo(1, 12);
+    expect(stageRate(p.eggDays, p, (25 + p.developmentZero) / 2)).toBeCloseTo(stageRate(p.eggDays, p, 25) / 2, 12);
+    expect(stageRate(p.eggDays, p, p.developmentZero - 1)).toBe(0);
   });
 
   it('turns an egg into a larva after eggDays, and a fed larva into a pupa after larvaDays', () => {
     const p = params();
     const b = createBrood();
     addBrood(b, BroodStage.egg, 10, 10);
-    stepBrood(b, p, p.eggDays * p.daySeconds * 0.99);
+    stepBrood(b, FARM, p, p.eggDays * p.daySeconds * 0.99);
     expect(b.stage[0]).toBe(BroodStage.egg);
-    stepBrood(b, p, p.eggDays * p.daySeconds * 0.02);
+    stepBrood(b, FARM, p, p.eggDays * p.daySeconds * 0.02);
     expect(b.stage[0]).toBe(BroodStage.larva);
     b.food[0] = p.larvaFood;
-    for (let d = 0; d < p.larvaDays * 1.01; d += 0.01) stepBrood(b, p, 0.01 * p.daySeconds);
+    for (let d = 0; d < p.larvaDays * 1.01; d += 0.01) stepBrood(b, FARM, p, 0.01 * p.daySeconds);
     expect(b.stage[0]).toBe(BroodStage.pupa);
   });
 
@@ -42,7 +43,7 @@ describe('brood development', () => {
     addBrood(b, BroodStage.larva, 10, 10);
     addBrood(b, BroodStage.larva, 20, 10);
     b.food[1] = p.larvaFood / 2;
-    for (let d = 0; d < p.larvaDays * 2; d += 0.1) stepBrood(b, p, 0.1 * p.daySeconds);
+    for (let d = 0; d < p.larvaDays * 2; d += 0.1) stepBrood(b, FARM, p, 0.1 * p.daySeconds);
     expect(b.progress[0]).toBe(0);
     expect(b.progress[1]).toBeCloseTo(0.5, 9);
     expect(broodCounts(b)).toEqual({ eggs: 0, larvae: 2, pupae: 0 });

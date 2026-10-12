@@ -18,6 +18,7 @@ update DESIGN.md in the same pull request when a model changes.
 - `npm run experiment -- division --runs 3 [--no-fat]`: foragers' fat, then the busiest fifth taken out (M4a; a few minutes per run)
 - `npm run experiment -- sorting --runs 3 [--mixed]`: scattered brood sorted by stage over 3 hours (M4b; about a minute per run)
 - `npm run experiment -- cemetery --runs 3 [--corpses 200] [--no-piles]`: strewn corpses gathered into piles over 30 hours (M4c); `midden --runs 3`: workers dead in the nest carried out (a minute or two per run)
+- `npm run experiment -- warmth --runs 3 [--no-thermo]`: brood in a temperature gradient (M5a); `growth` takes `--room 22 --mat 110` to raise a colony on the heat mat
 - `npm run farm -- --seed 1 --ants 60 --hours 3`: a farm colony headless, with a text picture of the nest
 - `npm run build`: production build (deployed to GitHub Pages from `main`)
 

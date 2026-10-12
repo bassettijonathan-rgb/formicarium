@@ -6,13 +6,14 @@
 import { AntState, Caste, Place } from './ants';
 import { BroodStage, addBrood, broodCounts } from './brood';
 import { isLiveWorker } from './corpses';
-import { excavatedArea } from './farm';
+import { FIELD_CELL, excavatedArea } from './farm';
+import { temperatureAt } from './heat';
 import { Material } from './materials';
 import { Purpose, Rng } from './rng';
 import { doubleBridge, foodChoice, Tally } from './lab';
 import type { AntParams } from './params';
 import { STEPS_PER_SECOND } from './time';
-import { addCorpse, colonyCrop, createWorld, killAnt, placeProtein, placeSugar, removeAnt, removeFood, step, type World } from './world';
+import { addCorpse, colonyCrop, createWorld, killAnt, setHeatMat, placeProtein, placeSugar, removeAnt, removeFood, step, type World } from './world';
 
 export interface RunOptions {
   seed: number;
@@ -212,6 +213,8 @@ export interface GrowthDay {
   reserve: number;
   /** How full the workers' crops are on average, 0 to 1. */
   crops: number;
+  /** Mean temperature where the brood lies, °C (NaN with no brood). */
+  broodTemperature: number;
 }
 
 /**
@@ -220,8 +223,9 @@ export interface GrowthDay {
  * false (the control), a crushed insect every tank day. Reports the brood
  * and workers at the end of each day.
  */
-export function runColonyGrowth(opts: RunOptions & { days: number; protein?: boolean }): GrowthDay[] {
+export function runColonyGrowth(opts: RunOptions & { days: number; protein?: boolean; matX?: number }): GrowthDay[] {
   const world = createWorld(opts.seed, { ants: opts.ants ?? 60, queen: true, params: opts.params ?? {} });
+  if (opts.matX !== undefined) setHeatMat(world, opts.matX);
   const { params } = world;
   const daySteps = Math.round(params.daySeconds * STEPS_PER_SECOND);
   const out: GrowthDay[] = [];
@@ -246,7 +250,23 @@ export function runColonyGrowth(opts: RunOptions & { days: number; protein?: boo
         if (world.ants.place[i] === Place.farm) deadInFarm++;
       } else if (world.ants.caste[i] === Caste.queen) reserve = world.ants.reserve[i]!;
     }
-    out.push({ day, ...broodCounts(world.brood), workers, dead, deadInFarm, reserve, crops: crop / workers / params.cropLoad });
+    let warmth = 0;
+    let items = 0;
+    for (let k = 0; k < world.brood.count; k++) {
+      if (world.brood.stage[k] === BroodStage.none) continue;
+      warmth += temperatureAt(world.farm, world.brood.x[k]!, world.brood.y[k]!);
+      items++;
+    }
+    out.push({
+      day,
+      ...broodCounts(world.brood),
+      workers,
+      dead,
+      deadInFarm,
+      reserve,
+      crops: crop / workers / params.cropLoad,
+      broodTemperature: warmth / items,
+    });
   }
   return out;
 }
@@ -392,12 +412,49 @@ export function stageSegregation(xs: number[], ys: number[], stages: number[], k
  * Do the stages end up apart?
  */
 export function runBroodSorting(opts: RunOptions & { hours: number; perStage?: number }): SortingResult {
+  const { world } = broodChamber(opts);
+  const { brood } = world;
+  const measure = () => {
+    const xs: number[] = [];
+    const ys: number[] = [];
+    const st: number[] = [];
+    for (let k = 0; k < brood.count; k++) {
+      if (brood.stage[k] === BroodStage.none) continue;
+      xs.push(brood.x[k]!);
+      ys.push(brood.y[k]!);
+      st.push(brood.stage[k]!);
+    }
+    return { same: stageSegregation(xs, ys, st), ...pilePurity(xs, ys, st) };
+  };
+  const before = measure();
+  const steps = Math.round(opts.hours * 3600 * STEPS_PER_SECOND);
+  for (let s = 0; s < steps; s++) step(world);
+  const after = measure();
+  const n = 3 * (opts.perStage ?? 15);
+  const each = opts.perStage ?? 15;
+  return {
+    sameBefore: before.same,
+    sameAfter: after.same,
+    random: (each - 1) / (n - 1),
+    purityBefore: before.purity,
+    purityAfter: after.purity,
+    piles: after.piles,
+  };
+}
+
+/**
+ * The closed chamber of the brood experiments: 100 mm long and 10 mm high,
+ * 40 mm under the soil, with `ants` workers and `perStage` eggs, larvae and
+ * pupae strewn through it at random. Development, digging and foraging are
+ * switched off; the workers only move brood.
+ */
+function broodChamber(opts: RunOptions & { perStage?: number }): { world: World; x0: number; x1: number; y0: number; y1: number } {
   const params: Partial<AntParams> = {
     digRate: 0,
     forageRate: 0,
     returnToFoodRate: 0,
     burnRate: 0,
-    nestTemperature: 0,
+    developmentZero: 1e9, // no development: brood stays as it is
     larvaStarveDays: 1e9,
     ...opts.params,
   };
@@ -425,32 +482,7 @@ export function runBroodSorting(opts: RunOptions & { hours: number; perStage?: n
       addBrood(brood, stage, x, y);
     }
   }
-  const measure = () => {
-    const xs: number[] = [];
-    const ys: number[] = [];
-    const st: number[] = [];
-    for (let k = 0; k < brood.count; k++) {
-      if (brood.stage[k] === BroodStage.none) continue;
-      xs.push(brood.x[k]!);
-      ys.push(brood.y[k]!);
-      st.push(brood.stage[k]!);
-    }
-    return { same: stageSegregation(xs, ys, st), ...pilePurity(xs, ys, st) };
-  };
-  const before = measure();
-  const steps = Math.round(opts.hours * 3600 * STEPS_PER_SECOND);
-  for (let s = 0; s < steps; s++) step(world);
-  const after = measure();
-  const n = 3 * (opts.perStage ?? 15);
-  const each = opts.perStage ?? 15;
-  return {
-    sameBefore: before.same,
-    sameAfter: after.same,
-    random: (each - 1) / (n - 1),
-    purityBefore: before.purity,
-    purityAfter: after.purity,
-    piles: after.piles,
-  };
+  return { world, x0, x1, y0, y1 };
 }
 
 /**
@@ -587,4 +619,55 @@ export function runMidden(opts: RunOptions & { settleHours: number; hours: numbe
     arenaDistance: xs.length > 0 ? distance / xs.length : -1,
     piles: corpsePiles(xs, ys, 5, 3).piles,
   };
+}
+
+export interface WarmthResult {
+  /** Mean temperature where the brood lies, °C, at the start and at the end of each hour. */
+  meanByHour: number[];
+  /** Share of the brood within 2 °C of `broodPreferred`, at the start and at the end of each hour. */
+  nearByHour: number[];
+}
+
+/**
+ * Brood in a temperature gradient (Roces & Núñez 1989): the closed chamber
+ * of the brood experiments, held at `cold` °C at one end and `warm` °C at
+ * the other, with the temperatures fixed (`heatFlow` off). Nurses carry the
+ * brood to where it is as warm as they keep it.
+ */
+export function runBroodWarmth(opts: RunOptions & { hours: number; cold?: number; warm?: number }): WarmthResult {
+  const { world, x0, x1 } = broodChamber({ ...opts, params: { heatFlow: false, ...opts.params } });
+  const { brood, farm, params } = world;
+  const cold = opts.cold ?? 16;
+  const warm = opts.warm ?? 32;
+  for (let fy = 0; fy < farm.fieldHeight; fy++) {
+    for (let fx = 0; fx < farm.fieldWidth; fx++) {
+      const x = (fx + 0.5) * FIELD_CELL;
+      const f = Math.min(1, Math.max(0, (x - x0) / (x1 - x0)));
+      farm.temperature[fy * farm.fieldWidth + fx] = cold + (warm - cold) * f;
+    }
+  }
+  const measure = () => {
+    let sum = 0;
+    let near = 0;
+    let n = 0;
+    for (let k = 0; k < brood.count; k++) {
+      if (brood.stage[k] === BroodStage.none) continue;
+      const t = temperatureAt(farm, brood.x[k]!, brood.y[k]!);
+      sum += t;
+      if (Math.abs(t - params.broodPreferred) <= 2) near++;
+      n++;
+    }
+    return { mean: sum / n, near: near / n };
+  };
+  const first = measure();
+  const meanByHour = [first.mean];
+  const nearByHour = [first.near];
+  const hourSteps = 3600 * STEPS_PER_SECOND;
+  for (let h = 0; h < opts.hours; h++) {
+    for (let s = 0; s < hourSteps; s++) step(world);
+    const m = measure();
+    meanByHour.push(m.mean);
+    nearByHour.push(m.near);
+  }
+  return { meanByHour, nearByHour };
 }

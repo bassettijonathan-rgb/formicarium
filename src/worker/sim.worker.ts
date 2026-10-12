@@ -6,10 +6,14 @@
 import { AntState, Caste, Place } from '../sim/ants';
 import { BroodStage } from '../sim/brood';
 import { STEPS_PER_SECOND } from '../sim/time';
-import { colonyCrop, createWorld, placeProtein, placeSugar, removeFood, step, type World } from '../sim/world';
+import { FIELD_CELL } from '../sim/farm';
+import { colonyCrop, createWorld, placeProtein, placeSugar, removeFood, setHeatMat, step, type World } from '../sim/world';
 import { ANT_STRIDE, type FromWorker, type ToWorker } from './protocol';
 
 const INTERVAL_MS = 50;
+/** The page's tank: room temperature, °C, and where the heat mat starts (its left edge, mm). */
+const PAGE_ROOM = 22;
+const PAGE_MAT_X = 110;
 /** The arena (trail, food, counts) and changed soil are sent every this many intervals. */
 const ARENA_EVERY = 4;
 /** Most steps run in one interval; beyond this the simulation runs slower than asked rather than freezing the page. */
@@ -101,6 +105,22 @@ function sendArena(w: World): void {
   );
 }
 
+function sendHeat(w: World): void {
+  const temperature = Float32Array.from(w.farm.temperature);
+  post(
+    {
+      type: 'heat',
+      width: w.farm.fieldWidth,
+      height: w.farm.fieldHeight,
+      cell: FIELD_CELL,
+      temperature,
+      mat: w.heatMat ? { ...w.heatMat } : null,
+      room: w.params.roomTemperature,
+    },
+    [temperature.buffer],
+  );
+}
+
 /** Keeper actions are applied between steps, in the order they arrived. */
 function applyPending(w: World): boolean {
   const any = pending.length > 0;
@@ -108,6 +128,7 @@ function applyPending(w: World): boolean {
     if (msg.type === 'sugar') placeSugar(w, msg.x, msg.y, msg.volume, msg.concentration);
     else if (msg.type === 'protein') placeProtein(w, msg.x, msg.y, msg.volume);
     else if (msg.type === 'clearFood') for (const d of [...w.food]) removeFood(w, d.id);
+    else if (msg.type === 'heatMat') setHeatMat(w, msg.x);
   }
   return any;
 }
@@ -115,12 +136,15 @@ function applyPending(w: World): boolean {
 onmessage = (e: MessageEvent<ToWorker>) => {
   const msg = e.data;
   if (msg.type === 'start') {
-    world = createWorld(msg.seed, { queen: true });
+    // A keeper's room, a little cool for Lasius niger, with the heat mat under the middle of the farm.
+    world = createWorld(msg.seed, { queen: true, params: { roomTemperature: PAGE_ROOM } });
+    setHeatMat(world, PAGE_MAT_X);
     // A first sugar drop, so a new tank has something to find.
     placeSugar(world, 100, 55, 40, 1);
     sendFarm(world);
     sendAnts(world);
     sendArena(world);
+    sendHeat(world);
   } else if (msg.type === 'speed') {
     speed = msg.value;
   } else {
@@ -142,6 +166,7 @@ setInterval(() => {
   sendAnts(world);
   if (++intervals % ARENA_EVERY === 0 || keeperActed) {
     sendArena(world);
+    sendHeat(world);
     if (world.farm.version !== farmVersion) sendFarm(world);
   }
 }, INTERVAL_MS);

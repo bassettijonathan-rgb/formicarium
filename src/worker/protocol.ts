@@ -9,7 +9,9 @@ export type ToWorker =
   /** The keeper puts a crushed insect (protein) in the arena. */
   | { type: 'protein'; x: number; y: number; volume: number }
   /** The keeper removes all food from the arena. */
-  | { type: 'clearFood' };
+  | { type: 'clearFood' }
+  /** The keeper puts the heat mat under the farm with its left edge at `x` mm, or takes it away (null). */
+  | { type: 'heatMat'; x: number | null };
 
 /** Numbers per ant in `AntsSnapshot.ants`. */
 export const ANT_STRIDE = 7;
@@ -61,8 +63,21 @@ export interface FarmSnapshot {
   loose: Uint8Array;
 }
 
+export interface HeatSnapshot {
+  type: 'heat';
+  /** The farm's temperature field: `width` × `height` cells of `cell` mm, °C. */
+  width: number;
+  height: number;
+  cell: number;
+  temperature: Float32Array;
+  /** Where the heat mat is under the farm, mm, or null. */
+  mat: { x: number; width: number } | null;
+  room: number;
+}
+
 export type FromWorker =
   /** The farm's soil layers; sent at start and whenever the soil changes. */
   | FarmSnapshot
   | AntsSnapshot
-  | ArenaSnapshot;
+  | ArenaSnapshot
+  | HeatSnapshot;
