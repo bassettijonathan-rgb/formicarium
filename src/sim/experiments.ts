@@ -3,9 +3,11 @@
  * the tests in tests/science/ and the `npm run experiment` command.
  * Each run returns the numbers the original papers report.
  */
-import { Caste, Place } from './ants';
-import { broodCounts } from './brood';
+import { AntState, Caste, Place } from './ants';
+import { BroodStage, addBrood, broodCounts } from './brood';
 import { excavatedArea } from './farm';
+import { Material } from './materials';
+import { Purpose, Rng } from './rng';
 import { doubleBridge, foodChoice, Tally } from './lab';
 import type { AntParams } from './params';
 import { STEPS_PER_SECOND } from './time';
@@ -311,5 +313,133 @@ export function runDivision(
     tripsAfter: workers.map((i, n) => ants.trips[i]! - tripsBefore[n]!),
     fatAfter: workers.map((i) => ants.fat[i]!),
     age: workers.map((i) => ants.age[i]!),
+  };
+}
+
+export interface SortingResult {
+  /**
+   * For each brood item, the share of its three nearest items that are of
+   * its own stage, averaged over all items, at the start and the end.
+   */
+  sameBefore: number;
+  sameAfter: number;
+  /** What that share would be if the stages were mixed at random. */
+  random: number;
+  /**
+   * Piles: items closer than 4 mm, directly or through others, are one pile.
+   * For each item, the share of its pile that is of its own stage, averaged
+   * over the items, at the start and the end; and the number of piles of 3 or more items.
+   */
+  purityBefore: number;
+  purityAfter: number;
+  piles: number;
+}
+
+/** Piles (single linkage at `link` mm) and their purity by stage; see `SortingResult`. */
+export function pilePurity(xs: number[], ys: number[], stages: number[], link = 4): { purity: number; piles: number } {
+  const n = xs.length;
+  const pile = new Int32Array(n).fill(-1);
+  let piles = 0;
+  let big = 0;
+  let total = 0;
+  for (let a = 0; a < n; a++) {
+    if (pile[a] !== -1) continue;
+    const members = [a];
+    pile[a] = piles;
+    for (let m = 0; m < members.length; m++) {
+      const p = members[m]!;
+      for (let b = 0; b < n; b++) {
+        if (pile[b] !== -1 || (xs[b]! - xs[p]!) ** 2 + (ys[b]! - ys[p]!) ** 2 > link * link) continue;
+        pile[b] = piles;
+        members.push(b);
+      }
+    }
+    piles++;
+    if (members.length >= 3) big++;
+    for (const p of members) total += members.filter((q) => stages[q] === stages[p]).length / members.length;
+  }
+  return { purity: total / n, piles: big };
+}
+
+/** Share of each item's `k` nearest other items that are of its own stage, averaged over the items. */
+export function stageSegregation(xs: number[], ys: number[], stages: number[], k = 3): number {
+  let total = 0;
+  for (let a = 0; a < xs.length; a++) {
+    const near = xs
+      .map((x, b) => ({ b, d: (x - xs[a]!) ** 2 + (ys[b]! - ys[a]!) ** 2 }))
+      .filter((e) => e.b !== a)
+      .sort((p, q) => p.d - q.d || p.b - q.b)
+      .slice(0, k);
+    total += near.filter((e) => stages[e.b] === stages[a]).length / k;
+  }
+  return total / xs.length;
+}
+
+/**
+ * Brood sorting (Franks & Sendova-Franks 1992; Deneubourg et al. 1991): eggs,
+ * larvae and pupae, `perStage` of each, scattered at random through a closed
+ * chamber 100 mm long and 10 mm high with `ants` workers. Development and
+ * digging are switched off and nobody goes out; the workers only move brood.
+ * Do the stages end up apart?
+ */
+export function runBroodSorting(opts: RunOptions & { hours: number; perStage?: number }): SortingResult {
+  const params: Partial<AntParams> = {
+    digRate: 0,
+    forageRate: 0,
+    returnToFoodRate: 0,
+    burnRate: 0,
+    nestTemperature: 0,
+    larvaStarveDays: 1e9,
+    ...opts.params,
+  };
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 30, params });
+  const { ants, brood, farm } = world;
+  const rng = new Rng(opts.seed, Purpose.test);
+  const x0 = 100;
+  const x1 = 200;
+  const y0 = Math.max(...Array.from(farm.surface.slice(x0, x1))) + 40;
+  const y1 = y0 + 10;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      farm.material[y * farm.width + x] = Material.air;
+      farm.loose[y * farm.width + x] = 0;
+    }
+  }
+  const inside = () => [rng.range(x0 + 1, x1 - 1), rng.range(y0 + 1, y1 - 1)] as const;
+  for (let i = 0; i < ants.count; i++) {
+    [ants.x[i], ants.y[i]] = inside();
+    ants.state[i] = AntState.wandering;
+  }
+  for (const stage of [BroodStage.egg, BroodStage.larva, BroodStage.pupa]) {
+    for (let n = 0; n < (opts.perStage ?? 15); n++) {
+      const [x, y] = inside();
+      addBrood(brood, stage, x, y);
+    }
+  }
+  const measure = () => {
+    const xs: number[] = [];
+    const ys: number[] = [];
+    const st: number[] = [];
+    for (let k = 0; k < brood.count; k++) {
+      if (brood.stage[k] === BroodStage.none) continue;
+      xs.push(brood.x[k]!);
+      ys.push(brood.y[k]!);
+      st.push(brood.stage[k]!);
+    }
+    return { same: stageSegregation(xs, ys, st), ...pilePurity(xs, ys, st) };
+  };
+  const before = measure();
+  const steps = Math.round(opts.hours * 3600 * STEPS_PER_SECOND);
+  for (let s = 0; s < steps; s++) step(world);
+  const after = measure();
+  const n = 3 * (opts.perStage ?? 15);
+  const each = opts.perStage ?? 15;
+  return {
+    sameBefore: before.same,
+    sameAfter: after.same,
+    random: (each - 1) / (n - 1),
+    purityBefore: before.purity,
+    purityAfter: after.purity,
+    piles: after.piles,
   };
 }

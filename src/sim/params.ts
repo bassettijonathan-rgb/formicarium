@@ -270,6 +270,11 @@ export interface AntParams {
    * (k/(k+n))², where n is the other brood within `broodSenseRadius` and k is
    * `broodPickHalf`; a carrier puts it down at `broodDropRate` times
    * (n/(k+n))² with k = `broodDropHalf`, or after `broodCarryMax` seconds.
+   * Sorting (M4b): when picking up or putting down an item, n counts only
+   * brood of the item's own stage within `broodSortRadius` (Deneubourg et
+   * al.'s sorting rule), and brood of other stages at `broodOtherWeight`. At
+   * 0.1 or more the stages end up in one mixed pile (DESIGN.md 9.6); at 1, with
+   * a 5 mm radius, this is M3b's piling, which ignores stages.
    */
   broodPickRate: number;
   broodPickHalf: number;
@@ -277,6 +282,9 @@ export interface AntParams {
   broodDropHalf: number;
   broodSenseRadius: number;
   broodCarryMax: number;
+  broodOtherWeight: number;
+  /** How far round a worker sorting brood feels for brood of the same stage, mm: what its antennae reach (rough). */
+  broodSortRadius: number;
   /** Chance per second that a worker touching a begging larva feeds it, if it has protein in its crop. */
   nurseRate: number;
   /** Protein food passed to a larva in one feed, µL at most. */
@@ -434,6 +442,8 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   broodDropRate: 1,
   broodDropHalf: 1,
   broodSenseRadius: 5,
+  broodOtherWeight: 0,
+  broodSortRadius: 2.5,
   broodCarryMax: 120,
   nurseRate: 0.5,
   nurseLoad: 0.01,

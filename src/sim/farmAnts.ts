@@ -24,7 +24,7 @@ import {
   moveAnt,
   wrapAngle,
 } from './ants';
-import { BroodStage, addBrood, broodNear, larvaHungry, larvaStarved } from './brood';
+import { BroodStage, addBrood, broodLike, broodNear, larvaHungry, larvaStarved } from './brood';
 import { addToField, cellSolid, isBlockedFarm, isSoil, openAbove, sampleField, type Farm } from './farm';
 import { placeGrain, removeGrain } from './soil';
 import { STEPS_PER_SECOND } from './time';
@@ -150,10 +150,11 @@ function feedQueen(ctx: AntContext): void {
 }
 
 /**
- * Brood piling (Deneubourg et al. 1991): a resting or wandering worker that
- * touches a brood item picks it up, more readily the less other brood lies
- * round it. Carriers put it down where brood lies thick (`carryBrood`), so
- * scattered eggs and larvae end up in piles that nurses keep together.
+ * Brood piling and sorting (Deneubourg et al. 1991): a resting or wandering
+ * worker that touches a brood item picks it up, more readily the less brood
+ * of the same stage lies round it. Carriers put it down where brood of its
+ * stage lies thick (`carryBrood`), so scattered eggs, larvae and pupae end up
+ * in piles of their own stage, side by side (M4b).
  */
 function pickUpBrood(ctx: AntContext): void {
   const { ants, brood, params, rng } = ctx;
@@ -167,7 +168,7 @@ function pickUpBrood(ctx: AntContext): void {
       const dx = brood.x[k]! - ants.x[i]!;
       const dy = brood.y[k]! - ants.y[i]!;
       if (dx * dx + dy * dy > r2) continue;
-      const n = broodAround(ctx, brood.x[k]!, brood.y[k]!, i, k);
+      const n = broodAround(ctx, brood.x[k]!, brood.y[k]!, i, k, brood.stage[k] as BroodStage);
       const alone = params.broodPickHalf / (params.broodPickHalf + n);
       if (rng.chance(params.broodPickRate * alone * alone * DT)) {
         ants.broodHeld[i] = k;
@@ -185,29 +186,39 @@ function pickUpBrood(ctx: AntContext): void {
  * How much brood an ant senses round (x, y): the brood items within
  * `broodSenseRadius` (but `skip`), plus the queen if she is that close,
  * counted as `queenBroodWeight` items. The queen's eggs are piled round her
- * and her workers gather there, so she weighs like a pile of brood.
+ * and her workers gather there, so she weighs like a pile of eggs. Sorting
+ * an item of `stage`, brood of other stages (and the queen, for larvae and
+ * pupae) counts only `broodOtherWeight` as much.
  */
-function broodAround(ctx: AntContext, x: number, y: number, self: number, skip = -1): number {
+function broodAround(ctx: AntContext, x: number, y: number, self: number, skip = -1, stage?: BroodStage): number {
   const { ants, brood, params } = ctx;
   const r = params.broodSenseRadius;
-  let n = brood.count > 0 ? broodNear(brood, x, y, r, skip) : 0;
+  let n = 0;
+  if (brood.count > 0) {
+    n =
+      stage === undefined
+        ? broodNear(brood, x, y, r, skip)
+        : broodLike(brood, x, y, params.broodSortRadius, stage, params.broodOtherWeight, skip);
+  }
+  const queenWeight =
+    params.queenBroodWeight * (stage === undefined || stage === BroodStage.egg ? 1 : params.broodOtherWeight);
   for (const q of queens) {
     if (q === self) continue;
     const dx = ants.x[q]! - x;
     const dy = ants.y[q]! - y;
-    if (dx * dx + dy * dy <= r * r) n += params.queenBroodWeight;
+    if (dx * dx + dy * dy <= r * r) n += queenWeight;
   }
   return n;
 }
 
-/** A brood carrier after each step: the item goes where it goes, and it puts it down where brood lies thick. */
+/** A brood carrier after each step: the item goes where it goes, and it puts it down where brood of its stage lies thick. */
 function carryBrood(ctx: AntContext, i: number, outside: boolean): void {
   const { ants, brood, params, rng } = ctx;
   const k = ants.broodHeld[i]!;
   brood.x[k] = ants.x[i]!;
   brood.y[k] = ants.y[i]!;
   const carried = ++ants.timer[i]! / STEPS_PER_SECOND;
-  const n = broodAround(ctx, ants.x[i]!, ants.y[i]!, i);
+  const n = broodAround(ctx, ants.x[i]!, ants.y[i]!, i, -1, brood.stage[k] as BroodStage);
   const thick = n / (params.broodDropHalf + n);
   const tired = carried > (outside ? 2 : 1) * params.broodCarryMax;
   if (tired || (!outside && rng.chance(params.broodDropRate * thick * thick * DT))) {
