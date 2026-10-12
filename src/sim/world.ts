@@ -13,6 +13,7 @@ import type { FoodDrop } from './food';
 import { type AntParams, DEFAULT_ANT_PARAMS } from './params';
 import { Purpose, Rng } from './rng';
 import { stepSoil } from './soil';
+import { type HeatMat, MAT_WIDTH, updateTemperature } from './heat';
 import { STEPS_PER_SECOND } from './time';
 
 export type { Farm } from './farm';
@@ -41,6 +42,8 @@ export interface World {
   brood: Brood;
   nextFoodId: number;
   params: AntParams;
+  /** Where the keeper has put the heat mat under the farm, or null (M5a). */
+  heatMat: HeatMat | null;
 }
 
 export interface WorldOptions {
@@ -58,6 +61,7 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
   const nestMode = options.nest ?? 'farm';
   const params = { ...DEFAULT_ANT_PARAMS, ...options.params };
   const farm = createFarm(new Rng(seed, Purpose.soil));
+  farm.temperature.fill(params.roomTemperature);
   const ants = createAnts(options.ants ?? 60);
   giveTraits(ants, params, seed);
   if (nestMode === 'farm') {
@@ -78,6 +82,7 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
     brood: createBrood(),
     nextFoodId: 1,
     params,
+    heatMat: null,
   };
 }
 
@@ -162,7 +167,8 @@ export function step(world: World): void {
       updateField(farm, farm.odour, seconds, params.odourHalfLife, params.odourDiffusion, true);
       updateField(farm, farm.digMark, seconds, params.digMarkHalfLife, 0);
       updateFresh(farm);
-      stepBrood(world.brood, params, seconds);
+      updateTemperature(farm, world.heatMat, params, seconds);
+      stepBrood(world.brood, farm, params, seconds);
       scentBrood(world.brood, farm, params, seconds);
       updateField(farm, farm.broodScent, seconds, params.broodScentHalfLife, params.broodScentDiffusion, true);
     }
@@ -257,6 +263,11 @@ export function addCorpse(world: World, place: Place, x: number, y: number, dead
   ants.deadFor[k] = deadFor;
   ants.corpseVersion++;
   return k;
+}
+
+/** The keeper puts the heat mat under the farm with its left edge at `x` mm, or takes it away (null). */
+export function setHeatMat(world: World, x: number | null): void {
+  world.heatMat = x === null ? null : { x: Math.max(0, Math.min(world.farm.width - MAT_WIDTH, x)), width: MAT_WIDTH };
 }
 
 /** Takes a drop away (the keeper cleaning up, or an experiment removing food). */

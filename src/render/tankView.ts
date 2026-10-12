@@ -9,6 +9,7 @@ import { Place } from '../sim/ants';
 import type { FarmSnapshot } from '../worker/protocol';
 import { AntLayer } from './antLayer';
 import { BroodLayer } from './broodLayer';
+import { HeatLayer } from './heatLayer';
 import { ArenaLayer } from './arenaLayer';
 import { paintSoil } from './soilColors';
 
@@ -23,12 +24,16 @@ export class TankView {
   readonly farmAnts: AntLayer;
   /** Eggs, larvae and pupae lying in the nest. */
   readonly brood = new BroodLayer();
+  /** The heat mat and the temperature overlay. */
+  readonly heat = new HeatLayer(FARM_HEIGHT + FRAME);
   private readonly soil = new Sprite();
   private soilCanvas: HTMLCanvasElement | undefined;
 
   constructor(renderer: Renderer) {
+    this.root.addChild(this.heat.mat);
     this.root.addChild(this.drawFarmFrame());
     this.root.addChild(this.soil);
+    this.root.addChild(this.heat.overlay);
     this.root.addChild(this.brood.root);
     this.farmAnts = new AntLayer(renderer, Place.farm);
     this.root.addChild(this.farmAnts.root);
@@ -48,7 +53,7 @@ export class TankView {
     x: -FRAME - 10,
     y: -FRAME - 24,
     width: ARENA_X + ARENA_SIZE + 2 * FRAME + 20,
-    height: FARM_HEIGHT + 2 * FRAME + 34,
+    height: FARM_HEIGHT + 2 * FRAME + 40,
   };
 
   /** Repaints the soil from a snapshot of the farm's layers. */

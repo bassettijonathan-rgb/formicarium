@@ -236,10 +236,11 @@ export interface AntParams {
   // --- Queen and brood (M3b) ---
 
   /**
-   * Temperature in the nest, °C. Fixed until M5 brings the heat mat and a
-   * temperature field; development rates scale with it.
+   * The room's temperature, °C: the arena's, and the farm's wherever the heat
+   * mat does not reach (M5). Brood develops and ants walk at the temperature
+   * where they are.
    */
-  nestTemperature: number;
+  roomTemperature: number;
   /**
    * Below this temperature, °C, brood does not develop. Development speed
    * rises in a straight line above it (the degree-day model used for ant
@@ -381,6 +382,56 @@ export interface AntParams {
   corpseCarryMax: number;
   /** False makes picking up and dropping ignore other corpses: the control for cemetery formation. */
   corpseClustering: boolean;
+
+  // --- Warmth (M5a) ---
+
+  /**
+   * The heat mat's temperature, °C, where it touches the bottom of the farm
+   * (rough: keepers' mats warm the glass they touch to about 8 °C above room).
+   */
+  matTemperature: number;
+  /**
+   * How heat spreads through the farm, mm²/s: the thermal diffusivity of damp
+   * sandy soil, about 0.5 mm²/s (rough, from soil physics tables).
+   */
+  heatDiffusivity: number;
+  /**
+   * The farm loses heat through its glass to the room: its excess temperature
+   * falls by half in this many seconds (rough). With `heatDiffusivity` this
+   * sets how far the mat's warmth reaches, about 3 cm.
+   */
+  heatLossHalfLife: number;
+  /** False holds the farm's temperatures where they are set (for experiments with a fixed gradient). */
+  heatFlow: boolean;
+  /**
+   * Walking speed doubles for every this many °C warmer, about 15 (ants run
+   * twice as fast at 30 °C as at 15 °C: Hurlbert et al. 2008). `speed` is at 25 °C.
+   */
+  speedDoubling: number;
+  /**
+   * The temperature nurses keep brood at, °C (rough: Camponotus mus nurses
+   * carry brood to 27.5-30.8 °C in a gradient, Roces & Núñez 1989; Lasius
+   * niger keepers raise brood at 25-28 °C).
+   */
+  broodPreferred: number;
+  /** Within this many °C of `broodPreferred`, brood is warm enough: nurses leave it be. */
+  broodTolerance: number;
+  /**
+   * The smallest difference in temperature an ant notices across its
+   * antennae, °C (Camponotus nurses react to a rise of 0.2 °C: Roces & Núñez 1995).
+   */
+  thermoSense: number;
+  /** A brood carrier turns towards the side nearer `broodPreferred`, radians per second at full strength. */
+  thermoTurn: number;
+  /**
+   * Where brood lies too cold or too warm and the ant feels which way is
+   * better, nurses pick it up up to 1 + `thermoPick` times as readily and
+   * carriers put it down 1 + `thermoHold` times less readily (rough).
+   */
+  thermoPick: number;
+  thermoHold: number;
+  /** False: nurses ignore temperature (the control for brood thermotaxis). */
+  thermotaxis: boolean;
 }
 
 export const DEFAULT_ANT_PARAMS: AntParams = {
@@ -465,7 +516,7 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   forageRate: 1 / 240,
   scoutShare: 0.2,
 
-  nestTemperature: 25,
+  roomTemperature: 25,
   developmentZero: 12,
   eggDays: 16,
   larvaDays: 12,
@@ -517,4 +568,17 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   corpseSenseRadius: 5,
   corpseCarryMax: 300,
   corpseClustering: true,
+
+  matTemperature: 33,
+  heatDiffusivity: 0.5,
+  heatLossHalfLife: 1200,
+  heatFlow: true,
+  speedDoubling: 15,
+  broodPreferred: 28,
+  broodTolerance: 1,
+  thermoSense: 0.2,
+  thermoTurn: 3,
+  thermoPick: 4,
+  thermoHold: 9,
+  thermotaxis: true,
 };

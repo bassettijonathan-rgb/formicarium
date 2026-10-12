@@ -9,6 +9,7 @@
  * unfed larva waits and begs.
  */
 import { type Farm, addToField } from './farm';
+import { temperatureAt } from './heat';
 import type { AntParams } from './params';
 
 /** Stage of a brood item. Stored in saves, so append-only. */
@@ -130,9 +131,9 @@ export function broodLike(
   return n;
 }
 
-/** Fraction of a stage that `days` at 25 °C completes, scaled to the nest's temperature (degree-days). */
-export function stageRate(stageDays: number, params: AntParams): number {
-  const effective = Math.max(0, params.nestTemperature - params.developmentZero);
+/** Fraction of a stage that a tank day at `celsius` completes: a day at 25 °C does 1/`stageDays` (degree-days). */
+export function stageRate(stageDays: number, params: AntParams, celsius: number): number {
+  const effective = Math.max(0, celsius - params.developmentZero);
   return effective / ((25 - params.developmentZero) * stageDays);
 }
 
@@ -152,13 +153,16 @@ export function larvaHungry(brood: Brood, k: number, params: AntParams): boolean
  * pupae reach the point of eclosion and wait for a worker to help them out
  * of the cocoon (see `farmAnts.ts`).
  */
-export function stepBrood(brood: Brood, params: AntParams, seconds: number): void {
+export function stepBrood(brood: Brood, farm: Farm, params: AntParams, seconds: number): void {
   const days = seconds / params.daySeconds;
-  const egg = stageRate(params.eggDays, params) * days;
-  const larva = stageRate(params.larvaDays, params) * days;
-  const pupa = stageRate(params.pupaDays, params) * days;
   for (let k = 0; k < brood.count; k++) {
     const stage = brood.stage[k];
+    if (stage === BroodStage.none) continue;
+    // Each item develops at the temperature where it lies (M5a).
+    const celsius = temperatureAt(farm, brood.x[k]!, brood.y[k]!);
+    const egg = stageRate(params.eggDays, params, celsius) * days;
+    const larva = stageRate(params.larvaDays, params, celsius) * days;
+    const pupa = stageRate(params.pupaDays, params, celsius) * days;
     if (stage === BroodStage.egg) {
       brood.progress[k]! += egg;
       if (brood.progress[k]! >= 1) {

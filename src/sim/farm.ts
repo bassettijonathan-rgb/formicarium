@@ -47,6 +47,8 @@ export interface Farm {
   fresh: Float64Array;
   /** Trail pheromone, laid by foragers carrying food from the tube to the nest. */
   trail: Float64Array;
+  /** Temperature per field cell, °C (M5a; see heat.ts). */
+  temperature: Float64Array;
   /** Where the tube opens into the farm, mm. */
   tubeX: number;
   tubeY: number;
@@ -105,6 +107,7 @@ export function createFarm(rng: Rng): Farm {
     broodScent: new Float64Array(fieldWidth * fieldHeight),
     fresh: new Float64Array(fieldWidth * fieldHeight),
     trail: new Float64Array(width * height),
+    temperature: new Float64Array(fieldWidth * fieldHeight),
     tubeX: width - 1.5,
     tubeY: TUBE.farmY,
   };

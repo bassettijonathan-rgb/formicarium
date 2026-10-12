@@ -48,6 +48,8 @@ async function start(): Promise<void> {
       status.textContent =
         `Tank ${seed} · ant time ${formatAntTime(msg.step)} · ` +
         `brood: ${n[BroodStage.egg]} eggs, ${n[BroodStage.larva]} larvae, ${n[BroodStage.pupa]} pupae`;
+    } else if (msg.type === 'heat') {
+      view.heat.setHeat(msg);
     } else if (msg.type === 'arena') {
       view.arena.setArena(msg);
       counts.textContent =
@@ -88,6 +90,21 @@ async function start(): Promise<void> {
     trailsButton.setAttribute('aria-pressed', String(on));
     view.arena.showTrails = on;
   });
+
+  const warmthButton = document.getElementById('warmth')!;
+  warmthButton.addEventListener('click', () => {
+    const on = warmthButton.getAttribute('aria-pressed') !== 'true';
+    warmthButton.setAttribute('aria-pressed', String(on));
+    view.heat.showWarmth = on;
+  });
+  const matButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-mat]')];
+  for (const button of matButtons) {
+    button.addEventListener('click', () => {
+      const at = button.dataset.mat;
+      send({ type: 'heatMat', x: at === 'off' ? null : Number(at) });
+      for (const b of matButtons) b.setAttribute('aria-pressed', String(b === button));
+    });
+  }
 
   const speedButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-speed]')];
   for (const button of speedButtons) {

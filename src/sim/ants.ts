@@ -14,6 +14,7 @@ import type { Brood } from './brood';
 import type { Farm } from './farm';
 import { dieOfAge, holdCorpse, mayDropCorpse, tryPickUpCorpse } from './corpses';
 import { computeContacts, stepFarmAnt } from './farmAnts';
+import { speedAt } from './heat';
 import { type FoodDrop, dropRadius, foodQuality } from './food';
 import type { AntParams } from './params';
 import type { Rng } from './rng';
@@ -514,7 +515,8 @@ function walk(ctx: AntContext, i: number): void {
   heading = wrapAngle(heading + turn);
 
   // 5. Move, sliding along walls when blocked, and update the path integrator.
-  const stepLength = params.speed * DT;
+  // The arena is at room temperature; ants walk faster when it is warm (M5a).
+  const stepLength = speedAt(params, params.roomTemperature) * DT;
   if (!moveAnt(ctx, i, heading, stepLength, (px, py) => isBlocked(arena, px, py))) return;
   const nx = ants.x[i]!;
   const ny = ants.y[i]!;

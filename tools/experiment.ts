@@ -5,16 +5,18 @@
  *   npm run experiment -- symmetric | choice | equal-choice | decay
  *   npm run experiment -- nest [--ants 40] [--hours 12] [--no-crowd]
  *   npm run experiment -- spread [--ants 50] [--minutes 60] [--no-sharing] [--satiated]
- *   npm run experiment -- growth [--days 50] [--no-protein]
+ *   npm run experiment -- growth [--days 50] [--no-protein] [--room 22] [--mat 110]
  *   npm run experiment -- division [--days 4] [--after 6] [--no-fat]
  *   npm run experiment -- sorting [--hours 3] [--mixed]
  *   npm run experiment -- cemetery [--hours 30] [--corpses 100] [--no-piles]
  *   npm run experiment -- midden [--hours 3]
+ *   npm run experiment -- warmth [--hours 3] [--no-thermo]
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
  */
 import type { AntParams } from '../src/sim/params';
 import {
   runBroodSorting,
+  runBroodWarmth,
   runCemetery,
   runColonyGrowth,
   runDivision,
@@ -37,6 +39,7 @@ let days = 0;
 let after = 6;
 let protein = true;
 let corpses = 100;
+let matX: number | undefined;
 const params: Partial<AntParams> = {};
 for (let i = 0; i < rest.length; i++) {
   if (rest[i] === '--runs') runs = Number(rest[++i]);
@@ -50,10 +53,13 @@ for (let i = 0; i < rest.length; i++) {
   else if (rest[i] === '--satiated') satiated = true;
   else if (rest[i] === '--days') days = Number(rest[++i]);
   else if (rest[i] === '--no-protein') protein = false;
+  else if (rest[i] === '--mat') matX = Number(rest[++i]);
+  else if (rest[i] === '--room') params.roomTemperature = Number(rest[++i]);
   else if (rest[i] === '--after') after = Number(rest[++i]);
   else if (rest[i] === '--no-fat') params.fatDrift = false;
   else if (rest[i] === '--corpses') corpses = Number(rest[++i]);
   else if (rest[i] === '--no-piles') params.corpseClustering = false;
+  else if (rest[i] === '--no-thermo') params.thermotaxis = false;
   else if (rest[i] === '--mixed') {
     // The control of section 9.6: count brood of every stage, as piling does.
     params.broodOtherWeight = 1;
@@ -98,12 +104,18 @@ for (let seed = first; seed < first + runs; seed++) {
     );
   } else if (name === 'growth') {
     const length = days || 50;
-    const r = runColonyGrowth({ seed, ants: ants || 60, days: length, protein, params });
+    const r = runColonyGrowth({ seed, ants: ants || 60, days: length, protein, params, ...(matX === undefined ? {} : { matX }) });
     const every = Math.max(1, Math.round(length / 10));
     const rows = r.filter((d) => d.day % every === 0 || d.day === length);
     console.log(
       `seed ${seed}: ` +
-        rows.map((d) => `d${d.day} ${d.eggs}e ${d.larvae}l ${d.pupae}p ${d.workers}w ${d.dead} dead (${d.deadInFarm} in) q${d.reserve.toFixed(2)} c${Math.round(100 * d.crops)}%`).join(' | '),
+        rows
+          .map(
+            (d) =>
+              `d${d.day} ${d.eggs}e ${d.larvae}l ${d.pupae}p ${d.workers}w ${d.dead} dead (${d.deadInFarm} in) ` +
+              `q${d.reserve.toFixed(2)} c${Math.round(100 * d.crops)}% ${d.broodTemperature.toFixed(1)}°C`,
+          )
+          .join(' | '),
     );
   } else if (name === 'division') {
     const r = runDivision({ seed, ants: ants || 60, days: days || 4, afterDays: after, removeShare: 0.2, params });
@@ -140,7 +152,15 @@ for (let seed = first; seed < first + runs; seed++) {
       `seed ${seed}: 10 dead; in the farm by hour ${r.inFarmByHour.join(' ')}, in the arena ${r.inArenaByHour.join(' ')}; ` +
         `${r.arenaDistance.toFixed(0)} mm from the entrance, ${r.piles} piles`,
     );
+  } else if (name === 'warmth') {
+    const r = runBroodWarmth({ seed, hours: hours || 3, ...(ants ? { ants } : {}), params });
+    console.log(
+      `seed ${seed}: mean brood temperature by hour ${r.meanByHour.map((t) => t.toFixed(1)).join(' ')} °C; ` +
+        `within 2 °C of the preferred ${r.nearByHour.map(pct).join(' ')}`,
+    );
   } else {
-    throw new Error('Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery or midden');
+    throw new Error(
+      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden or warmth',
+    );
   }
 }
