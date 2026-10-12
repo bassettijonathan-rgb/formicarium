@@ -627,6 +627,68 @@ What grows mould, as Marco chose: uneaten prey and corpses (`src/sim/mould.ts`).
 Like water flow, mould is off in the experiments unless they say otherwise
 (with it off nothing changes, checked bit for bit); the page turns it on.
 
+### 7.9 Colony death and the keeper's tools (M5c)
+
+How a colony dies (D10), each from what one ant feels where it is
+(`endure` in `src/sim/corpses.ts`):
+
+1. **Hunger.** A worker whose crop is empty and whose fat is spent
+   starves, and dies after 2 tank days of it (rough); any food in its crop
+   ends its hunger. Fat lasts 20 tank days from full in the nest and far
+   less out foraging (section 7.5), so when food stops, the lean foragers
+   die first and the fat nest workers last, as Dussutour et al. (2016)
+   found in starved Lasius niger. The queen does not starve: founding
+   queens live for months on their body reserves.
+2. **Drying out.** An adult in air drier than 30% (rough) loses water, and
+   dies after 2 tank days of it (rough); in damper air it drinks and
+   recovers four times as fast. This needs the soil's water to move
+   (section 7.7). The queen dries out like a worker.
+3. **Heat.** An adult in air above 40 °C (rough: Lasius niger workers'
+   critical thermal maximum is in the low 40s) dies within about an hour.
+   The page's room and heat mat never get that hot; the rule is there for
+   tanks that will.
+4. **Mould** kills brood, not adults (section 7.8). The queen does not die
+   of age (section 2).
+5. A dying ant dies at a moment its mouth is free and it is out of the
+   tube, as with old age; what it died of is kept with its corpse. The tank
+   notes when its last ant and last brood have died: the colony has died
+   out, and the tank stays on the page, with its dead, to look at.
+
+All this is `mortal`, off in the experiments unless they say otherwise
+(with it off nothing changes, checked bit for bit); the page turns it on.
+
+6. **A lost forager gives up.** A worker heading out through the farm that
+   has not reached the tube in 10 minutes (rough; the trip normally takes
+   under one) turns back among its nestmates and stops trusting its path
+   integrator to the tube; next time it finds the way by climbing, by the
+   tube's draught and by the trail. This holds in every tank. It came from
+   the first fed colonies with hunger on: an ant whose integrator had
+   drifted over weeks in the nest could be drawn into a top corner of the
+   headspace, far from the tube, and stay there until it starved (section
+   9.11). It changes nothing in the first 30 minutes of a tank (checked bit
+   for bit).
+7. **An ant shut in by sand digs its way up.** An ant that has been in a
+   closed pocket of air (under 20 mm², none of it leading on) for a minute
+   takes the grain above it, pushes it down behind itself and climbs into
+   the space, a grain at a time at the digging rate, until it is out. Ants
+   buried by a cave-in or by spoil that slid onto them get out this way;
+   before, they could stay shut in for days (section 9.11). A worker at the
+   tip of a tunnel it is digging is not shut in, as its tunnel leads on.
+   The minute matters: in an ordinary nest ants squeeze through closed
+   pockets a few thousand times a day, nearly always for under a second,
+   and an ant that dug up at once each time ate into the earlier results
+   (busy foragers kept more fat, a fed colony sent out more foragers). Over
+   two days, 60-ant colonies on three seeds had two or three spells of a
+   minute or more each; this holds in every tank.
+
+The keeper's tools (section 8) on the page after M5c: food (rich or weak
+sugar, an insect), clear food, **clean the arena** (the dead lying there and
+food gone mouldy are taken out; fresh food stays), the heat mat, water,
+overlays for trails, warmth and **damp**, and **a new tank** (the next
+seed). The page shows the living workers, whether the queen lives, and the
+dead so far by cause. Seeds are not offered: Lasius niger hardly eats them;
+they come with a seed-harvesting species (M7).
+
 ---
 
 ## 8. Your role
@@ -678,6 +740,9 @@ project. If one fails, we fix the model, not the test.
 12. **Hygiene** (Diez et al. 2014): workers carry their dead out of the
    nest before mould grows on them; dead left in the nest grow mould that
    kills brood.
+13. **Starvation** (Dussutour et al. 2016): when a colony's food stops, its
+   lean foragers die before its fat nest workers; a fed colony loses none
+   to hunger.
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -764,6 +829,14 @@ small margin (135 against 41); a quarter was our own choice in M3a, not a
 measured ratio, and whether fed lean foragers should keep revisiting a
 drop they cannot drink from is open.
 
+Re-run with M5c (10 colonies per condition): 62% fed at 30 minutes and 84%
+at 60, 31% of workers went out, 154 departures; without sharing 29% fed at
+60 minutes; well fed, 40 departures (a quarter of the starved colonies').
+The no-sharing control was asked to feed under a third as many workers as
+sharing, but over 10 colonies it was about a third both before M5c (31%
+against 91%) and after (29% against 84%), so seeds 1-3 passed or failed it
+by chance; since M5c the test asks for under 1/2.5.
+
 In M3a, over 4 hours a starved colony's crops levelled off at 40-70% full,
 where what it brings in matches what it burns: hunger regulating foraging,
 with nothing counting the colony's food. Greenwald et al. 2018 saw
@@ -846,6 +919,20 @@ colony settles at fewer trips and emptier crops. Who takes over is set as
 much by each worker's own threshold as by its fat, so the new foragers are
 mostly ones that had already gone out now and then (19-77% of trips after
 the removal were by workers that had made none before).
+
+**Re-run with M5c, seeds 1-6.** The rules M5c adds for every tank (lost
+foragers give up, shut-in ants dig out) change no averages, but any change
+to the rules sends each colony down a different path, and what happens
+after the removal varies a lot from colony to colony. Over seeds 1-6 the
+busiest fifth before the removal had 0.04-0.23 fat against 0.68-0.76 for the
+rest. After it, the new busiest fifth had 0.25-0.69 of the others' fat
+(mean 0.43; 0.12-0.47 without the dig-out rule, mean 0.38), and crops at
+the end were 0.36-0.73 of what they were before (0.49-1.7 without it). Seed
+1 drew the worst of both: its new busiest fifth kept 0.44 fat against 0.64,
+and its crops fell to about a third. So since M5c the test asks the
+before-removal contrast of each colony, and the two after-removal checks
+(new busiest fifth under 0.6 of the others' fat, crops over 0.4 of before)
+of the three colonies on average: 0.49 and 0.53.
 Age polyethism is weak, as section 7.5 says: only callows are kept in.
 
 ### 9.6 Results so far (brood sorting, M4b; 3 chambers of 30 workers, 3 hours each)
@@ -1012,6 +1099,41 @@ brood. Left in the brood pile, the dead grow mould that spreads over
 several cm², yet the nurses, carrying brood out of mould, save nearly all
 of it in two colonies of three; blind to mould, they lose two thirds of it.
 
+### 9.11 Results so far (starvation and colony death, M5c; colonies of 60 workers)
+
+`npm run experiment -- starvation [--fed]`; `tests/science/starvation.test.ts`
+checks seeds 1-2 (fed 3 days, then starved 6) and a fed control. A queen
+and her workers in the farm at 25 °C are given sugar water and an insect
+every tank day for 4 days, then the food stops. Foragers are the fifth of
+workers that went out most while food came; nest workers, those that never
+went out.
+
+| | Fat when the food stops, foragers / nest workers | Median survival, foragers / nest workers | Last worker dead |
+|---|---|---|---|
+| Seed 1 | 0.07 / 0.77 | 4.4 / 14.7 days | day 19 |
+| Seed 2 | 0.15 / 0.81 | 4.8 / 14.6 days | day 19 |
+| Seed 3 | 0.04 / 0.75 | 4.4 / 13.3 days | day 20 |
+| Fed on (control, seed 1) | 0.07 / 0.77 | all alive at day 27 | one starved on day 28 |
+
+As in Dussutour et al. (2016), the lean foragers die first and the fat nest
+workers last. How long it takes is rough: the fat and hunger parameters are
+not taken from a paper, and the whole colony starves within three weeks
+(19 to 20 days). The queen lives on. (Re-run with the final rules of
+section 7.9; the first runs, before shut-in ants dug out, gave the same
+picture: 4.5-4.7 days against 13.6-15.7.)
+
+**A fed colony on the page's terms** (room at 22 °C, mat under the middle,
+the soil's water moving; seed 1, 26 tank days). With hunger first switched
+on, a colony fed every day lost 2 workers to hunger even when watered, both
+pressed into the top of the headspace far from the tube by a path
+integrator that had drifted (section 7.9, item 6). With lost foragers
+giving up, the watered colony lost none. Left unwatered, it lost 4 of 59,
+from day 20 on: workers that kept digging in one spot for days until they
+starved. The two looked at closely were shut in small pockets in loose
+sand, which builds up where dry sand falls. Once shut-in ants dig their way
+up (section 7.9, item 7), unwatered colonies lost none to hunger in 26
+days (seeds 1 and 2).
+
 ---
 
 ## 10. Architecture
@@ -1043,7 +1165,7 @@ Each milestone is one or a few small PRs, merged by Marco, with a link to play.
 | M2 | Soil and digging: side-view farm, soil physics, ants dig tunnels and chambers that scale with colony size |
 | M3 | Colony life: queen, brood, development, trophallaxis, founding. In three PRs: M3a food flow (hunger, sharing, forager thresholds); M3b queen, brood and development, with the queen and brood as the heart of the nest (planned as M3c, brought forward by Marco 2026-10-11); M3c brood and the resting nest as the digging cue, folded into M3b (the digging cue itself is still open) |
 | M4 | Division of labour: response thresholds, age polyethism, brood sorting, midden. In three PRs: M4a fat, age and who forages (thresholds drift with each worker's fat; callows; protein delivered before going out); M4b brood sorting by stage; M4c corpses and the midden |
-| M5 | Tending: temperature, humidity, mould, feeding tools, colony death. In parts: M5a warmth (heat mat, temperature field, brood thermotaxis); M5b water (soil water, humidity, watering, brood drying out and hygrotaxis) and mould (prey and corpses); M5c colony death and the keeper's tools |
+| M5 | Tending: temperature, humidity, mould, feeding tools, colony death. In parts: M5a warmth (heat mat, temperature field, brood thermotaxis); M5b water (soil water, humidity, watering, brood drying out and hygrotaxis) and mould (prey and corpses); M5c colony death (hunger, drying out, heat) and the keeper's tools (clean the arena, damp overlay, new tank) |
 | M6 | Keeping it: saves, offline catch-up, ant inspector, graphs, timelapse |
 | M7 | Optional extras: second colony and war, other species, nuptial flights |
 
@@ -1067,6 +1189,7 @@ parameters, I stop and report before changing the model.
 - Depickère, Fresneau & Deneubourg 2004. Dynamics of aggregation in *Lasius niger* (Formicidae): influence of polyethism. Insectes Soc. 51, 81-90.
 - Diez, Deneubourg & Detrain 2012. Social prophylaxis through distant corpse removal in ants. Naturwissenschaften 99, 833-842.
 - Diez, Lejeune & Detrain 2014. Keep the nest clean: survival advantages of corpse removal in ants. Biol. Lett. 10, 20140306.
+- Dussutour, Poissonnier, Buhl & Simpson 2016. Resistance to nutritional stress in ants: when being fat is advantageous. J. Exp. Biol. 219, 824-833.
 - Dussutour & Simpson 2009. Communal nutrition in ants. Curr. Biol.
 - Dussutour & Simpson 2012. Ant workers die young and colonies collapse when fed a high-protein diet. Proc. R. Soc. B.
 - Franks & Sendova-Franks 1992. Brood sorting by ants. Behav. Ecol. Sociobiol.

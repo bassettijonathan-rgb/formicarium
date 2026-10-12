@@ -10,9 +10,11 @@
  * the colony's dead end up in a few piles: the midden. Nobody knows where the
  * midden is; it is wherever the corpses happen to have piled up.
  */
-import { type AntContext, type Ants, AntState, Caste, DT, Place } from './ants';
+import { type AntContext, type Ants, AntState, Caste, Cause, DT, Place } from './ants';
+import { temperatureAt } from './heat';
 import type { AntParams } from './params';
 import { Purpose, Rng } from './rng';
+import { humidityAt } from './water';
 
 /** Where a carried corpse is held, ahead of the carrier's centre, mm. */
 const CORPSE_AHEAD = 3;
@@ -70,14 +72,52 @@ export function dieOfAge(ctx: AntContext, i: number): boolean {
   const lifespan = ants.lifespan[i]!;
   if (lifespan <= 0 || ants.age[i]! < lifespan) return false;
   if (ants.place[i] === Place.tube || !handsFree(ants.state[i]!)) return false;
-  die(ctx, i);
+  die(ctx, i, Cause.age);
   return true;
 }
 
-/** The ant dies where it is. What was in its crop is lost with it. */
-export function die(ctx: AntContext, i: number): void {
+/**
+ * Hardship (M5c, with `mortal` on): an adult starves once its crop is empty
+ * and its fat is spent, dries out in dry air, and cooks above `heatDeath`.
+ * Each wears it down for so many tank days before it dies; food ends hunger
+ * at once, damp air undoes drying slowly, and cooler air ends the heat. An
+ * ant dies, as of age, at a moment its mouth is free and it is out of the
+ * tube. Returns true if it died.
+ */
+export function endure(ctx: AntContext, i: number): boolean {
+  const { ants, farm, params } = ctx;
+  const days = DT / params.daySeconds;
+  const inFarm = ants.place[i] === Place.farm;
+  const x = ants.x[i]!;
+  const y = ants.y[i]!;
+  if (ants.caste[i] === Caste.worker && ants.crop[i]! <= 0 && ants.fat[i]! <= 0) ants.hunger[i]! += days;
+  else ants.hunger[i] = 0;
+  if (params.waterFlow) {
+    const humidity = inFarm ? humidityAt(farm, x, y) : params.roomHumidity;
+    if (humidity < params.adultDryHumidity) ants.thirst[i]! += days;
+    else if (ants.thirst[i]! > 0) ants.thirst[i] = Math.max(0, ants.thirst[i]! - 4 * days);
+  }
+  const temperature = inFarm ? temperatureAt(farm, x, y) : params.roomTemperature;
+  if (temperature > params.heatDeath) ants.heat[i]! += days;
+  else ants.heat[i] = 0;
+  const cause =
+    ants.hunger[i]! >= params.starveDays
+      ? Cause.hunger
+      : ants.thirst[i]! >= params.adultDryDays
+        ? Cause.drying
+        : ants.heat[i]! >= params.heatDeathDays
+          ? Cause.heat
+          : Cause.none;
+  if (cause === Cause.none || ants.place[i] === Place.tube || !handsFree(ants.state[i]!)) return false;
+  die(ctx, i, cause);
+  return true;
+}
+
+/** The ant dies where it is, of `cause`. What was in its crop is lost with it. */
+export function die(ctx: AntContext, i: number, cause: Cause): void {
   const { ants } = ctx;
   ants.state[i] = AntState.dead;
+  ants.cause[i] = cause;
   ants.deadFor[i] = 0;
   ants.crop[i] = 0;
   ants.cropProtein[i] = 0;

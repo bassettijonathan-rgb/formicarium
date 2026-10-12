@@ -4,9 +4,9 @@
  * M2: the colony lives in the sand farm, digs its nest, and forages in the
  * arena through the tube. Lab experiments use a simple lab nest instead.
  */
-import { type AntContext, type Ants, AntState, Caste, type Nest, type NestMode, Place, addAnt, createAnts, stepAnts } from './ants';
+import { type AntContext, type Ants, AntState, Caste, Cause, type Nest, type NestMode, Place, addAnt, createAnts, stepAnts } from './ants';
 import { die, drawLifespan, dropCorpse } from './corpses';
-import { type Brood, createBrood, scentBrood, stepBrood } from './brood';
+import { type Brood, BroodStage, createBrood, scentBrood, stepBrood } from './brood';
 import { type Arena, createArena, evaporateTrail } from './arena';
 import { type Farm, createFarm, updateField, updateFresh } from './farm';
 import type { FoodDrop } from './food';
@@ -46,6 +46,8 @@ export interface World {
   params: AntParams;
   /** Where the keeper has put the heat mat under the farm, or null (M5a). */
   heatMat: HeatMat | null;
+  /** The step at which the colony died out, its last ant and its last brood dead; -1 while it lives (M5c). */
+  diedOut: number;
 }
 
 export interface WorldOptions {
@@ -86,6 +88,7 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
     nextFoodId: 1,
     params,
     heatMat: null,
+    diedOut: -1,
   };
 }
 
@@ -177,6 +180,7 @@ export function step(world: World): void {
       if (world.step % WATER_EVERY === 0) {
         updateWater(farm, params, WATER_EVERY / STEPS_PER_SECOND);
         updateMould(farm, world.ants, params, WATER_EVERY / STEPS_PER_SECOND);
+        if (world.diedOut < 0 && !colonyAlive(world)) world.diedOut = world.step;
       }
       stepBrood(world.brood, farm, params, seconds);
       scentBrood(world.brood, farm, params, seconds);
@@ -237,7 +241,7 @@ export function removeAnt(world: World, i: number): void {
 
 /** A worker dies where it is (an experiment with the dead). */
 export function killAnt(world: World, i: number): void {
-  die(ctx(world), i);
+  die(ctx(world), i, Cause.killed);
 }
 
 /** The ants' view of the world, for calling ant rules from outside a step. */
@@ -267,6 +271,7 @@ export function addCorpse(world: World, place: Place, x: number, y: number, dead
   ants.caste[k] = Caste.worker;
   ants.place[k] = place;
   ants.state[k] = AntState.dead;
+  ants.cause[k] = Cause.killed;
   ants.x[k] = x;
   ants.y[k] = y;
   ants.heading[k] = heading;
@@ -283,6 +288,41 @@ export function setHeatMat(world: World, x: number | null): void {
 /** The keeper waters the farm from above at `x` mm (M5b). Returns the water the soil took up, µL. */
 export function water(world: World, x: number): number {
   return pourWater(world.farm, world.params, x);
+}
+
+/** True while any ant in the tank lives, or any brood. */
+export function colonyAlive(world: World): boolean {
+  const { ants, brood } = world;
+  for (let i = 0; i < ants.count; i++) if (ants.place[i] !== Place.gone && ants.state[i] !== AntState.dead) return true;
+  for (let k = 0; k < brood.count; k++) if (brood.stage[k] !== BroodStage.none) return true;
+  return false;
+}
+
+/** How many ants have died of each `Cause`, indexed by cause (those the keeper took out of the tank included). */
+export function deathsBy(world: World): number[] {
+  const { ants } = world;
+  const n = Object.values(Cause).map(() => 0);
+  for (let i = 0; i < ants.count; i++) if (ants.state[i] === AntState.dead) n[ants.cause[i]!]!++;
+  return n;
+}
+
+/**
+ * The keeper cleans the arena (M5c): takes out the dead lying there (the
+ * midden) and food gone mouldy. Fresh food stays. Returns how many things
+ * were taken out.
+ */
+export function cleanArena(world: World): number {
+  const { ants } = world;
+  let n = 0;
+  for (let i = 0; i < ants.count; i++) {
+    if (ants.state[i] !== AntState.dead || ants.place[i] !== Place.arena || ants.carriedBy[i]! >= 0) continue;
+    ants.place[i] = Place.gone;
+    ants.corpseVersion++;
+    n++;
+  }
+  const before = world.food.length;
+  world.food = world.food.filter((d) => !d.mouldy);
+  return n + before - world.food.length;
 }
 
 /** Takes a drop away (the keeper cleaning up, or an experiment removing food). */

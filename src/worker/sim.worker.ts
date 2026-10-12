@@ -7,7 +7,19 @@ import { AntState, Caste, Place } from '../sim/ants';
 import { BroodStage } from '../sim/brood';
 import { STEPS_PER_SECOND } from '../sim/time';
 import { FIELD_CELL } from '../sim/farm';
-import { colonyCrop, createWorld, placeProtein, placeSugar, removeFood, setHeatMat, step, water, type World } from '../sim/world';
+import {
+  cleanArena,
+  colonyCrop,
+  createWorld,
+  deathsBy,
+  placeProtein,
+  placeSugar,
+  removeFood,
+  setHeatMat,
+  step,
+  water,
+  type World,
+} from '../sim/world';
 import { ANT_STRIDE, type FromWorker, type ToWorker } from './protocol';
 
 const INTERVAL_MS = 50;
@@ -84,8 +96,13 @@ function sendArena(w: World): void {
   const wall = w.arena.wall.slice();
   let out = 0;
   let alive = 0;
+  let queen = false;
   for (let i = 0; i < w.ants.count; i++) {
     if (w.ants.place[i] === Place.gone || w.ants.state[i] === AntState.dead) continue;
+    if (w.ants.caste[i] === Caste.queen) {
+      queen = true;
+      continue;
+    }
     alive++;
     if (w.ants.place[i] === Place.arena || w.ants.place[i] === Place.tube) out++;
   }
@@ -100,6 +117,9 @@ function sendArena(w: World): void {
       ants: alive,
       out,
       stores: w.nestMode === 'farm' ? colonyCrop(w) : w.nest.stores,
+      queen,
+      deaths: deathsBy(w),
+      diedOut: w.diedOut,
     },
     [trail.buffer, wall.buffer],
   );
@@ -108,6 +128,7 @@ function sendArena(w: World): void {
 function sendHeat(w: World): void {
   const temperature = Float32Array.from(w.farm.temperature);
   const mould = w.farm.mouldy > 0 ? Float32Array.from(w.farm.mould) : null;
+  const humidity = Float32Array.from(w.farm.humidity);
   post(
     {
       type: 'heat',
@@ -118,8 +139,9 @@ function sendHeat(w: World): void {
       mat: w.heatMat ? { ...w.heatMat } : null,
       room: w.params.roomTemperature,
       mould,
+      humidity,
     },
-    mould ? [temperature.buffer, mould.buffer] : [temperature.buffer],
+    mould ? [temperature.buffer, humidity.buffer, mould.buffer] : [temperature.buffer, humidity.buffer],
   );
 }
 
@@ -132,6 +154,7 @@ function applyPending(w: World): boolean {
     else if (msg.type === 'clearFood') for (const d of [...w.food]) removeFood(w, d.id);
     else if (msg.type === 'heatMat') setHeatMat(w, msg.x);
     else if (msg.type === 'water') water(w, msg.x);
+    else if (msg.type === 'clean') cleanArena(w);
   }
   return any;
 }
@@ -140,8 +163,11 @@ onmessage = (e: MessageEvent<ToWorker>) => {
   const msg = e.data;
   if (msg.type === 'start') {
     // A keeper's room, a little cool for Lasius niger, with the heat mat under the middle of the farm.
-    // The soil dries unless the keeper waters it, and what is left to rot goes mouldy.
-    world = createWorld(msg.seed, { queen: true, params: { roomTemperature: PAGE_ROOM, waterFlow: true, mould: true } });
+    // The soil dries unless the keeper waters it, what is left to rot goes mouldy, and the colony can die.
+    world = createWorld(msg.seed, {
+      queen: true,
+      params: { roomTemperature: PAGE_ROOM, waterFlow: true, mould: true, mortal: true },
+    });
     setHeatMat(world, PAGE_MAT_X);
     // A first sugar drop, so a new tank has something to find.
     placeSugar(world, 100, 55, 40, 1);

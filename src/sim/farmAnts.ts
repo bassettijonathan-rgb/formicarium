@@ -454,6 +454,7 @@ function share(ctx: AntContext, i: number): void {
 
 export function stepFarmAnt(ctx: AntContext, i: number): void {
   if (cellSolid(ctx.farm, Math.floor(ctx.ants.x[i]!), Math.floor(ctx.ants.y[i]!)) && unbury(ctx, i)) return;
+  if (digOut(ctx, i)) return;
   const state = ctx.ants.state[i]!;
   // A worker resting or about the nest that touches a corpse smelling of death may carry it out.
   if ((state === AntState.resting || state === AntState.wandering) && tryPickUpCorpse(ctx, i)) return;
@@ -743,8 +744,17 @@ function walkFarm(ctx: AntContext, i: number): void {
   } else if (outbound) {
     const dTube = Math.hypot(nx - farm.tubeX, ny - farm.tubeY);
     if (dTube < 3) enterTube(ctx, i);
-    else if (!undertaker) clearWay(ctx, i, dTube < TUBE_CLEAR);
-    else if (++ants.timer[i]! > params.corpseCarryMax * STEPS_PER_SECOND) dropCorpse(ctx, i); // lost: it gives up
+    else if (!undertaker) {
+      clearWay(ctx, i, dTube < TUBE_CLEAR);
+      // Lost: an ant that has looked for the way out this long gives up, goes back in among its
+      // nestmates and no longer trusts its path integrator to the tube (M5c). Without this, an ant whose
+      // integrator had drifted could stay pressed into a corner of the headspace until it starved.
+      if (isOutbound(ants.state[i]!) && ++ants.timer[i]! > params.tubeSearchMax * STEPS_PER_SECOND) {
+        ants.state[i] = AntState.wandering;
+        ants.knowsTube[i] = 0;
+        ants.timer[i] = 0;
+      }
+    } else if (++ants.timer[i]! > params.corpseCarryMax * STEPS_PER_SECOND) dropCorpse(ctx, i); // lost: it gives up
   } else if (inbound) {
     if (state === AntState.returning && params.trailLaying) {
       depositTrail(farm, nx, ny, params.trailDeposit * params.speed * DT * ants.cropQuality[i]!);
@@ -927,6 +937,86 @@ function unbury(ctx: AntContext, i: number): boolean {
   ants.state[i] = AntState.carrying;
   ants.timer[i] = 0;
   ants.carryOut[i] = 0;
+  return true;
+}
+
+/** Where a shut-in ant digs, best first: straight up, then up to either side. */
+const UPWARDS: readonly (readonly [number, number])[] = [
+  [0, -1],
+  [-1, -1],
+  [1, -1],
+];
+
+/** Air cells an ant's pocket must hold, all joined to its own, for it to have a way on rather than be shut in. */
+const POCKET = 20;
+/** Scratch for `shutIn`: cells reached, as y * width + x. */
+const pocket: number[] = [];
+
+/** True if the air round (cx, cy) is a closed pocket of fewer than `POCKET` cells: the tip of a tunnel leads on, a cave-in does not. */
+function shutIn(farm: Farm, cx: number, cy: number): boolean {
+  const w = farm.width;
+  pocket.length = 0;
+  pocket.push(cy * w + cx);
+  for (let k = 0; k < pocket.length; k++) {
+    const c = pocket[k]!;
+    const x = c % w;
+    const y = (c - x) / w;
+    for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0], [0, 1]] as const) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (cellSolid(farm, nx, ny)) continue;
+      const n = ny * w + nx;
+      if (pocket.includes(n)) continue;
+      pocket.push(n);
+      if (pocket.length >= POCKET) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * An ant shut in by sand (a cave-in, or loose sand fallen round it) with no
+ * room to walk feels sand pressing on every side; if that lasts (digOutAfter)
+ * it digs its way up: it
+ * takes the grain above it, pushes it down behind itself and climbs into the
+ * space, until it is out where there is room (M5c). An ant already carrying
+ * a grain leaves that one behind and takes the next. Returns true if that
+ * took its step.
+ */
+function digOut(ctx: AntContext, i: number): boolean {
+  const { ants, farm, params, rng } = ctx;
+  const state = ants.state[i]!;
+  if (state === AntState.sharing || state === AntState.carryingBrood || state === AntState.carryingCorpse) return false;
+  const cx = Math.floor(ants.x[i]!);
+  const cy = Math.floor(ants.y[i]!);
+  // (A quick look first: with this much air in the 5 × 5 mm round it, the ant's pocket is not small.)
+  let air = 0;
+  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (!cellSolid(farm, cx + dx, cy + dy)) air++;
+  if (air >= POCKET || !shutIn(farm, cx, cy)) {
+    ants.shutIn[i] = 0;
+    return false;
+  }
+  // A moment in a tight spot is normal; only an ant that stays shut in digs out.
+  if ((ants.shutIn[i]! += DT) < params.digOutAfter) return false;
+  if (!rng.chance(params.digRate * DT)) return true;
+  let to: readonly [number, number] | undefined;
+  for (const d of UPWARDS) if (!cellSolid(farm, cx + d[0], cy + d[1])) to ??= d;
+  for (const d of UPWARDS) if (isSoil(farm, cx + d[0], cy + d[1])) to ??= d;
+  if (!to) return true; // against the frame: nothing to dig
+  const tx = cx + to[0];
+  const ty = cy + to[1];
+  if (isSoil(farm, tx, ty)) {
+    const grain = removeGrain(farm, tx, ty);
+    if (state === AntState.carrying) {
+      placeGrain(farm, cx, cy, ants.grain[i]!, ants.grainMoisture[i]!);
+      ants.grain[i] = grain.material;
+      ants.grainMoisture[i] = grain.moisture;
+    } else placeGrain(farm, cx, cy, grain.material, grain.moisture);
+  }
+  ants.x[i] = tx + 0.5;
+  ants.y[i] = ty + 0.5;
+  ants.heading[i] = -Math.PI / 2;
+  if (state === AntState.resting) ants.state[i] = AntState.wandering;
   return true;
 }
 

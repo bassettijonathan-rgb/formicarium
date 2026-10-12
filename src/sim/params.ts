@@ -380,6 +380,18 @@ export interface AntParams {
   corpseSenseRadius: number;
   /** In the farm a carrier takes its corpse out to the tube; it gives up and drops it after this long, seconds (rough). */
   corpseCarryMax: number;
+  /**
+   * A worker heading out through the farm that has not found the tube after
+   * this long, seconds, gives up and forgets the way it thought it knew
+   * (rough; the trip out normally takes under a minute; M5c).
+   */
+  tubeSearchMax: number;
+  /**
+   * A worker shut in by sand, with no room to walk, for this long, seconds,
+   * starts digging its way up (rough; M5c). Ants squeezing through a tight
+   * spot in a normal nest are shut in for under a second.
+   */
+  digOutAfter: number;
   /** False makes picking up and dropping ignore other corpses: the control for cemetery formation. */
   corpseClustering: boolean;
 
@@ -518,6 +530,30 @@ export interface AntParams {
   mouldKillDays: number;
   /** Nurses notice mould this thick where they stand and carry brood out of it (0-1, rough). */
   mouldSense: number;
+
+  // --- Colony death (M5c) ---
+
+  /**
+   * True: adults die of hunger, of drying out (when the soil's water moves,
+   * `waterFlow`) and of heat, so a colony can die out. Off in the experiments
+   * unless they say otherwise; the page turns it on.
+   */
+  mortal: boolean;
+  /**
+   * Tank days a worker lives once its crop is empty and its fat is spent
+   * (rough). Fat lasts `1 / fatBurn` days from full, so a fat nest worker
+   * outlives a lean forager when food runs out (Dussutour et al. 2016). The
+   * queen, who lives on her body reserves for months while founding, does not starve.
+   */
+  starveDays: number;
+  /** An adult loses water in air drier than this relative humidity, and drinks it back in damper air or on damp soil (rough). */
+  adultDryHumidity: number;
+  /** Tank days in dry air that kill an adult; in damp air it recovers four times as fast (rough). */
+  adultDryDays: number;
+  /** Above this temperature, °C, an adult is dying of heat (rough: Lasius niger workers' critical thermal maximum is in the low 40s). */
+  heatDeath: number;
+  /** Tank days above `heatDeath` that kill an adult (rough: about an hour). */
+  heatDeathDays: number;
 }
 
 export const DEFAULT_ANT_PARAMS: AntParams = {
@@ -653,6 +689,8 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   corpseDropSpont: 0.012,
   corpseSenseRadius: 5,
   corpseCarryMax: 300,
+  tubeSearchMax: 600,
+  digOutAfter: 60,
   corpseClustering: true,
 
   matTemperature: 33,
@@ -695,4 +733,11 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   mouldHarm: 0.2,
   mouldKillDays: 1,
   mouldSense: 0.05,
+
+  mortal: false,
+  starveDays: 2,
+  adultDryHumidity: 0.3,
+  adultDryDays: 2,
+  heatDeath: 40,
+  heatDeathDays: 1 / 24,
 };

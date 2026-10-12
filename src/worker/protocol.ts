@@ -13,7 +13,9 @@ export type ToWorker =
   /** The keeper puts the heat mat under the farm with its left edge at `x` mm, or takes it away (null). */
   | { type: 'heatMat'; x: number | null }
   /** The keeper waters the farm from above at `x` mm (M5b). */
-  | { type: 'water'; x: number };
+  | { type: 'water'; x: number }
+  /** The keeper cleans the arena: the dead lying there and mouldy food are taken out (M5c). */
+  | { type: 'clean' };
 
 /** Numbers per ant in `AntsSnapshot.ants`. */
 export const ANT_STRIDE = 7;
@@ -53,6 +55,12 @@ export interface ArenaSnapshot {
   ants: number;
   out: number;
   stores: number;
+  /** Whether the queen lives (M5c). */
+  queen: boolean;
+  /** Ants dead so far of each `Cause`. */
+  deaths: number[];
+  /** The step at which the colony died out, or -1 while it lives. */
+  diedOut: number;
 }
 
 export interface FarmSnapshot {
@@ -77,6 +85,8 @@ export interface HeatSnapshot {
   room: number;
   /** Mould in the farm, on the same grid, 0-1; null while there is none (M5b). */
   mould: Float32Array | null;
+  /** Relative humidity of the farm's air, on the same grid, 0-1 (M5b). */
+  humidity: Float32Array;
 }
 
 export type FromWorker =

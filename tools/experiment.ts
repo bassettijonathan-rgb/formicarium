@@ -13,13 +13,17 @@
  *   npm run experiment -- warmth [--hours 3] [--no-thermo]
  *   npm run experiment -- damp [--hours 3] [--no-hygro]
  *   npm run experiment -- hygiene [--days 4] [--no-removal]
+ *   npm run experiment -- starvation [--days 30] [--fed]
+ *   growth takes --mortal: adults die of hunger, drying out and heat (M5c)
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
  */
+import { Cause } from '../src/sim/ants';
 import type { AntParams } from '../src/sim/params';
 import {
   runBroodSorting,
   runBroodDamp,
   runHygiene,
+  runStarvation,
   runBroodWarmth,
   runCemetery,
   runColonyGrowth,
@@ -45,6 +49,7 @@ let protein = true;
 let corpses = 100;
 let matX: number | undefined;
 let waterEvery = 0;
+let fed = false;
 const params: Partial<AntParams> = {};
 for (let i = 0; i < rest.length; i++) {
   if (rest[i] === '--runs') runs = Number(rest[++i]);
@@ -68,6 +73,8 @@ for (let i = 0; i < rest.length; i++) {
   else if (rest[i] === '--soil-water') params.waterFlow = true;
   else if (rest[i] === '--no-hygro') params.hygrotaxis = false;
   else if (rest[i] === '--no-removal') params.corpsePickRate = 0;
+  else if (rest[i] === '--mortal') params.mortal = true;
+  else if (rest[i] === '--fed') fed = true;
   else if (rest[i] === '--water') {
     waterEvery = Number(rest[++i]);
     params.waterFlow = true;
@@ -86,6 +93,7 @@ for (let i = 0; i < rest.length; i++) {
 }
 
 const pct = (x: number) => `${(100 * x).toFixed(0)}%`;
+const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
 
 for (let seed = first; seed < first + runs; seed++) {
   if (name === 'bridge' || name === 'symmetric') {
@@ -134,13 +142,13 @@ for (let seed = first; seed < first + runs; seed++) {
             (d) =>
               `d${d.day} ${d.eggs}e ${d.larvae}l ${d.pupae}p ${d.workers}w ${d.dead} dead (${d.deadInFarm} in) ` +
               `q${d.reserve.toFixed(2)} c${Math.round(100 * d.crops)}% ${d.broodTemperature.toFixed(1)}°C` +
-              (params.waterFlow ? ` RH${Math.round(100 * d.broodHumidity)}% ${d.dried} dried soil ${pct(d.soilWater)}` : ''),
+              (params.waterFlow ? ` RH${Math.round(100 * d.broodHumidity)}% ${d.dried} dried soil ${pct(d.soilWater)}` : '') +
+              (params.mortal ? ` died of hunger ${d.deaths[Cause.hunger]}, drying ${d.deaths[Cause.drying]}, heat ${d.deaths[Cause.heat]}` : ''),
           )
           .join(' | '),
     );
   } else if (name === 'division') {
     const r = runDivision({ seed, ants: ants || 60, days: days || 4, afterDays: after, removeShare: 0.2, params });
-    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
     const removed = new Set(r.removed);
     const kept = r.tripsBefore.map((_, n) => n).filter((n) => !removed.has(n));
     const busiest = [...kept].sort((a, b) => r.tripsAfter[b]! - r.tripsAfter[a]! || a - b);
@@ -191,9 +199,26 @@ for (let seed = first; seed < first + runs; seed++) {
       `seed ${seed}: ${r.brood} brood; by day: corpses in the farm ${r.corpsesByDay.join(' ')}, ` +
         `mould ${r.mouldByDay.join(' ')} mm², brood killed by mould ${r.killedByDay.join(' ')}`,
     );
+  } else if (name === 'starvation') {
+    const r = runStarvation({ seed, fedDays: 4, days: days || 30, fed, ...(ants ? { ants } : {}), params });
+    // Foragers: the fifth of workers that made most trips while fed; nest workers: those that made none.
+    const order = r.trips.map((_, n) => n).sort((a, b) => r.trips[b]! - r.trips[a]! || a - b);
+    const foragers = order.slice(0, Math.round(order.length / 5));
+    const nest = order.filter((n) => r.trips[n] === 0);
+    const median = (xs: number[]) => {
+      const v = xs.map((x) => (Number.isNaN(x) ? Infinity : x)).sort((a, b) => a - b);
+      const m = v[Math.floor(v.length / 2)];
+      return m === undefined || m === Infinity ? 'alive' : `${m.toFixed(1)} d`;
+    };
+    const hungry = r.cause.filter((c) => c === Cause.hunger).length;
+    console.log(
+      `seed ${seed}: workers alive by day ${r.aliveByDay.join(' ')}; ${hungry} starved\n` +
+        `  foragers (${foragers.length}): fat ${mean(foragers.map((n) => r.fat[n]!)).toFixed(2)}, median survival ${median(foragers.map((n) => r.diedOn[n]!))}; ` +
+        `nest workers (${nest.length}): fat ${mean(nest.map((n) => r.fat[n]!)).toFixed(2)}, median survival ${median(nest.map((n) => r.diedOn[n]!))}`,
+    );
   } else {
     throw new Error(
-      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp or hygiene',
+      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene or starvation',
     );
   }
 }
