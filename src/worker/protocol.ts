@@ -1,21 +1,22 @@
 /** Messages between the page and the simulation worker (DESIGN.md section 10). */
 
+import type { KeeperCommand } from '../sim/keeper';
+
 export type ToWorker =
-  | { type: 'start'; seed: number }
+  /**
+   * Opens the kept tank, or a new tank `seed` (M6a). With `fresh` false and a
+   * kept tank of another seed, the worker asks first (`ask`); with `seed`
+   * null it opens whatever tank is kept, or tank 1.
+   */
+  | { type: 'open'; seed: number | null; fresh: boolean }
   /** Simulation speed: 0 pauses, 1 is real ant time. */
   | { type: 'speed'; value: number }
-  /** The keeper puts a sugar drop in the arena, at arena coordinates in mm. */
-  | { type: 'sugar'; x: number; y: number; volume: number; concentration: number }
-  /** The keeper puts a crushed insect (protein) in the arena. */
-  | { type: 'protein'; x: number; y: number; volume: number }
-  /** The keeper removes all food from the arena. */
-  | { type: 'clearFood' }
-  /** The keeper puts the heat mat under the farm with its left edge at `x` mm, or takes it away (null). */
-  | { type: 'heatMat'; x: number | null }
-  /** The keeper waters the farm from above at `x` mm (M5b). */
-  | { type: 'water'; x: number }
-  /** The keeper cleans the arena: the dead lying there and mouldy food are taken out (M5c). */
-  | { type: 'clean' };
+  /** One of the keeper's tools, applied between steps and logged. */
+  | { type: 'command'; command: KeeperCommand }
+  /** Stop catching up on the time the tank was closed; go on from here. */
+  | { type: 'skip' }
+  /** Keep the tank now (the page is being hidden or closed). */
+  | { type: 'save' };
 
 /** Numbers per ant in `AntsSnapshot.ants`. */
 export const ANT_STRIDE = 7;
@@ -94,4 +95,15 @@ export type FromWorker =
   | FarmSnapshot
   | AntsSnapshot
   | ArenaSnapshot
-  | HeatSnapshot;
+  | HeatSnapshot
+  /**
+   * The tank now running. `resumed` when it is the kept tank; `note` when
+   * something about the kept tank needs saying (it could not be read).
+   */
+  | { type: 'tank'; seed: number; resumed: boolean; note?: string }
+  /** Another tank is kept than the one asked for: replace it? Answer with `open`. */
+  | { type: 'ask'; seed: number; kept: { seed: number; step: number; workers: number } }
+  /** Catching up on the time the tank was closed: steps done of `total`. */
+  | { type: 'catchUp'; done: number; total: number }
+  /** What happened while the tank was closed, line by line. */
+  | { type: 'away'; lines: string[] };

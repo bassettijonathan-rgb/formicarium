@@ -7,36 +7,32 @@ import { AntState, Caste, Place } from '../sim/ants';
 import { BroodStage } from '../sim/brood';
 import { STEPS_PER_SECOND } from '../sim/time';
 import { FIELD_CELL } from '../sim/farm';
-import {
-  cleanArena,
-  colonyCrop,
-  createWorld,
-  deathsBy,
-  placeProtein,
-  placeSugar,
-  removeFood,
-  setHeatMat,
-  step,
-  water,
-  type World,
-} from '../sim/world';
+import { colonyCrop, deathsBy, step, type World } from '../sim/world';
+import { type KeeperCommand, type LoggedCommand, applyCommand, createTank } from '../sim/keeper';
+import { SAVE_VERSION, type Save, awayReport, catchUpSteps, census, loadWorld } from '../sim/save';
 import { ANT_STRIDE, type FromWorker, type ToWorker } from './protocol';
+import { readSave, setAside, writeSave } from './store';
 
 const INTERVAL_MS = 50;
-/** The page's tank: room temperature, °C, and where the heat mat starts (its left edge, mm). */
-const PAGE_ROOM = 22;
-const PAGE_MAT_X = 110;
 /** The arena (trail, food, counts) and changed soil are sent every this many intervals. */
 const ARENA_EVERY = 4;
 /** Most steps run in one interval; beyond this the simulation runs slower than asked rather than freezing the page. */
 const MAX_STEPS_PER_INTERVAL = 2000;
+/** The tank is kept this often while it runs, ms of real time. */
+const SAVE_EVERY_MS = 15_000;
+/** Catching up runs in slices of this many steps, so the page sees progress and can say skip. */
+const CATCH_UP_SLICE = 2000;
 
 let world: World | undefined;
+/** The keeper's actions on this tank since it was set up. */
+let log: LoggedCommand[] = [];
 let speed = 1;
 let owed = 0;
 let intervals = 0;
 let farmVersion = -1;
-const pending: ToWorker[] = [];
+const pending: KeeperCommand[] = [];
+/** While the tank catches up on the time it was closed. */
+let catching: { done: number; total: number; before: ReturnType<typeof census>; skip: boolean } | undefined;
 
 function post(msg: FromWorker, transfer: Transferable[] = []): void {
   postMessage(msg, transfer);
@@ -145,45 +141,94 @@ function sendHeat(w: World): void {
   );
 }
 
-/** Keeper actions are applied between steps, in the order they arrived. */
+/** Keeper actions are applied between steps, in the order they arrived, and logged. */
 function applyPending(w: World): boolean {
   const any = pending.length > 0;
-  for (const msg of pending.splice(0)) {
-    if (msg.type === 'sugar') placeSugar(w, msg.x, msg.y, msg.volume, msg.concentration);
-    else if (msg.type === 'protein') placeProtein(w, msg.x, msg.y, msg.volume);
-    else if (msg.type === 'clearFood') for (const d of [...w.food]) removeFood(w, d.id);
-    else if (msg.type === 'heatMat') setHeatMat(w, msg.x);
-    else if (msg.type === 'water') water(w, msg.x);
-    else if (msg.type === 'clean') cleanArena(w);
+  for (const command of pending.splice(0)) {
+    applyCommand(w, command);
+    log.push({ step: w.step, command });
   }
   return any;
 }
 
+function sendAll(w: World): void {
+  sendFarm(w);
+  sendAnts(w);
+  sendArena(w);
+  sendHeat(w);
+}
+
+function save(): void {
+  if (!world || catching) return;
+  const kept: Save = { version: SAVE_VERSION, seed: world.seed, savedAt: Date.now(), log, world };
+  writeSave(kept).catch(() => undefined); // storage full or blocked: the tank runs on unkept
+}
+
+function begin(w: World, savedLog: LoggedCommand[], resumed: boolean, note?: string): void {
+  world = w;
+  log = savedLog;
+  owed = 0;
+  post({ type: 'tank', seed: w.seed, resumed, ...(note ? { note } : {}) });
+  sendAll(w);
+}
+
+/** Lets the tank live through `total` steps as fast as it can, in slices, then reports what happened. */
+function catchUp(w: World, total: number): void {
+  catching = { done: 0, total, before: census(w), skip: false };
+  const slice = () => {
+    const c = catching!;
+    const n = Math.min(CATCH_UP_SLICE, c.total - c.done);
+    for (let i = 0; i < n; i++) step(w);
+    c.done += n;
+    post({ type: 'catchUp', done: c.done, total: c.total });
+    sendAll(w);
+    if (c.done < c.total && !c.skip) {
+      setTimeout(slice, 0);
+      return;
+    }
+    catching = undefined;
+    post({ type: 'away', lines: awayReport(c.before, census(w), w.params.daySeconds) });
+    save();
+  };
+  setTimeout(slice, 0);
+}
+
+async function open(seed: number | null, fresh: boolean): Promise<void> {
+  const kept = fresh ? undefined : await readSave();
+  if (kept && (seed === null || seed === kept.seed)) {
+    const w = loadWorld(kept);
+    if (w) {
+      begin(w, kept.log ?? [], true);
+      const away = catchUpSteps(w, (Date.now() - kept.savedAt) / 1000);
+      if (away > 0) catchUp(w, away);
+      return;
+    }
+    await setAside(kept).catch(() => undefined);
+    begin(createTank(seed ?? kept.seed), [], false, 'Your kept tank was saved by an older version that cannot be carried over, so this is a new one. The old save is set aside in the browser.');
+    save();
+    return;
+  }
+  if (kept && seed !== null) {
+    const workers = census(kept.world).workers;
+    post({ type: 'ask', seed, kept: { seed: kept.seed, step: kept.world.step, workers } });
+    return;
+  }
+  begin(createTank(seed ?? 1), [], false);
+  save();
+}
+
 onmessage = (e: MessageEvent<ToWorker>) => {
   const msg = e.data;
-  if (msg.type === 'start') {
-    // A keeper's room, a little cool for Lasius niger, with the heat mat under the middle of the farm.
-    // The soil dries unless the keeper waters it, what is left to rot goes mouldy, and the colony can die.
-    world = createWorld(msg.seed, {
-      queen: true,
-      params: { roomTemperature: PAGE_ROOM, waterFlow: true, mould: true, mortal: true },
-    });
-    setHeatMat(world, PAGE_MAT_X);
-    // A first sugar drop, so a new tank has something to find.
-    placeSugar(world, 100, 55, 40, 1);
-    sendFarm(world);
-    sendAnts(world);
-    sendArena(world);
-    sendHeat(world);
-  } else if (msg.type === 'speed') {
-    speed = msg.value;
-  } else {
-    pending.push(msg);
-  }
+  if (msg.type === 'open') void open(msg.seed, msg.fresh);
+  else if (msg.type === 'speed') speed = msg.value;
+  else if (msg.type === 'command') pending.push(msg.command);
+  else if (msg.type === 'skip') {
+    if (catching) catching.skip = true;
+  } else if (msg.type === 'save') save();
 };
 
 setInterval(() => {
-  if (!world) return;
+  if (!world || catching) return;
   const keeperActed = applyPending(world);
   if (speed > 0) {
     owed += (speed * STEPS_PER_SECOND * INTERVAL_MS) / 1000;
@@ -200,3 +245,5 @@ setInterval(() => {
     if (world.farm.version !== farmVersion) sendFarm(world);
   }
 }, INTERVAL_MS);
+
+setInterval(save, SAVE_EVERY_MS);
