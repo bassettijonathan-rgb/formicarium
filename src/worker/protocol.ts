@@ -1,5 +1,6 @@
 /** Messages between the page and the simulation worker (DESIGN.md section 10). */
 
+import type { AntCard } from '../sim/inspect';
 import type { KeeperCommand } from '../sim/keeper';
 
 export type ToWorker =
@@ -16,7 +17,9 @@ export type ToWorker =
   /** Stop catching up on the time the tank was closed; go on from here. */
   | { type: 'skip' }
   /** Keep the tank now (the page is being hidden or closed). */
-  | { type: 'save' };
+  | { type: 'save' }
+  /** Watch one ant in the inspector (M6b), or none. */
+  | { type: 'inspect'; id: number | null };
 
 /** Numbers per ant in `AntsSnapshot.ants`. */
 export const ANT_STRIDE = 7;
@@ -106,4 +109,6 @@ export type FromWorker =
   /** Catching up on the time the tank was closed: steps done of `total`. */
   | { type: 'catchUp'; done: number; total: number }
   /** What happened while the tank was closed, line by line. */
-  | { type: 'away'; lines: string[] };
+  | { type: 'away'; lines: string[] }
+  /** The inspected ant, described (M6b). */
+  | { type: 'ant'; id: number; card: AntCard };

@@ -260,6 +260,7 @@ export function tryPickUpCorpse(ctx: AntContext, i: number): boolean {
   const alone = params.corpsePickHalf / (params.corpsePickHalf + n);
   if (!rng.chance(params.corpsePickRate * alone * alone * DT)) return false;
   ants.corpseHeld[i] = found;
+  ants.corpsesCarried[i]! += 1;
   ants.carriedBy[found] = i;
   ants.state[i] = AntState.carryingCorpse;
   ants.timer[i] = 0;

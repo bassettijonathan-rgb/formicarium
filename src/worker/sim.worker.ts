@@ -12,6 +12,7 @@ import { type KeeperCommand, type LoggedCommand, applyCommand, createTank } from
 import { SAVE_VERSION, type Save, awayReport, catchUpSteps, census, loadWorld } from '../sim/save';
 import { ANT_STRIDE, type FromWorker, type ToWorker } from './protocol';
 import { readSave, setAside, writeSave } from './store';
+import { inspectAnt } from '../sim/inspect';
 
 const INTERVAL_MS = 50;
 /** The arena (trail, food, counts) and changed soil are sent every this many intervals. */
@@ -32,6 +33,8 @@ let intervals = 0;
 let farmVersion = -1;
 const pending: KeeperCommand[] = [];
 /** While the tank catches up on the time it was closed. */
+/** The ant in the inspector, or -1. */
+let inspected = -1;
 let catching: { done: number; total: number; before: ReturnType<typeof census>; skip: boolean } | undefined;
 
 function post(msg: FromWorker, transfer: Transferable[] = []): void {
@@ -151,11 +154,16 @@ function applyPending(w: World): boolean {
   return any;
 }
 
+function sendInspected(w: World): void {
+  if (inspected >= 0 && inspected < w.ants.count) post({ type: 'ant', id: inspected, card: inspectAnt(w, inspected) });
+}
+
 function sendAll(w: World): void {
   sendFarm(w);
   sendAnts(w);
   sendArena(w);
   sendHeat(w);
+  sendInspected(w);
 }
 
 function save(): void {
@@ -166,6 +174,7 @@ function save(): void {
 
 function begin(w: World, savedLog: LoggedCommand[], resumed: boolean, note?: string): void {
   world = w;
+  inspected = -1;
   log = savedLog;
   owed = 0;
   post({ type: 'tank', seed: w.seed, resumed, ...(note ? { note } : {}) });
@@ -225,6 +234,10 @@ onmessage = (e: MessageEvent<ToWorker>) => {
   else if (msg.type === 'skip') {
     if (catching) catching.skip = true;
   } else if (msg.type === 'save') save();
+  else if (msg.type === 'inspect') {
+    inspected = msg.id ?? -1;
+    if (world) sendInspected(world);
+  }
 };
 
 setInterval(() => {
@@ -242,6 +255,7 @@ setInterval(() => {
   if (++intervals % ARENA_EVERY === 0 || keeperActed) {
     sendArena(world);
     sendHeat(world);
+    sendInspected(world);
     if (world.farm.version !== farmVersion) sendFarm(world);
   }
 }, INTERVAL_MS);

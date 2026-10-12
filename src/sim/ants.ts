@@ -202,6 +202,31 @@ export interface Ants {
   cause: Uint8Array;
   /** Seconds the ant has been shut in by sand with no room to walk (M5c); 0 when it is not. */
   shutIn: Float64Array;
+  /**
+   * Its life so far, for the ant inspector (M6b); no rule reads these. 1 if
+   * it came out of its cocoon in this tank (0 if it was poured in), grains
+   * of soil it dug or cleared, food it gave nestmates (µL), protein it fed
+   * larvae (µL), brood items it picked up and corpses it carried.
+   */
+  born: Uint8Array;
+  dug: Int32Array;
+  gave: Float64Array;
+  nursed: Float64Array;
+  broodMoved: Int32Array;
+  corpsesCarried: Int32Array;
+  /**
+   * How it has spent its life, in steps (M6b; no rule reads these): out
+   * foraging (in the arena or the tube, or on its way through the farm to or
+   * from it), resting, walking about the nest, digging (carrying soil),
+   * carrying brood, sharing food, and carrying the dead.
+   */
+  timeOut: Int32Array;
+  timeResting: Int32Array;
+  timeAbout: Int32Array;
+  timeDigging: Int32Array;
+  timeBrood: Int32Array;
+  timeSharing: Int32Array;
+  timeDead: Int32Array;
 }
 
 export function createAnts(count: number): Ants {
@@ -258,6 +283,19 @@ export function createAnts(count: number): Ants {
     heat: new Float64Array(count),
     cause: new Uint8Array(count),
     shutIn: new Float64Array(count),
+    born: new Uint8Array(count),
+    dug: new Int32Array(count),
+    gave: new Float64Array(count),
+    nursed: new Float64Array(count),
+    broodMoved: new Int32Array(count),
+    corpsesCarried: new Int32Array(count),
+    timeOut: new Int32Array(count),
+    timeResting: new Int32Array(count),
+    timeAbout: new Int32Array(count),
+    timeDigging: new Int32Array(count),
+    timeBrood: new Int32Array(count),
+    timeSharing: new Int32Array(count),
+    timeDead: new Int32Array(count),
   };
 }
 
@@ -346,6 +384,7 @@ export function stepAnts(ctx: AntContext): void {
       if (ants.cropProtein[i]! > ants.crop[i]!) ants.cropProtein[i] = ants.crop[i]!;
     }
     const state = ants.state[i]!;
+    tally(ants, i, place, state);
     if (place === Place.tube) walkTube(ctx, i);
     else if (place === Place.farm) stepFarmAnt(ctx, i);
     else if (state === AntState.inNest) restInNest(ctx, i);
@@ -353,6 +392,17 @@ export function stepAnts(ctx: AntContext): void {
     else walk(ctx, i);
     if (ants.corpseHeld[i]! >= 0) holdCorpse(ctx, i);
   }
+}
+
+/** Counts this step toward what the ant is spending its life on (for the inspector). */
+function tally(ants: Ants, i: number, place: number, state: number): void {
+  if (state === AntState.carryingCorpse) ants.timeDead[i]! += 1;
+  else if (state === AntState.resting || state === AntState.inNest) ants.timeResting[i]! += 1;
+  else if (place !== Place.farm || isOutbound(state) || state === AntState.returning || state === AntState.homing) ants.timeOut[i]! += 1;
+  else if (state === AntState.carrying) ants.timeDigging[i]! += 1;
+  else if (state === AntState.carryingBrood) ants.timeBrood[i]! += 1;
+  else if (state === AntState.sharing) ants.timeSharing[i]! += 1;
+  else ants.timeAbout[i]! += 1;
 }
 
 /**

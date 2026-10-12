@@ -57,6 +57,32 @@ export class AntLayer {
     }
   }
 
+  /** Where ant `i` is drawn this frame, in this place's mm, or null when it is not here. */
+  positionOf(i: number): { x: number; y: number } | null {
+    const ant = this.ants[i];
+    return ant && ant.body.visible ? { x: ant.body.position.x, y: ant.body.position.y } : null;
+  }
+
+  /** The ant drawn nearest (x, y) within `radius` mm, living ants before the dead, or -1. */
+  nearest(x: number, y: number, radius: number): number {
+    let best = -1;
+    let bestD = radius * radius;
+    let bestDead = true;
+    for (let i = 0; i < this.ants.length; i++) {
+      const body = this.ants[i]!.body;
+      if (!body.visible) continue;
+      const d = (body.position.x - x) ** 2 + (body.position.y - y) ** 2;
+      if (d > radius * radius) continue;
+      const dead = this.current?.ants[i * ANT_STRIDE + 3] === AntState.dead;
+      if ((bestDead && !dead) || (dead === bestDead && d < bestD)) {
+        best = i;
+        bestD = d;
+        bestDead = dead;
+      }
+    }
+    return best;
+  }
+
   /** Places the ants for this frame. */
   update(now: number): void {
     const cur = this.current;

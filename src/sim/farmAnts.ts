@@ -179,6 +179,7 @@ function pickUpBrood(ctx: AntContext): void {
       const thermal = 1 + params.thermoPick * broodPull(ctx, farm, i);
       if (rng.chance(params.broodPickRate * alone * alone * thermal * DT)) {
         ants.broodHeld[i] = k;
+        ants.broodMoved[i]! += 1;
         brood.carried[k] = 1;
         ants.state[i] = AntState.carryingBrood;
         ants.timer[i] = 0;
@@ -279,6 +280,7 @@ function tendBrood(ctx: AntContext): void {
       const meal = Math.min(params.nurseLoad, ants.cropProtein[i]!, params.larvaFood - brood.food[k]!);
       ants.cropProtein[i]! -= meal;
       ants.crop[i] = Math.max(0, ants.crop[i]! - meal);
+      ants.nursed[i]! += meal;
       brood.food[k]! += meal;
       break;
     }
@@ -364,6 +366,7 @@ function eclose(ctx: AntContext, k: number): void {
   // A new worker comes out of its cocoon with a full fat body, built from what it was fed as a larva.
   ants.fat[i] = 1;
   ants.lifespan[i] = drawLifespan(ctx.seed, i, 0, params);
+  ants.born[i] = 1;
   brood.stage[k] = BroodStage.none;
 }
 
@@ -437,6 +440,7 @@ function share(ctx: AntContext, i: number): void {
     const protein = (flow * ants.cropProtein[j]!) / ants.crop[j]!;
     ants.crop[i]! += flow;
     ants.crop[j]! -= flow;
+    ants.gave[j]! += flow;
     ants.cropProtein[i]! += protein;
     ants.cropProtein[j] = Math.min(ants.crop[j]!, Math.max(0, ants.cropProtein[j]! - protein));
     if (room - flow < 0.02 * params.cropLoad || ants.crop[j]! - ants.crop[i]! < 0.02 * params.cropLoad) done = true;
@@ -805,6 +809,7 @@ function tryDig(ctx: AntContext, i: number): boolean {
   const p = params.digRate * crowd * where * (1 + params.digMarkGain * mark) * DT;
   if (!rng.chance(p)) return false;
   const grain = removeGrain(farm, cx, cy);
+  ants.dug[i]! += 1;
   addToField(farm, farm.digMark, cx + 0.5, cy + 0.5, 1);
   ants.digX[i] = ants.piX[i]!;
   ants.digY[i] = ants.piY[i]!;
@@ -830,6 +835,7 @@ function clearWay(ctx: AntContext, i: number, nearTube: boolean): void {
   const cx = face % farm.width;
   const cy = (face - cx) / farm.width;
   const grain = removeGrain(farm, cx, cy);
+  ants.dug[i]! += 1;
   ants.digX[i] = ants.piX[i]!;
   ants.digY[i] = ants.piY[i]!;
   ants.hasDigSite[i] = 0;
