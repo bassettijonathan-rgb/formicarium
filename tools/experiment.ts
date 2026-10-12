@@ -7,10 +7,12 @@
  *   npm run experiment -- spread [--ants 50] [--minutes 60] [--no-sharing] [--satiated]
  *   npm run experiment -- growth [--days 50] [--no-protein]
  *   npm run experiment -- division [--days 4] [--after 6] [--no-fat]
+ *   npm run experiment -- sorting [--hours 3] [--mixed]
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
  */
 import type { AntParams } from '../src/sim/params';
 import {
+  runBroodSorting,
   runColonyGrowth,
   runDivision,
   runDoubleBridge,
@@ -24,7 +26,7 @@ const [name, ...rest] = process.argv.slice(2);
 let runs = 10;
 let first = 1;
 let ants = 0;
-let hours = 12;
+let hours = 0;
 let minutes = 60;
 let satiated = false;
 let days = 0;
@@ -45,6 +47,11 @@ for (let i = 0; i < rest.length; i++) {
   else if (rest[i] === '--no-protein') protein = false;
   else if (rest[i] === '--after') after = Number(rest[++i]);
   else if (rest[i] === '--no-fat') params.fatDrift = false;
+  else if (rest[i] === '--mixed') {
+    // The control of section 9.6: count brood of every stage, as piling does.
+    params.broodOtherWeight = 1;
+    params.broodSortRadius = 5;
+  }
   else if (rest[i] === '--param') {
     // --param name=value: any ant parameter, for trying values out.
     const [key, value] = rest[++i]!.split('=');
@@ -69,7 +76,7 @@ for (let seed = first; seed < first + runs; seed++) {
         `trail ${r.trailAtRemoval.toFixed(0)} -> ${r.trailAfter.toFixed(0)}`,
     );
   } else if (name === 'nest') {
-    const r = runNestVolume({ seed, ants: ants || 40, hours, params });
+    const r = runNestVolume({ seed, ants: ants || 40, hours: hours || 12, params });
     console.log(`seed ${seed}: dug out by hour (mm²) ${r.areaByHour.join(' ')}`);
   } else if (name === 'spread') {
     const r = runFoodSpread({ seed, ants: ants || 50, minutes, satiated, params });
@@ -108,7 +115,13 @@ for (let seed = first; seed < first + runs; seed++) {
         `  after: new busiest fifth fat ${mean(top.map((n) => r.fatAfter[n]!)).toFixed(2)}, the rest ` +
         `${mean(rest.map((n) => r.fatAfter[n]!)).toFixed(2)}; trips by workers that had made none ${pct(newcomers / Math.max(1, tripsAfter))}`,
     );
+  } else if (name === 'sorting') {
+    const r = runBroodSorting({ seed, hours: hours || 3, params });
+    console.log(
+      `seed ${seed}: same-stage neighbours ${r.sameBefore.toFixed(2)} -> ${r.sameAfter.toFixed(2)} ` +
+        `(mixed at random ${r.random.toFixed(2)}); pile purity ${r.purityBefore.toFixed(2)} -> ${r.purityAfter.toFixed(2)}; ${r.piles} piles`,
+    );
   } else {
-    throw new Error('Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth or division');
+    throw new Error('Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division or sorting');
   }
 }

@@ -104,6 +104,32 @@ export function broodNear(
   return n;
 }
 
+/**
+ * Brood within `radius` mm of (x, y) as a worker sorting brood senses it
+ * round an item of `stage`: items of the same stage count fully, the others
+ * at `otherWeight` (not counting item `skip` or items being carried).
+ */
+export function broodLike(
+  brood: Brood,
+  x: number,
+  y: number,
+  radius: number,
+  stage: BroodStage,
+  otherWeight: number,
+  skip = -1,
+): number {
+  const r2 = radius * radius;
+  let n = 0;
+  for (let k = 0; k < brood.count; k++) {
+    const s = brood.stage[k]!;
+    if (k === skip || s === BroodStage.none || brood.carried[k]) continue;
+    const dx = brood.x[k]! - x;
+    const dy = brood.y[k]! - y;
+    if (dx * dx + dy * dy <= r2) n += s === stage ? 1 : otherWeight;
+  }
+  return n;
+}
+
 /** Fraction of a stage that `days` at 25 °C completes, scaled to the nest's temperature (degree-days). */
 export function stageRate(stageDays: number, params: AntParams): number {
   const effective = Math.max(0, params.nestTemperature - params.developmentZero);

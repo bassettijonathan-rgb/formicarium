@@ -428,7 +428,18 @@ crops, and the page shows that total.
 
 Nurses sort brood by stage into rings or piles (Franks & Sendova-Franks 1992)
 and carry it toward the preferred temperature. Cleaners take refuse and
-corpses to an outside pile. Food left inside too long grows **mould** that
+corpses to an outside pile.
+
+**Sorting (M4b).** The piling of section 7.1 (item 6) becomes sorting with one
+change, Deneubourg et al.'s (1991) own rule for sorting: when a worker
+decides whether to pick an item up or put it down, it counts only brood of
+that item's stage, and only what lies under its antennae (2.5 mm). An egg
+among larvae is picked up as readily as an egg lying alone, and put down
+where eggs lie thick. The queen still counts as five eggs, so the egg pile
+stays by her, and workers still settle on brood of any stage. Counting the
+other stages even a little (a tenth as much) was enough to keep all stages
+in one mixed pile (section 9.6). Temperature, which real nurses also sort
+by, comes with the heat mat in M5. Food left inside too long grows **mould** that
 spreads in damp soil and kills brood. Overfeeding is a real ant-keeping
 mistake, and the sim should punish it the same way.
 
@@ -693,6 +704,41 @@ much by each worker's own threshold as by its fat, so the new foragers are
 mostly ones that had already gone out now and then (19-77% of trips after
 the removal were by workers that had made none before).
 Age polyethism is weak, as section 7.5 says: only callows are kept in.
+
+### 9.6 Results so far (brood sorting, M4b; 3 chambers of 30 workers, 3 hours each)
+
+`npm run experiment -- sorting [--mixed]`; `tests/science/broodSorting.test.ts`
+checks seeds 1-3. A closed chamber 100 mm long and 10 mm high, with no
+digging, food or queen, holds 30 workers and 15 eggs, 15 larvae and 15
+pupae strewn at random. Two measures: for each item, the share of its three
+nearest items that are of its own stage (a third if stages were mixed at
+random); and the share of its pile that is of its own stage, items closer
+than 4 mm being one pile.
+
+| | Same-stage neighbours, start → 3 h | Pile purity, start → 3 h | Piles |
+|---|---|---|---|
+| Seed 1 | 0.31 → 1.00 | 0.52 → 1.00 | 3 |
+| Seed 2 | 0.36 → 0.80 | 0.52 → 0.67 | 2 |
+| Seed 3 | 0.37 → 0.66 | 0.52 → 0.67 | 2 |
+| Control: count all stages, 5 mm (M3b piling) | 0.31-0.37 → 0.35-0.42 | → 0.36-0.41 | 2-4 |
+| Other stages counted at a tenth | → 0.46-0.63 | → 0.33-0.61 | 1-2 |
+| Other stages counted at a quarter | → 0.32-0.38 | → 0.33 | 1 |
+
+With each worker counting only the stage of the item it handles, the brood
+ends up sorted: in one chamber into three single-stage piles, in the other
+two into a pure pile and a mixed one, as Franks & Sendova-Franks (1992)
+describe for Leptothorax brood and Deneubourg et al. (1991) got with this
+rule. With piling as it was in M3b the stages stay as mixed as they started.
+The result is sensitive in a way worth knowing: workers that let other
+stages count even a little build one mixed pile, because the biggest pile
+then pulls everything in. Real nurses tell stages apart by touch and smell,
+so counting only the right stage is the plausible rule. The radius matters
+less (3 mm gave 0.99/0.78/0.60), but a 5 mm one sorts only weakly.
+
+Sorting does not get in the way of raising brood: the three colonies of
+section 9.4, re-run with it, had 131, 133 and 136 workers on day 60 (139, 95
+and 156 without it). In one of them the queen ran out of protein from day 42
+and laid less, so its brood was smaller by the end.
 
 ---
 
