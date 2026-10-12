@@ -21,6 +21,7 @@ update DESIGN.md in the same pull request when a model changes.
 - `npm run experiment -- warmth --runs 3 [--no-thermo]`: brood in a temperature gradient (M5a); `growth` takes `--room 22 --mat 110` to raise a colony on the heat mat
 - `npm run experiment -- damp --runs 3 [--no-hygro]`: brood in a humidity gradient (M5b); `growth` takes `--soil-water` (the soil dries) or `--water 5` (and the keeper waters every 5 days)
 - `npm run experiment -- hygiene --runs 3 [--no-removal]`: workers die in the brood pile; their dead carried out before mould grows (M5b; a few minutes per run)
+- `npm run experiment -- starvation --runs 3 [--days 30] [--fed]`: a colony fed 4 days, then its food stops; who starves first (M5c; about 10 min per run); `growth` takes `--mortal` (adults die of hunger, drying out and heat)
 - `npm run farm -- --seed 1 --ants 60 --hours 3`: a farm colony headless, with a text picture of the nest
 - `npm run build`: production build (deployed to GitHub Pages from `main`)
 

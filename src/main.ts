@@ -7,6 +7,7 @@ import { Camera } from './render/camera';
 import { ARENA_X, TankView } from './render/tankView';
 import { ARENA_SIZE, FARM_HEIGHT, FARM_WIDTH } from './sim/tank';
 import { formatAntTime } from './sim/time';
+import { Cause } from './sim/ants';
 import { BroodStage } from './sim/brood';
 import { BROOD_STRIDE, type FromWorker, type ToWorker } from './worker/protocol';
 
@@ -33,6 +34,8 @@ async function start(): Promise<void> {
   fit();
   document.getElementById('fit')!.addEventListener('click', fit);
 
+  /** The step at which the colony died out, or -1 while it lives (from the arena snapshots). */
+  let diedOut = -1;
   const worker = new Worker(new URL('./worker/sim.worker.ts', import.meta.url), { type: 'module' });
   const send = (msg: ToWorker) => worker.postMessage(msg);
   worker.onmessage = (e: MessageEvent<FromWorker>) => {
@@ -47,14 +50,25 @@ async function start(): Promise<void> {
       for (let o = 2; o < msg.brood.length; o += BROOD_STRIDE) n[msg.brood[o]!]!++;
       status.textContent =
         `Tank ${seed} · ant time ${formatAntTime(msg.step)} · ` +
-        `brood: ${n[BroodStage.egg]} eggs, ${n[BroodStage.larva]} larvae, ${n[BroodStage.pupa]} pupae`;
+        (diedOut >= 0
+          ? `the colony died out at ${formatAntTime(diedOut)}`
+          : `brood: ${n[BroodStage.egg]} eggs, ${n[BroodStage.larva]} larvae, ${n[BroodStage.pupa]} pupae`);
     } else if (msg.type === 'heat') {
       view.heat.setHeat(msg);
     } else if (msg.type === 'arena') {
       view.arena.setArena(msg);
+      diedOut = msg.diedOut;
+      const d = msg.deaths;
+      const died = [
+        [d[Cause.age], 'of age'],
+        [d[Cause.hunger], 'of hunger'],
+        [d[Cause.drying], 'dried out'],
+        [d[Cause.heat], 'of heat'],
+      ].filter(([count]) => (count as number) > 0);
       counts.textContent =
-        `${msg.ants - msg.out} ants in the farm, ${msg.out} out foraging · ` +
-        `${msg.stores.toFixed(1)} µL of sugar water in their crops`;
+        `${msg.ants - msg.out} workers in the farm, ${msg.out} out foraging, ` +
+        `${msg.queen ? 'the queen' : 'no queen'} · ${msg.stores.toFixed(1)} µL of sugar water in their crops` +
+        (died.length > 0 ? ` · dead: ${died.map(([count, what]) => `${count} ${what}`).join(', ')}` : '');
     }
   };
   send({ type: 'start', seed });
@@ -89,6 +103,10 @@ async function start(): Promise<void> {
     });
   }
   document.getElementById('clear')!.addEventListener('click', () => send({ type: 'clearFood' }));
+  document.getElementById('clean')!.addEventListener('click', () => send({ type: 'clean' }));
+  document.getElementById('new-tank')!.addEventListener('click', () => {
+    location.search = `?seed=${seed + 1}`;
+  });
   const waterButton = document.getElementById('water')!;
   waterButton.addEventListener('click', () => {
     watering = waterButton.getAttribute('aria-pressed') !== 'true';
@@ -101,12 +119,15 @@ async function start(): Promise<void> {
     view.arena.showTrails = on;
   });
 
-  const warmthButton = document.getElementById('warmth')!;
-  warmthButton.addEventListener('click', () => {
-    const on = warmthButton.getAttribute('aria-pressed') !== 'true';
-    warmthButton.setAttribute('aria-pressed', String(on));
-    view.heat.showWarmth = on;
-  });
+  // The farm's overlay shows warmth or damp, or neither.
+  const overlayButtons = [document.getElementById('warmth')!, document.getElementById('damp')!];
+  for (const button of overlayButtons) {
+    button.addEventListener('click', () => {
+      const on = button.getAttribute('aria-pressed') !== 'true';
+      for (const b of overlayButtons) b.setAttribute('aria-pressed', String(on && b === button));
+      view.heat.show = on ? (button.id === 'warmth' ? 'warmth' : 'damp') : null;
+    });
+  }
   const matButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-mat]')];
   for (const button of matButtons) {
     button.addEventListener('click', () => {

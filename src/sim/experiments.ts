@@ -14,7 +14,7 @@ import { Purpose, Rng } from './rng';
 import { doubleBridge, foodChoice, Tally } from './lab';
 import type { AntParams } from './params';
 import { STEPS_PER_SECOND } from './time';
-import { addCorpse, colonyCrop, createWorld, killAnt, setHeatMat, placeProtein, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
+import { addCorpse, colonyCrop, createWorld, deathsBy, killAnt, setHeatMat, placeProtein, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
 
 export interface RunOptions {
   seed: number;
@@ -221,6 +221,8 @@ export interface GrowthDay {
   dried: number;
   /** Water in the farm's soil, mean fraction of saturation. */
   soilWater: number;
+  /** Ants dead so far of each `Cause` (M5c). */
+  deaths: number[];
 }
 
 /** Where the keeper of the growth runs pours water: three taps along the farm, mm. */
@@ -291,6 +293,7 @@ export function runColonyGrowth(
       broodHumidity: damp / items,
       dried: world.brood.dried,
       soilWater: soil / cells / 255,
+      deaths: deathsBy(world),
     });
   }
   return out;
@@ -828,4 +831,57 @@ export function runHygiene(
     killedByDay.push(brood.moulded);
   }
   return { corpsesByDay, mouldByDay, killedByDay, brood: start };
+}
+
+export interface StarvationResult {
+  /** Per worker alive when the food stops: trips out so far, and fat. */
+  trips: number[];
+  fat: number[];
+  /** Per worker: the tank day (counted from when the food stopped) it died on, its `Cause`; NaN and 0 if alive at the end. */
+  diedOn: number[];
+  cause: number[];
+  /** Live workers at the end of each day after the food stops. */
+  aliveByDay: number[];
+}
+
+/**
+ * Starvation (M5c): a queen and her workers in the farm, fed sugar and an
+ * insect daily for `fedDays`, so foragers grow lean and nest workers stay
+ * fat; then the food stops (or, as the control, `fed` goes on) and the colony
+ * runs `days` more. Who dies first, and when? Dussutour et al. (2016) found
+ * Lasius niger's inner-nest workers outlive its foragers when starved, as
+ * they are fatter. Water is not lacking: the soil's water stays still.
+ */
+export function runStarvation(opts: RunOptions & { fedDays: number; days: number; fed?: boolean }): StarvationResult {
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, queen: true, params: { mortal: true, ...opts.params } });
+  const { ants, params } = world;
+  const daySteps = Math.round(params.daySeconds * STEPS_PER_SECOND);
+  const y = world.arena.entranceY;
+  const feed = () => {
+    world.food = [];
+    placeSugar(world, 60, y - 15, 40, 1);
+    placeProtein(world, 60, y + 15, 10);
+  };
+  for (let d = 0; d < opts.fedDays; d++) {
+    feed();
+    for (let s = 0; s < daySteps; s++) step(world);
+  }
+  const workers = [...Array(ants.count).keys()].filter((i) => isLiveWorker(ants, i));
+  const trips = workers.map((i) => ants.trips[i]!);
+  const fat = workers.map((i) => ants.fat[i]!);
+  const diedOn = workers.map(() => NaN);
+  const aliveByDay: number[] = [];
+  world.food = [];
+  for (let day = 1; day <= opts.days; day++) {
+    if (opts.fed) feed();
+    for (let s = 0; s < daySteps; s++) {
+      step(world);
+      if (s % 200 !== 0) continue;
+      for (let n = 0; n < workers.length; n++) {
+        if (Number.isNaN(diedOn[n]!) && ants.state[workers[n]!] === AntState.dead) diedOn[n] = day - 1 + s / daySteps;
+      }
+    }
+    aliveByDay.push(workers.filter((i) => isLiveWorker(ants, i)).length);
+  }
+  return { trips, fat, diedOn, cause: workers.map((i) => ants.cause[i]!), aliveByDay };
 }

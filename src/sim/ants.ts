@@ -12,7 +12,7 @@
 import { type Arena, depositTrail, isBlocked, sampleTrail } from './arena';
 import type { Brood } from './brood';
 import type { Farm } from './farm';
-import { dieOfAge, holdCorpse, mayDropCorpse, tryPickUpCorpse } from './corpses';
+import { dieOfAge, endure, holdCorpse, mayDropCorpse, tryPickUpCorpse } from './corpses';
 import { computeContacts, stepFarmAnt } from './farmAnts';
 import { speedAt } from './heat';
 import { type FoodDrop, dropRadius, foodQuality } from './food';
@@ -74,6 +74,19 @@ export const Caste = {
 } as const;
 
 export type Caste = (typeof Caste)[keyof typeof Caste];
+
+/** What an ant died of (none while alive). Stored in saves, so append-only. */
+export const Cause = {
+  none: 0,
+  age: 1,
+  hunger: 2,
+  drying: 3,
+  heat: 4,
+  /** Killed by the keeper or an experiment. */
+  killed: 5,
+} as const;
+
+export type Cause = (typeof Cause)[keyof typeof Cause];
 
 /** All workers, as parallel arrays indexed by ant id. */
 export interface Ants {
@@ -181,6 +194,14 @@ export interface Ants {
   carriedBy: Int32Array;
   /** Counts corpses picked up, put down or newly dead, so lookups know when corpses have moved. */
   corpseVersion: number;
+  /** Adults (M5c): tank days starving (crop empty, fat spent), dried out, and too hot; 0 while all is well. */
+  hunger: Float64Array;
+  thirst: Float64Array;
+  heat: Float64Array;
+  /** The dead: what killed them (`Cause`). */
+  cause: Uint8Array;
+  /** Seconds the ant has been shut in by sand with no room to walk (M5c); 0 when it is not. */
+  shutIn: Float64Array;
 }
 
 export function createAnts(count: number): Ants {
@@ -232,6 +253,11 @@ export function createAnts(count: number): Ants {
     corpseHeld: new Int32Array(count).fill(-1),
     carriedBy: new Int32Array(count).fill(-1),
     corpseVersion: 0,
+    hunger: new Float64Array(count),
+    thirst: new Float64Array(count),
+    heat: new Float64Array(count),
+    cause: new Uint8Array(count),
+    shutIn: new Float64Array(count),
   };
 }
 
@@ -313,6 +339,7 @@ export function stepAnts(ctx: AntContext): void {
       age(ctx, i);
       if (dieOfAge(ctx, i)) continue;
     }
+    if (params.mortal && ctx.nestMode === 'farm' && endure(ctx, i)) continue;
     if (burn > 0 && ants.crop[i]! > 0) {
       // Sugar is burnt first; protein only once the sugar is gone.
       ants.crop[i] = Math.max(0, ants.crop[i]! - burn);

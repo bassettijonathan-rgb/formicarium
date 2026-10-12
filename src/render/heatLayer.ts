@@ -1,8 +1,10 @@
 /**
  * Warmth in the farm (DESIGN.md section 7.6): the heat mat under the farm's
  * bottom edge, and an overlay of the farm's temperatures, blue where it is
- * cool and red where it is warm, drawn from the worker's snapshots. Mould
- * (section 7.8) comes on the same grid and is drawn here too.
+ * cool and red where it is warm, drawn from the worker's snapshots. The same
+ * overlay can show the air's humidity instead (section 7.7), sandy where it
+ * is dry and blue where it is damp. Mould (section 7.8) comes on the same
+ * grid and is drawn here too.
  */
 import { Graphics, Sprite, Texture } from 'pixi.js';
 import type { HeatSnapshot } from '../worker/protocol';
@@ -10,6 +12,11 @@ import type { HeatSnapshot } from '../worker/protocol';
 /** The overlay's colour scale, °C: blue at `COOL` and below, red at `HOT` and above. */
 const COOL = 18;
 const HOT = 34;
+/** The humidity scale: sandy at `DRY` and below, blue at saturation. */
+const DRY = 0.3;
+
+/** What the overlay shows. */
+export type Overlay = 'warmth' | 'damp' | null;
 
 export class HeatLayer {
   /** The temperature overlay, over the soil. */
@@ -21,13 +28,17 @@ export class HeatLayer {
   private canvas: HTMLCanvasElement | undefined;
   private mouldCanvas: HTMLCanvasElement | undefined;
 
+  private shown: Overlay = null;
+
   constructor(private readonly farmBottom: number) {
     this.overlay.alpha = 0.45;
     this.overlay.visible = false;
   }
 
-  set showWarmth(on: boolean) {
-    this.overlay.visible = on;
+  /** Shows the temperature or humidity overlay, or neither; it is drawn from the next snapshot. */
+  set show(what: Overlay) {
+    this.shown = what;
+    this.overlay.visible = what !== null;
   }
 
   setHeat(snapshot: HeatSnapshot): void {
@@ -39,8 +50,8 @@ export class HeatLayer {
       for (let wx = x + 4; wx < x + width - 2; wx += 6) this.mat.rect(wx, this.farmBottom + 1, 0.6, 3).fill({ color: 0xd9824f, alpha: 0.7 });
     }
     this.drawMould(snapshot);
-    if (!this.overlay.visible) return;
-    const { width, height, cell, temperature } = snapshot;
+    if (this.shown === null) return;
+    const { width, height, cell, temperature, humidity } = snapshot;
     const canvas = (this.canvas ??= document.createElement('canvas'));
     canvas.width = width;
     canvas.height = height;
@@ -48,10 +59,17 @@ export class HeatLayer {
     if (!ctx) return;
     const image = ctx.createImageData(width, height);
     for (let i = 0; i < width * height; i++) {
-      const f = Math.min(1, Math.max(0, (temperature[i]! - COOL) / (HOT - COOL)));
-      image.data[4 * i] = Math.round(40 + 215 * f);
-      image.data[4 * i + 1] = Math.round(90 + 60 * (1 - Math.abs(2 * f - 1)));
-      image.data[4 * i + 2] = Math.round(230 * (1 - f) + 25);
+      if (this.shown === 'damp') {
+        const f = Math.min(1, Math.max(0, (humidity[i]! - DRY) / (1 - DRY)));
+        image.data[4 * i] = Math.round(225 - 175 * f);
+        image.data[4 * i + 1] = Math.round(180 - 40 * f);
+        image.data[4 * i + 2] = Math.round(90 + 150 * f);
+      } else {
+        const f = Math.min(1, Math.max(0, (temperature[i]! - COOL) / (HOT - COOL)));
+        image.data[4 * i] = Math.round(40 + 215 * f);
+        image.data[4 * i + 1] = Math.round(90 + 60 * (1 - Math.abs(2 * f - 1)));
+        image.data[4 * i + 2] = Math.round(230 * (1 - f) + 25);
+      }
       image.data[4 * i + 3] = 255;
     }
     ctx.putImageData(image, 0, 0);
