@@ -10,13 +10,12 @@
  * as it is (a structured clone). Real time never enters the simulation: the
  * page measures how long it was closed and asks for that many steps.
  */
-import { AntState, Caste, Cause, Place, createAnts } from './ants';
-import { BroodStage, createBrood } from './brood';
-import { excavatedArea } from './farm';
+import { Cause, createAnts } from './ants';
+import { createBrood } from './brood';
+import type { Census } from './history';
 import { type LoggedCommand, createTank } from './keeper';
-import { Material } from './materials';
 import { STEPS_PER_SECOND } from './time';
-import { colonyCrop, type World } from './world';
+import type { World } from './world';
 
 /**
  * The save format. A model change that only adds state does not change it:
@@ -78,75 +77,7 @@ function fill(saved: Record<string, unknown>, template: Record<string, unknown>)
   }
 }
 
-/** What the keeper sees of a tank at a glance, compared before and after it was closed. */
-export interface Census {
-  step: number;
-  /** Living workers, and whether the queen lives. */
-  workers: number;
-  queen: boolean;
-  /** Every ant the tank has held, alive or dead: new ones are workers out of their cocoons. */
-  everAnts: number;
-  /** Ants dead of each `Cause`. */
-  deaths: number[];
-  eggs: number;
-  larvae: number;
-  pupae: number;
-  /** Brood dead of drying out and of mould, since the tank was set up. */
-  broodDried: number;
-  broodMoulded: number;
-  /** Sugar water in the workers' crops, and food left in the arena, µL. */
-  crops: number;
-  arenaFood: number;
-  /** Nest dug out of the soil, mm². */
-  nest: number;
-  /** Mould in the farm (summed over its cells; 0 when there is none). */
-  mould: number;
-  /** Mean water content of the farm's soil, 0-1. */
-  soilWater: number;
-  /** The step the colony died out, or -1. */
-  diedOut: number;
-}
-
-export function census(world: World): Census {
-  const { ants, brood, farm } = world;
-  let workers = 0;
-  let queen = false;
-  const deaths = Object.values(Cause).map(() => 0);
-  for (let i = 0; i < ants.count; i++) {
-    if (ants.state[i] === AntState.dead) deaths[ants.cause[i]!]!++;
-    else if (ants.place[i] !== Place.gone) {
-      if (ants.caste[i] === Caste.queen) queen = true;
-      else workers++;
-    }
-  }
-  const stages = [0, 0, 0, 0];
-  for (let k = 0; k < brood.count; k++) stages[brood.stage[k]!]!++;
-  let water = 0;
-  let soil = 0;
-  for (let c = 0; c < farm.material.length; c++) {
-    if (farm.material[c] === Material.air) continue;
-    water += farm.moisture[c]!;
-    soil++;
-  }
-  return {
-    step: world.step,
-    workers,
-    queen,
-    everAnts: ants.count,
-    deaths,
-    eggs: stages[BroodStage.egg]!,
-    larvae: stages[BroodStage.larva]!,
-    pupae: stages[BroodStage.pupa]!,
-    broodDried: brood.dried,
-    broodMoulded: brood.moulded,
-    crops: colonyCrop(world),
-    arenaFood: world.food.reduce((sum, d) => sum + d.volume, 0),
-    nest: excavatedArea(farm),
-    mould: farm.mouldy,
-    soilWater: soil > 0 ? water / (255 * soil) : 0,
-    diedOut: world.diedOut,
-  };
-}
+export { type Census, census } from './history';
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 

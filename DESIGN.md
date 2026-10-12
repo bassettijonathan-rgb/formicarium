@@ -746,6 +746,26 @@ by watching it:
 These are counters no rule reads; a test checks that the inspector only
 reads the world, and the ants behave exactly as before.
 
+### 7.12 Colony graphs and the timelapse (M6c)
+
+What M6c builds (`src/sim/history.ts`, `src/ui/`):
+
+1. **History in the world.** Every tenth of a tank day (6 minutes of ant
+   time) the world takes a census: workers, the queen, brood by stage,
+   deaths by cause, food in crops and arena, mean fat, the nest's area,
+   mould, soil water, and how many workers are at each activity (the
+   inspector's categories). Every 5 minutes of ant time it keeps a picture
+   of the nest, one bit per cell. Both are saved with the tank and come out
+   the same on every run. When either grows long (600 censuses, 240
+   pictures) the interval doubles and the entries off it are dropped, so a
+   tank of any age keeps a few hundred, evenly spaced; at most about 2 MB.
+2. **Colony graphs:** the colony by stage (workers, eggs, larvae, pupae);
+   how full the workers' crops are and their fat; what the workers are
+   doing, as shares; and the nest dug out, in cm².
+3. **Timelapse:** the pictures played in order, the soil coloured as it was
+   when the tank was set up and the spoil the ants dumped as loose grains,
+   with a slider to go through them by hand.
+
 ---
 
 ## 8. Your role

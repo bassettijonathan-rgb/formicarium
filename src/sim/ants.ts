@@ -394,15 +394,57 @@ export function stepAnts(ctx: AntContext): void {
   }
 }
 
+/** What a living ant is spending its time on, as the inspector and the colony graphs count it (M6). */
+export const Activity = {
+  /** In the arena or the tube, or on its way through the farm to the tube or back. */
+  out: 0,
+  resting: 1,
+  /** Walking about the nest. */
+  about: 2,
+  /** Carrying soil. */
+  digging: 3,
+  brood: 4,
+  sharing: 5,
+  /** Carrying a corpse out. */
+  dead: 6,
+} as const;
+
+export const ACTIVITY_COUNT = 7;
+
+export function activityOf(place: number, state: number): number {
+  if (state === AntState.carryingCorpse) return Activity.dead;
+  if (state === AntState.resting || state === AntState.inNest) return Activity.resting;
+  if (place !== Place.farm || isOutbound(state) || state === AntState.returning || state === AntState.homing) return Activity.out;
+  if (state === AntState.carrying) return Activity.digging;
+  if (state === AntState.carryingBrood) return Activity.brood;
+  if (state === AntState.sharing) return Activity.sharing;
+  return Activity.about;
+}
+
 /** Counts this step toward what the ant is spending its life on (for the inspector). */
 function tally(ants: Ants, i: number, place: number, state: number): void {
-  if (state === AntState.carryingCorpse) ants.timeDead[i]! += 1;
-  else if (state === AntState.resting || state === AntState.inNest) ants.timeResting[i]! += 1;
-  else if (place !== Place.farm || isOutbound(state) || state === AntState.returning || state === AntState.homing) ants.timeOut[i]! += 1;
-  else if (state === AntState.carrying) ants.timeDigging[i]! += 1;
-  else if (state === AntState.carryingBrood) ants.timeBrood[i]! += 1;
-  else if (state === AntState.sharing) ants.timeSharing[i]! += 1;
-  else ants.timeAbout[i]! += 1;
+  switch (activityOf(place, state)) {
+    case Activity.out:
+      ants.timeOut[i]! += 1;
+      break;
+    case Activity.resting:
+      ants.timeResting[i]! += 1;
+      break;
+    case Activity.about:
+      ants.timeAbout[i]! += 1;
+      break;
+    case Activity.digging:
+      ants.timeDigging[i]! += 1;
+      break;
+    case Activity.brood:
+      ants.timeBrood[i]! += 1;
+      break;
+    case Activity.sharing:
+      ants.timeSharing[i]! += 1;
+      break;
+    default:
+      ants.timeDead[i]! += 1;
+  }
 }
 
 /**

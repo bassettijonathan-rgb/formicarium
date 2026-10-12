@@ -1,5 +1,6 @@
 /** Messages between the page and the simulation worker (DESIGN.md section 10). */
 
+import type { Census } from '../sim/history';
 import type { AntCard } from '../sim/inspect';
 import type { KeeperCommand } from '../sim/keeper';
 
@@ -19,7 +20,9 @@ export type ToWorker =
   /** Keep the tank now (the page is being hidden or closed). */
   | { type: 'save' }
   /** Watch one ant in the inspector (M6b), or none. */
-  | { type: 'inspect'; id: number | null };
+  | { type: 'inspect'; id: number | null }
+  /** Send the colony's history, for the graphs and the timelapse (M6c). */
+  | { type: 'history' };
 
 /** Numbers per ant in `AntsSnapshot.ants`. */
 export const ANT_STRIDE = 7;
@@ -111,4 +114,20 @@ export type FromWorker =
   /** What happened while the tank was closed, line by line. */
   | { type: 'away'; lines: string[] }
   /** The inspected ant, described (M6b). */
-  | { type: 'ant'; id: number; card: AntCard };
+  | { type: 'ant'; id: number; card: AntCard }
+  | HistorySnapshot;
+
+/** The colony's history (M6c). */
+export interface HistorySnapshot {
+  type: 'history';
+  censuses: Census[];
+  /** Pictures of the nest, one bit per farm cell (1: solid), and the step each was taken at. */
+  frames: Uint8Array[];
+  frameSteps: number[];
+  width: number;
+  height: number;
+  /** The farm's soil when the tank was set up, a `Material` per cell. */
+  soil: Uint8Array;
+  daySeconds: number;
+  cropLoad: number;
+}

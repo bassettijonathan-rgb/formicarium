@@ -108,6 +108,8 @@ describe('the report of what happened while the tank was closed', () => {
     mould: 0,
     soilWater: 0.3,
     diedOut: -1,
+    fat: 0.8,
+    activity: [10, 30, 15, 2, 2, 1, 0],
   };
 
   it('says what changed, in plain words', () => {

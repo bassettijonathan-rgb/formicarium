@@ -17,6 +17,7 @@ import { type HeatMat, MAT_WIDTH, updateTemperature } from './heat';
 import { pourWater, updateHumidity, updateWater } from './water';
 import { agePrey, updateMould } from './mould';
 import { STEPS_PER_SECOND } from './time';
+import { type History, createHistory, recordHistory } from './history';
 
 export type { Farm } from './farm';
 
@@ -48,6 +49,8 @@ export interface World {
   heatMat: HeatMat | null;
   /** The step at which the colony died out, its last ant and its last brood dead; -1 while it lives (M5c). */
   diedOut: number;
+  /** Censuses and pictures of the nest over time, for the colony graphs and the timelapse (M6c). */
+  history: History;
 }
 
 export interface WorldOptions {
@@ -89,6 +92,7 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
     params,
     heatMat: null,
     diedOut: -1,
+    history: createHistory(),
   };
 }
 
@@ -190,6 +194,7 @@ export function step(world: World): void {
       evaporateTrail(farm, FARM_TRAIL_EVERY / STEPS_PER_SECOND, params.trailHalfLife);
     }
   }
+  recordHistory(world);
 }
 
 /** Puts a drop of sugar water on the arena floor. Returns its id. */

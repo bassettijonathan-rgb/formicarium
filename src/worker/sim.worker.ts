@@ -6,13 +6,14 @@
 import { AntState, Caste, Place } from '../sim/ants';
 import { BroodStage } from '../sim/brood';
 import { STEPS_PER_SECOND } from '../sim/time';
-import { FIELD_CELL } from '../sim/farm';
+import { FIELD_CELL, createFarm } from '../sim/farm';
 import { colonyCrop, deathsBy, step, type World } from '../sim/world';
 import { type KeeperCommand, type LoggedCommand, applyCommand, createTank } from '../sim/keeper';
 import { SAVE_VERSION, type Save, awayReport, catchUpSteps, census, loadWorld } from '../sim/save';
 import { ANT_STRIDE, type FromWorker, type ToWorker } from './protocol';
 import { readSave, setAside, writeSave } from './store';
 import { inspectAnt } from '../sim/inspect';
+import { Purpose, Rng } from '../sim/rng';
 
 const INTERVAL_MS = 50;
 /** The arena (trail, food, counts) and changed soil are sent every this many intervals. */
@@ -158,6 +159,25 @@ function sendInspected(w: World): void {
   if (inspected >= 0 && inspected < w.ants.count) post({ type: 'ant', id: inspected, card: inspectAnt(w, inspected) });
 }
 
+/** The soil of the running tank as it was set up, for the timelapse. */
+let soilAtStart: { seed: number; material: Uint8Array } | undefined;
+
+function sendHistory(w: World): void {
+  if (soilAtStart?.seed !== w.seed) soilAtStart = { seed: w.seed, material: createFarm(new Rng(w.seed, Purpose.soil)).material };
+  const h = w.history;
+  post({
+    type: 'history',
+    censuses: h.censuses,
+    frames: h.frames,
+    frameSteps: h.frameSteps,
+    width: w.farm.width,
+    height: w.farm.height,
+    soil: soilAtStart.material,
+    daySeconds: w.params.daySeconds,
+    cropLoad: w.params.cropLoad,
+  });
+}
+
 function sendAll(w: World): void {
   sendFarm(w);
   sendAnts(w);
@@ -234,7 +254,9 @@ onmessage = (e: MessageEvent<ToWorker>) => {
   else if (msg.type === 'skip') {
     if (catching) catching.skip = true;
   } else if (msg.type === 'save') save();
-  else if (msg.type === 'inspect') {
+  else if (msg.type === 'history') {
+    if (world) sendHistory(world);
+  } else if (msg.type === 'inspect') {
     inspected = msg.id ?? -1;
     if (world) sendInspected(world);
   }
