@@ -18,6 +18,15 @@
       #hud button { background: #262b33; color: #d8dde3; border: 1px solid #3a404a; border-radius: 5px;
         padding: 3px 9px; font: inherit; cursor: pointer; }
       #hud button[aria-pressed='true'] { background: #3d4a5c; border-color: #6d84a3; }
+      #inspector { position: fixed; left: 12px; bottom: 12px; padding: 10px 12px; border-radius: 8px; width: min(340px, calc(100vw - 48px));
+        background: rgba(17, 19, 23, 0.9); border: 1px solid #5a5236; }
+      #inspector h2 { font-size: 15px; margin: 0 0 4px; font-weight: 600; color: #ffd36b; }
+      #inspector p { margin: 3px 0; color: #c2cad4; }
+      #inspector p.doing { color: #e8ecf0; }
+      #inspector div { display: flex; gap: 6px; }
+      #inspector button { margin-top: 8px; background: #262b33; color: #d8dde3; border: 1px solid #3a404a; border-radius: 5px;
+        padding: 3px 9px; font: inherit; cursor: pointer; }
+      #inspector button[aria-pressed='true'] { background: #3d4a5c; border-color: #6d84a3; }
       #away { position: fixed; right: 12px; bottom: 12px; padding: 10px 12px; border-radius: 8px; width: min(360px, calc(100vw - 48px));
         background: rgba(17, 19, 23, 0.9); border: 1px solid #3a404a; }
       #away h2 { font-size: 15px; margin: 0 0 6px; font-weight: 600; }
@@ -32,7 +41,7 @@
       <h1>Formicarium</h1>
       <p id="status">Setting up the tank…</p>
       <p id="counts"></p>
-      <p>Tap the arena floor to put down a drop of sugar water, or the farm to water it. Drag to move, scroll or pinch to zoom.</p>
+      <p>Tap an ant to inspect and follow it. Tap the arena floor to put down a drop of sugar water, or the farm to water it. Drag to move, scroll or pinch to zoom.</p>
       <div class="row">
         <button data-sugar="1" aria-pressed="true">Rich sugar (1 M)</button>
         <button data-sugar="0.1">Weak sugar (0.1 M)</button>
@@ -65,6 +74,7 @@
       </div>
     </div>
     <div id="away" hidden></div>
+    <div id="inspector" hidden></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

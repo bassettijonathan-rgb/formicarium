@@ -25,6 +25,19 @@ export class Camera {
 
   /** Called with element-relative pixel coordinates when the user clicks or taps without dragging. */
   onTap: ((x: number, y: number) => void) | undefined;
+  /** Called when the user starts to drag the view. */
+  onDrag: (() => void) | undefined;
+
+  /** Pixels per mm. */
+  get scale(): number {
+    return this.target.scale.x;
+  }
+
+  /** Moves the view so the point (x, y) in mm is in the middle of the element, at the same zoom. */
+  centreOn(x: number, y: number): void {
+    const s = this.target.scale.x;
+    this.target.position.set(this.element.clientWidth / 2 - x * s, this.element.clientHeight / 2 - y * s);
+  }
 
   /** Fits a rectangle (in mm) to the element with a margin, leaving `top` pixels free for the panel. */
   fit(bounds: { x: number; y: number; width: number; height: number }, top = 0): void {
@@ -61,7 +74,10 @@ export class Camera {
   private onPointerMove(e: PointerEvent): void {
     const prev = this.pointers.get(e.pointerId);
     if (!prev) return;
-    if (this.press && Math.hypot(e.clientX - this.press.x, e.clientY - this.press.y) > 5) this.press.dragged = true;
+    if (this.press && !this.press.dragged && Math.hypot(e.clientX - this.press.x, e.clientY - this.press.y) > 5) {
+      this.press.dragged = true;
+      this.onDrag?.();
+    }
     if (this.pointers.size === 1) {
       this.target.position.x += e.clientX - prev.x;
       this.target.position.y += e.clientY - prev.y;

@@ -720,6 +720,32 @@ What M6a builds (`src/sim/keeper.ts`, `src/sim/save.ts`, `src/worker/store.ts`):
    colony's, the brood then and now, brood lost to drying or mould, mould
    appearing or gone, food running out, nest dug and the soil drying.
 
+### 7.11 The ant inspector (M6b)
+
+What M6b builds (`src/sim/inspect.ts`): tap an ant, in the farm or the
+arena, and a panel says who it is and what it is doing now ("carrying a
+grain of clay out of the way", "feeding worker 12, mouth to mouth"), and the
+view follows it until you drag. The panel shows what a keeper could learn
+by watching it:
+
+1. **How it is:** its age and whether it came out of its cocoon in this tank,
+   how full its crop is and how much of that is insect juices, its fat body
+   and so how readily it goes out to forage (its own threshold scaled by its
+   fat, section 7.5), and whether it is starving, drying out or too hot. For
+   the queen, the protein she holds for making eggs. For the dead, what
+   killed them and when.
+2. **Its life so far:** trips out to forage, grains of soil dug or cleared,
+   food given to nestmates, insect juices fed to larvae, brood carried, and
+   the dead carried out.
+3. **Its time:** the share of its life spent resting, about the nest, out
+   foraging (or on its way through the nest to the tube or back), digging,
+   carrying brood, sharing food and carrying the dead.
+   This is where division of labour shows in one ant: a lean forager is out
+   much of its time, a fat nurse rests among the brood.
+
+These are counters no rule reads; a test checks that the inspector only
+reads the world, and the ants behave exactly as before.
+
 ---
 
 ## 8. Your role

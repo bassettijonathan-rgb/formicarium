@@ -9,6 +9,7 @@ import { ARENA_X, TankView } from './render/tankView';
 import { ARENA_SIZE, FARM_HEIGHT, FARM_WIDTH } from './sim/tank';
 import { STEPS_PER_SECOND, formatAntTime } from './sim/time';
 import type { KeeperCommand } from './sim/keeper';
+import type { AntCard } from './sim/inspect';
 import { DEFAULT_ANT_PARAMS } from './sim/params';
 import { Cause } from './sim/ants';
 import { BroodStage } from './sim/brood';
@@ -26,6 +27,7 @@ async function start(): Promise<void> {
   const status = document.getElementById('status')!;
   const counts = document.getElementById('counts')!;
   const away = document.getElementById('away')!;
+  const inspector = document.getElementById('inspector')!;
   const query = new URLSearchParams(location.search);
   const asked = query.has('seed') ? parseSeed(query.get('seed')) : null;
   /** The tank running, once the worker has said which. */
@@ -53,6 +55,7 @@ async function start(): Promise<void> {
     if (msg.type === 'tank') {
       seed = msg.seed;
       history.replaceState(null, '', `?seed=${seed}`);
+      inspect(-1);
       if (msg.note) showAway([msg.note]);
     } else if (msg.type === 'ask') {
       const k = msg.kept;
@@ -65,6 +68,8 @@ async function start(): Promise<void> {
       showCatchUp(msg.done, msg.total);
     } else if (msg.type === 'away') {
       showAway(msg.lines);
+    } else if (msg.type === 'ant') {
+      if (msg.id === inspected) showCard(msg.card);
     } else if (msg.type === 'farm') view.setSoil(msg);
     else if (msg.type === 'ants') {
       const now = performance.now();
@@ -118,10 +123,57 @@ async function start(): Promise<void> {
     away.replaceChildren(text('h2', 'While you were away'), ...lines.map((l) => text('p', l)), button('Close', () => (away.hidden = true)));
   }
 
+  // The ant inspector (M6b): tap an ant to see what it is doing and its life so far; the view follows it.
+  let inspected = -1;
+  let following = false;
+  const followButton = button('Follow', () => {
+    following = !following;
+    followButton.setAttribute('aria-pressed', String(following));
+  });
+  const inspect = (id: number) => {
+    inspected = id;
+    following = id >= 0;
+    followButton.setAttribute('aria-pressed', String(following));
+    send({ type: 'inspect', id: id >= 0 ? id : null });
+    if (id < 0) inspector.hidden = true;
+  };
+  camera.onDrag = () => {
+    following = false;
+    followButton.setAttribute('aria-pressed', 'false');
+  };
+  function showCard(card: AntCard): void {
+    inspector.hidden = false;
+    const doing = text('p', `Now: ${card.doing}.`);
+    doing.className = 'doing';
+    const row = document.createElement('div');
+    row.append(followButton, button('Close', () => inspect(-1)));
+    inspector.replaceChildren(text('h2', card.title), doing, ...card.lines.map((l) => text('p', l)), row);
+  }
+  /** Where the inspected ant is drawn, in the scene's mm, or null while it is out of sight (in the tube). */
+  const inspectedAt = () => {
+    const inFarm = view.farmAnts.positionOf(inspected);
+    if (inFarm) return inFarm;
+    const inArena = view.arena.ants.positionOf(inspected);
+    return inArena ? { x: inArena.x + ARENA_X, y: inArena.y } : null;
+  };
+
+  let markerScale = 0;
   app.ticker.add(() => {
     const now = performance.now();
     view.arena.ants.update(now);
     view.farmAnts.update(now);
+    const at = inspected >= 0 ? inspectedAt() : null;
+    view.marker.visible = at !== null;
+    if (at && camera.scale !== markerScale) {
+      // The ring keeps a steady width on screen and never shrinks below a fingertip.
+      markerScale = camera.scale;
+      const s = markerScale;
+      view.marker.clear().circle(0, 0, Math.max(14, 2.5 * s) / s).stroke({ width: 2 / s, color: 0xffd36b, alpha: 0.9 });
+    }
+    if (at) {
+      view.marker.position.set(at.x, at.y);
+      if (following) camera.centreOn(at.x, at.y);
+    }
   });
 
   // Feeding: tap the arena floor to put a drop (or an insect) there. Watering: with the Water tool, tap the farm.
@@ -129,6 +181,14 @@ async function start(): Promise<void> {
   let watering = false;
   camera.onTap = (px, py) => {
     const p = view.root.toLocal({ x: px, y: py });
+    // A tap on an ant (within a finger's width) opens the inspector on it.
+    const reach = Math.max(1.5, 14 / camera.scale);
+    let ant = view.farmAnts.nearest(p.x, p.y, reach);
+    if (ant < 0) ant = view.arena.ants.nearest(p.x - ARENA_X, p.y, reach);
+    if (ant >= 0 && !watering) {
+      inspect(ant);
+      return;
+    }
     if (watering && p.x >= 0 && p.x < FARM_WIDTH && p.y >= 0 && p.y < FARM_HEIGHT) {
       command({ type: 'water', x: p.x });
       return;

@@ -26,6 +26,8 @@ export class TankView {
   readonly brood = new BroodLayer();
   /** The heat mat and the temperature overlay. */
   readonly heat = new HeatLayer(FARM_HEIGHT + FRAME);
+  /** A ring round the ant in the inspector (M6b), drawn by the page to suit the zoom. */
+  readonly marker = new Graphics();
   private readonly soil = new Sprite();
   private soilCanvas: HTMLCanvasElement | undefined;
 
@@ -46,6 +48,8 @@ export class TankView {
     this.root.addChild(this.drawTube());
     this.root.addChild(label('Formicarium · side view', 0, -FRAME - 14));
     this.root.addChild(label('Arena · top view', ARENA_X, -FRAME - 14));
+    this.marker.visible = false;
+    this.root.addChild(this.marker);
   }
 
   /** Total extent of the scene in mm, for fitting the camera. */
