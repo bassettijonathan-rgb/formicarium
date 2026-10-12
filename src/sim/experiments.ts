@@ -747,3 +747,85 @@ export function runBroodDamp(opts: RunOptions & { hours: number; dry?: number; d
   }
   return { meanByHour, dampByHour };
 }
+
+export interface HygieneResult {
+  /** At the end of each tank day: corpses still in the farm, mould at least `mouldHarm` thick (mm²), and brood killed by mould so far. */
+  corpsesByDay: number[];
+  mouldByDay: number[];
+  killedByDay: number[];
+  /** Brood items at the start. */
+  brood: number;
+}
+
+/**
+ * Hygiene (M5b): a farm colony settles in for `settleHours`, the keeper puts
+ * a pile of brood where most of its workers rest, and then the `deaths`
+ * workers resting nearest it die where they lie. Over `days` tank days the workers carry their dead out, before mould
+ * grows on them. The control (`corpsePickRate` 0) leaves the dead in the
+ * nest, as in colonies kept from removing corpses (Diez et al. 2014).
+ */
+export function runHygiene(
+  opts: RunOptions & { settleHours: number; days: number; deaths: number; brood?: number },
+): HygieneResult {
+  const params: Partial<AntParams> = {
+    mould: true,
+    developmentZero: 1e9, // brood stays as it is
+    larvaStarveDays: 1e9,
+    ...opts.params,
+  };
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, params });
+  const { ants, brood, farm } = world;
+  const hourSteps = 3600 * STEPS_PER_SECOND;
+  const y = world.arena.entranceY;
+  placeSugar(world, 60, y, 40, 1);
+  for (let s = 0; s < opts.settleHours * hourSteps; s++) step(world);
+  const resting: number[] = [];
+  for (let i = 0; i < ants.count; i++) if (ants.state[i] === AntState.resting && ants.caste[i] === Caste.worker) resting.push(i);
+  // The heart of the nest: the resting worker with most resting nestmates within 5 mm. The brood goes there.
+  const near = (a: number, b: number) => Math.hypot(ants.x[a]! - ants.x[b]!, ants.y[a]! - ants.y[b]!);
+  let heart = resting[0] ?? 0;
+  let most = -1;
+  for (const a of resting) {
+    const n = resting.filter((b) => near(a, b) <= 5).length;
+    if (n > most) {
+      most = n;
+      heart = a;
+    }
+  }
+  const cx = ants.x[heart]!;
+  const cy = ants.y[heart]!;
+  const rng = new Rng(opts.seed, Purpose.test);
+  const stages = [BroodStage.egg, BroodStage.larva, BroodStage.pupa];
+  for (let n = 0; n < (opts.brood ?? 30); n++) {
+    let x = cx;
+    let y = cy;
+    // Within 3 mm of the heart, in the open.
+    for (let tries = 0; tries < 20; tries++) {
+      x = cx + rng.range(-3, 3);
+      y = cy + rng.range(-3, 3);
+      if (farm.material[Math.floor(y) * farm.width + Math.floor(x)] === 0) break;
+    }
+    addBrood(brood, stages[n % 3]!, x, y);
+  }
+  const start = brood.count;
+  // The workers resting nearest the brood die where they lie.
+  const dying = [...resting].sort((a, b) => near(a, heart) - near(b, heart) || a - b).slice(0, opts.deaths);
+  for (const i of dying) killAnt(world, i);
+  const corpsesByDay: number[] = [];
+  const mouldByDay: number[] = [];
+  const killedByDay: number[] = [];
+  const daySteps = Math.round(world.params.daySeconds * STEPS_PER_SECOND);
+  for (let day = 1; day <= opts.days; day++) {
+    world.food = [];
+    placeSugar(world, 60, y, 40, 1);
+    for (let s = 0; s < daySteps; s++) step(world);
+    let corpses = 0;
+    for (let i = 0; i < ants.count; i++) if (ants.state[i] === AntState.dead && ants.place[i] === Place.farm) corpses++;
+    let cells = 0;
+    for (const m of farm.mould) if (m >= world.params.mouldHarm) cells++;
+    corpsesByDay.push(corpses);
+    mouldByDay.push(cells * FIELD_CELL * FIELD_CELL);
+    killedByDay.push(brood.moulded);
+  }
+  return { corpsesByDay, mouldByDay, killedByDay, brood: start };
+}

@@ -61,6 +61,10 @@ export interface Farm {
   temperature: Float64Array;
   /** Relative humidity of the air per field cell, 0-1 (M5b; see water.ts). */
   humidity: Float64Array;
+  /** Mould per field cell, 0 (none) to 1 (thick), M5b (see mould.ts). */
+  mould: Float64Array;
+  /** Sum of `mould` over the farm, so a clean farm costs nothing to check. */
+  mouldy: number;
   /** Water per cell not yet whole units of `moisture`, carried between updates so none is lost to rounding (M5b). */
   moistureRest: Float32Array;
   /** Where the tube opens into the farm, mm. */
@@ -123,6 +127,8 @@ export function createFarm(rng: Rng): Farm {
     temperature: new Float64Array(fieldWidth * fieldHeight),
     humidity: new Float64Array(fieldWidth * fieldHeight).fill(1),
     moistureRest: new Float32Array(width * height),
+    mould: new Float64Array(fieldWidth * fieldHeight),
+    mouldy: 0,
     tubeX: width - 1.5,
     tubeY: TUBE.farmY,
   };

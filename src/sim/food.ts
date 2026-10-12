@@ -14,6 +14,9 @@ export interface FoodDrop {
   concentration: number;
   /** Fraction of the drop that is protein-rich food (0 for sugar water, 1 for insect). */
   protein: number;
+  /** Insects: how long it has lain, in tank days at 25 °C (M5b), and whether it has gone mouldy; ants leave mouldy food. */
+  age: number;
+  mouldy: boolean;
 }
 
 /** Radius of a drop sitting on the floor as a hemisphere, mm. */

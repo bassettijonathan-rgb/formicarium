@@ -12,12 +12,14 @@
  *   npm run experiment -- midden [--hours 3]
  *   npm run experiment -- warmth [--hours 3] [--no-thermo]
  *   npm run experiment -- damp [--hours 3] [--no-hygro]
+ *   npm run experiment -- hygiene [--days 4] [--no-removal]
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
  */
 import type { AntParams } from '../src/sim/params';
 import {
   runBroodSorting,
   runBroodDamp,
+  runHygiene,
   runBroodWarmth,
   runCemetery,
   runColonyGrowth,
@@ -65,6 +67,7 @@ for (let i = 0; i < rest.length; i++) {
   else if (rest[i] === '--no-thermo') params.thermotaxis = false;
   else if (rest[i] === '--soil-water') params.waterFlow = true;
   else if (rest[i] === '--no-hygro') params.hygrotaxis = false;
+  else if (rest[i] === '--no-removal') params.corpsePickRate = 0;
   else if (rest[i] === '--water') {
     waterEvery = Number(rest[++i]);
     params.waterFlow = true;
@@ -182,9 +185,15 @@ for (let seed = first; seed < first + runs; seed++) {
       `seed ${seed}: mean humidity at the brood by hour ${r.meanByHour.map(pct).join(' ')}; ` +
         `in air damp enough ${r.dampByHour.map(pct).join(' ')}`,
     );
+  } else if (name === 'hygiene') {
+    const r = runHygiene({ seed, settleHours: 2, days: days || 4, deaths: 5, ...(ants ? { ants } : {}), params });
+    console.log(
+      `seed ${seed}: ${r.brood} brood; by day: corpses in the farm ${r.corpsesByDay.join(' ')}, ` +
+        `mould ${r.mouldByDay.join(' ')} mm², brood killed by mould ${r.killedByDay.join(' ')}`,
+    );
   } else {
     throw new Error(
-      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth or damp',
+      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp or hygiene',
     );
   }
 }

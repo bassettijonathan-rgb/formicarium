@@ -493,6 +493,31 @@ export interface AntParams {
   hygroSense: number;
   /** False: nurses ignore humidity (the control for brood hygrotaxis). */
   hygrotaxis: boolean;
+
+  // --- Mould (M5b) ---
+
+  /** True: uneaten prey and corpses lying in the farm go mouldy. Off in the experiments unless they say otherwise; the page turns it on. */
+  mould: boolean;
+  /** Tank days an insect lies in the arena at 25 °C before it is mouldy and ants no longer take it (rough: keepers take prey out after a day or two). */
+  preyMouldDays: number;
+  /** Tank days a corpse lies in the farm at 25 °C before mould grows on it (rough). */
+  corpseMouldDays: number;
+  /** Mould grows twice as fast every this many °C warmer (rough: a Q10 of about 2, as for most fungi). */
+  mouldDoubling: number;
+  /** How fast mould covers a corpse it has started on, per tank day at 25 °C (logistic rate; rough: covered in about two days). */
+  mouldGrowth: number;
+  /** How far mould's threads and spores spread from a corpse through damp soil and air, mm² per tank day (rough). */
+  mouldSpread: number;
+  /** Mould away from anything to feed on dies back by this fraction per tank day (rough; with `mouldSpread` it reaches about a cm round a corpse). */
+  mouldDecay: number;
+  /** Mould grows and spreads only in air at least this humid; drier, it dies back (rough). */
+  mouldHumidity: number;
+  /** Brood lying where mould is at least this thick is being killed by it (0-1, rough). */
+  mouldHarm: number;
+  /** Tank days in mould that kill an egg, larva or pupa (rough). */
+  mouldKillDays: number;
+  /** Nurses notice mould this thick where they stand and carry brood out of it (0-1, rough). */
+  mouldSense: number;
 }
 
 export const DEFAULT_ANT_PARAMS: AntParams = {
@@ -658,4 +683,16 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   broodHumidity: 0.9,
   hygroSense: 0.02,
   hygrotaxis: true,
+
+  mould: false,
+  preyMouldDays: 2,
+  corpseMouldDays: 2,
+  mouldDoubling: 10,
+  mouldGrowth: 3,
+  mouldSpread: 50,
+  mouldDecay: 0.5,
+  mouldHumidity: 0.9,
+  mouldHarm: 0.2,
+  mouldKillDays: 1,
+  mouldSense: 0.05,
 };

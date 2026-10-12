@@ -20,6 +20,7 @@ update DESIGN.md in the same pull request when a model changes.
 - `npm run experiment -- cemetery --runs 3 [--corpses 200] [--no-piles]`: strewn corpses gathered into piles over 30 hours (M4c); `midden --runs 3`: workers dead in the nest carried out (a minute or two per run)
 - `npm run experiment -- warmth --runs 3 [--no-thermo]`: brood in a temperature gradient (M5a); `growth` takes `--room 22 --mat 110` to raise a colony on the heat mat
 - `npm run experiment -- damp --runs 3 [--no-hygro]`: brood in a humidity gradient (M5b); `growth` takes `--soil-water` (the soil dries) or `--water 5` (and the keeper waters every 5 days)
+- `npm run experiment -- hygiene --runs 3 [--no-removal]`: workers die in the brood pile; their dead carried out before mould grows (M5b; a few minutes per run)
 - `npm run farm -- --seed 1 --ants 60 --hours 3`: a farm colony headless, with a text picture of the nest
 - `npm run build`: production build (deployed to GitHub Pages from `main`)
 

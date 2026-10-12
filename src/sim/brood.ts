@@ -10,6 +10,7 @@
  */
 import { type Farm, addToField } from './farm';
 import { temperatureAt } from './heat';
+import { mouldAt } from './mould';
 import { humidityAt } from './water';
 import type { AntParams } from './params';
 
@@ -42,6 +43,10 @@ export interface Brood {
   dry: Float64Array;
   /** Brood that has died of drying out, since the tank was set up. */
   dried: number;
+  /** How long the item has lain in mould, net of time out of it, seconds of ant time (M5b). */
+  mouldy: Float64Array;
+  /** Brood killed by mould, since the tank was set up. */
+  moulded: number;
 }
 
 export function createBrood(capacity = 0): Brood {
@@ -56,6 +61,8 @@ export function createBrood(capacity = 0): Brood {
     carried: new Uint8Array(capacity),
     dry: new Float64Array(capacity),
     dried: 0,
+    mouldy: new Float64Array(capacity),
+    moulded: 0,
   };
 }
 
@@ -75,6 +82,7 @@ export function addBrood(brood: Brood, stage: BroodStage, x: number, y: number):
   brood.unfed[k] = 0;
   brood.carried[k] = 0;
   brood.dry[k] = 0;
+  brood.mouldy[k] = 0;
   return k;
 }
 
@@ -92,6 +100,7 @@ function growBrood(brood: Brood, capacity: number): void {
   brood.unfed = grow(brood.unfed, (n) => new Float64Array(n));
   brood.carried = grow(brood.carried, (n) => new Uint8Array(n));
   brood.dry = grow(brood.dry, (n) => new Float64Array(n));
+  brood.mouldy = grow(brood.mouldy, (n) => new Float64Array(n));
 }
 
 /** Brood items of stage `from` or later within `radius` mm of (x, y), not counting item `skip` or items being carried. */
@@ -179,6 +188,16 @@ export function stepBrood(brood: Brood, farm: Farm, params: AntParams, seconds: 
       brood.stage[k] = BroodStage.none;
       brood.dried++;
       continue;
+    }
+    // Brood lying in mould dies in about `mouldKillDays` (M5b).
+    if (farm.mouldy > 0 || brood.mouldy[k]! > 0) {
+      const inMould = mouldAt(farm, brood.x[k]!, brood.y[k]!) >= params.mouldHarm;
+      brood.mouldy[k] = inMould ? brood.mouldy[k]! + seconds : Math.max(0, brood.mouldy[k]! - seconds);
+      if (brood.mouldy[k]! > params.mouldKillDays * params.daySeconds && !brood.carried[k]) {
+        brood.stage[k] = BroodStage.none;
+        brood.moulded++;
+        continue;
+      }
     }
     if (stage === BroodStage.egg) {
       brood.progress[k]! += egg;

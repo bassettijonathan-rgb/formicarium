@@ -48,7 +48,7 @@ export interface ArenaSnapshot {
   trail: Float32Array;
   /** 1 where the floor is blocked (only lab setups have inner walls). */
   wall: Uint8Array;
-  food: { id: number; x: number; y: number; volume: number; concentration: number; protein: number }[];
+  food: { id: number; x: number; y: number; volume: number; concentration: number; protein: number; mouldy: boolean }[];
   /** All workers; those out foraging (in the arena or the tube); sugar water in the colony's crops (µL). */
   ants: number;
   out: number;
@@ -75,6 +75,8 @@ export interface HeatSnapshot {
   /** Where the heat mat is under the farm, mm, or null. */
   mat: { x: number; width: number } | null;
   room: number;
+  /** Mould in the farm, on the same grid, 0-1; null while there is none (M5b). */
+  mould: Float32Array | null;
 }
 
 export type FromWorker =
