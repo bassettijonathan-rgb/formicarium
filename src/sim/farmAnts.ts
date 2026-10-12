@@ -28,6 +28,7 @@ import { BroodStage, addBrood, broodLike, broodNear, larvaHungry, larvaStarved }
 import { drawLifespan, dropCorpse, tryPickUpCorpse } from './corpses';
 import { addToField, cellSolid, isBlockedFarm, isSoil, openAbove, sampleField, type Farm } from './farm';
 import { speedAt, temperatureAt } from './heat';
+import { mouldAt } from './mould';
 import { humidityAt } from './water';
 import type { AntParams } from './params';
 import { placeGrain, removeGrain } from './soil';
@@ -333,8 +334,9 @@ function humidPull(ctx: AntContext, farm: Farm, i: number): number {
   return Math.min(1, felt / params.hygroSense);
 }
 
-/** The stronger of the two reasons to move brood: temperature (M5a) and humidity (M5b). */
+/** The strongest of the reasons to move brood: temperature (M5a), humidity and mould where the ant stands (M5b). */
 function broodPull(ctx: AntContext, farm: Farm, i: number): number {
+  if (mouldAt(farm, ctx.ants.x[i]!, ctx.ants.y[i]!) >= ctx.params.mouldSense) return 1;
   const thermal = thermalPull(ctx, farm, i);
   return thermal === 1 ? 1 : Math.max(thermal, humidPull(ctx, farm, i));
 }

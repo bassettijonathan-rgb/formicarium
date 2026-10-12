@@ -598,6 +598,35 @@ earlier milestones ran this way, the experiments still do unless they say
 otherwise, and with it off the colony behaves exactly as before M5b
 (checked bit for bit). The page turns it on.
 
+### 7.8 Mould (M5b)
+
+What grows mould, as Marco chose: uneaten prey and corpses (`src/sim/mould.ts`).
+
+1. **Corpses left in the nest.** A dead worker that has lain in the farm
+   for 2 tank days (rough) in damp air (90% or more) grows mould, which
+   covers it in about two days (a logistic rise, twice as fast every 10 °C
+   warmer: a Q10 of about 2, as for most fungi; rough). From the corpse it
+   spreads through damp soil and air on the 2 mm grid (50 mm² a tank day),
+   and away from anything to feed on it dies back (by half in about a tank
+   day, ten times faster in dry air), so it reaches about a cm round the
+   corpse. Once the corpse is carried off, the mould fades within days.
+   Carrying the dead out before mould grows is what the midden of section
+   7.4 is for: colonies kept from removing corpses fare worse (Myrmica
+   rubra, Diez et al. 2014).
+2. **Brood in mould dies.** An egg, larva or pupa lying where the mould is
+   20% thick or more for a tank day (net of time out of it) dies (rough).
+3. **Nurses carry brood out of mould.** A worker standing in mould (5% or
+   more) treats brood there like brood that is too cold or too dry: it picks
+   it up readily and holds on to it while it is still in mould.
+4. **Prey in the arena.** An insect left for 2 tank days at 25 °C (rough:
+   keepers take prey out after a day or two) goes mouldy, grey and furred,
+   and ants no longer take it; the keeper should clear it away. Ants drink
+   prey where it lies rather than carrying pieces home, so overfeeding
+   wastes food but brings no mould into the nest.
+
+Like water flow, mould is off in the experiments unless they say otherwise
+(with it off nothing changes, checked bit for bit); the page turns it on.
+
 ---
 
 ## 8. Your role
@@ -646,6 +675,9 @@ project. If one fails, we fix the model, not the test.
    nurses carry the brood to the temperature they keep it at.
 11. **Brood hygrotaxis** (M5b; a qualitative check, as keepers describe it):
    in a humidity gradient, nurses carry the brood to damp air.
+12. **Hygiene** (Diez et al. 2014): workers carry their dead out of the
+   nest before mould grows on them; dead left in the nest grow mould that
+   kills brood.
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -959,6 +991,27 @@ air with no soil near it the room's humidity; then even watered colonies
 lost their egg piles in the open pit, until the headspace was made one
 body of air between the surface's and the room's (section 7.7).
 
+### 9.10 Results so far (hygiene, M5b; 3 colonies of 60 workers)
+
+`npm run experiment -- hygiene [--no-removal]`; `tests/science/hygiene.test.ts`
+checks seeds 1-3 with removal and seeds 1-2 for the control. Each colony
+settles in the farm for 2 hours; the keeper puts 30 brood items where most
+workers rest, and the 5 workers resting nearest them die there. Sugar water
+every day, temperature 25 °C, air saturated, mould on.
+
+| | Corpses left in the farm, day 1 → 6 | Mould (20% or thicker), day 3 → 6 | Brood killed by mould by day 6 |
+|---|---|---|---|
+| Workers carry their dead out | 0, 0 and 3 → 0, 0 and 1 | 0, 0, 0.1 cm² → 0, 0, 1.2 cm² | 0, 0, 0 of 30 |
+| Dead left in place (no removal) | all 5-6 | 0.2-0.7 → 7-10 cm² | 0, 11, 0 |
+| No removal, and nurses blind to mould | all 5-6 | 0.2-0.7 → 7-10 cm² | 19, 23, 22 |
+
+The workers carry their dead out within a day (section 9.7), before mould
+can start, and the nest stays clean. Where one or two corpses stay in the
+farm (seed 3), a small patch of mould grows round them, away from the
+brood. Left in the brood pile, the dead grow mould that spreads over
+several cm², yet the nurses, carrying brood out of mould, save nearly all
+of it in two colonies of three; blind to mould, they lose two thirds of it.
+
 ---
 
 ## 10. Architecture
@@ -1013,6 +1066,7 @@ parameters, I stop and report before changing the model.
 - Deneubourg, Goss, Franks, Sendova-Franks, Detrain & Chrétien 1991. The dynamics of collective sorting: robot-like ants and ant-like robots. In From Animals to Animats (SAB 1990). MIT Press.
 - Depickère, Fresneau & Deneubourg 2004. Dynamics of aggregation in *Lasius niger* (Formicidae): influence of polyethism. Insectes Soc. 51, 81-90.
 - Diez, Deneubourg & Detrain 2012. Social prophylaxis through distant corpse removal in ants. Naturwissenschaften 99, 833-842.
+- Diez, Lejeune & Detrain 2014. Keep the nest clean: survival advantages of corpse removal in ants. Biol. Lett. 10, 20140306.
 - Dussutour & Simpson 2009. Communal nutrition in ants. Curr. Biol.
 - Dussutour & Simpson 2012. Ant workers die young and colonies collapse when fed a high-protein diet. Proc. R. Soc. B.
 - Franks & Sendova-Franks 1992. Brood sorting by ants. Behav. Ecol. Sociobiol.

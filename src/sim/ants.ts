@@ -417,7 +417,7 @@ function feed(ctx: AntContext, i: number): void {
   }
   const drop = food.find((d) => d.id === ants.foodId[i]);
   ants.foodId[i] = -1;
-  if (drop && drop.volume > 0) {
+  if (drop && drop.volume > 0 && !drop.mouldy) {
     // An ant tops up what is left in its crop. It lays trail by how much it drank, so foragers from a
     // well-fed colony, who could not unload at home, lay less (Mailleux et al. 2000, 2006).
     const take = Math.min(Math.max(0, params.cropLoad - ants.crop[i]!), drop.volume);
@@ -626,7 +626,7 @@ function nearestDrop(ctx: AntContext, i: number, x: number, y: number, range: nu
   let bestGap = range;
   for (const drop of ctx.food) {
     const protein = drop.protein > 0 ? 1 : 0;
-    if (drop.volume <= 0 || (protein !== seek && !(protein === 1 && preyToo))) continue;
+    if (drop.volume <= 0 || drop.mouldy || (protein !== seek && !(protein === 1 && preyToo))) continue;
     const gap = Math.hypot(drop.x - x, drop.y - y) - dropRadius(drop.volume);
     if (gap <= bestGap) {
       best = drop;

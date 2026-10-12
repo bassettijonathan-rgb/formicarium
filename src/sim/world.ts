@@ -15,6 +15,7 @@ import { Purpose, Rng } from './rng';
 import { stepSoil } from './soil';
 import { type HeatMat, MAT_WIDTH, updateTemperature } from './heat';
 import { pourWater, updateHumidity, updateWater } from './water';
+import { agePrey, updateMould } from './mould';
 import { STEPS_PER_SECOND } from './time';
 
 export type { Farm } from './farm';
@@ -160,6 +161,7 @@ export function step(world: World): void {
   });
   if (world.food.some((d) => d.volume <= 0)) world.food = world.food.filter((d) => d.volume > 0);
   world.step += 1;
+  if (world.step % WATER_EVERY === 0) agePrey(world.food, world.params, WATER_EVERY / STEPS_PER_SECOND);
   if (world.step % EVAPORATE_EVERY === 0) {
     evaporateTrail(world.arena, EVAPORATE_EVERY / STEPS_PER_SECOND, world.params.trailHalfLife);
   }
@@ -172,7 +174,10 @@ export function step(world: World): void {
       updateField(farm, farm.digMark, seconds, params.digMarkHalfLife, 0);
       updateFresh(farm);
       updateTemperature(farm, world.heatMat, params, seconds);
-      if (world.step % WATER_EVERY === 0) updateWater(farm, params, WATER_EVERY / STEPS_PER_SECOND);
+      if (world.step % WATER_EVERY === 0) {
+        updateWater(farm, params, WATER_EVERY / STEPS_PER_SECOND);
+        updateMould(farm, world.ants, params, WATER_EVERY / STEPS_PER_SECOND);
+      }
       stepBrood(world.brood, farm, params, seconds);
       scentBrood(world.brood, farm, params, seconds);
       updateField(farm, farm.broodScent, seconds, params.broodScentHalfLife, params.broodScentDiffusion, true);
@@ -186,7 +191,7 @@ export function step(world: World): void {
 /** Puts a drop of sugar water on the arena floor. Returns its id. */
 export function placeSugar(world: World, x: number, y: number, volume: number, concentration: number): number {
   const id = world.nextFoodId++;
-  world.food.push({ id, x, y, volume, concentration, protein: 0 });
+  world.food.push({ id, x, y, volume, concentration, protein: 0, age: 0, mouldy: false });
   return id;
 }
 
@@ -196,7 +201,7 @@ export function placeSugar(world: World, x: number, y: number, volume: number, c
  */
 export function placeProtein(world: World, x: number, y: number, volume: number): number {
   const id = world.nextFoodId++;
-  world.food.push({ id, x, y, volume, concentration: 1, protein: 1 });
+  world.food.push({ id, x, y, volume, concentration: 1, protein: 1, age: 0, mouldy: false });
   return id;
 }
 

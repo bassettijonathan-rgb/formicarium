@@ -1,7 +1,8 @@
 /**
  * Warmth in the farm (DESIGN.md section 7.6): the heat mat under the farm's
  * bottom edge, and an overlay of the farm's temperatures, blue where it is
- * cool and red where it is warm, drawn from the worker's snapshots.
+ * cool and red where it is warm, drawn from the worker's snapshots. Mould
+ * (section 7.8) comes on the same grid and is drawn here too.
  */
 import { Graphics, Sprite, Texture } from 'pixi.js';
 import type { HeatSnapshot } from '../worker/protocol';
@@ -15,7 +16,10 @@ export class HeatLayer {
   readonly overlay = new Sprite();
   /** The heat mat, drawn under the farm. */
   readonly mat = new Graphics();
+  /** Mould in the farm (M5b): a pale grey-green bloom, always shown. */
+  readonly mould = new Sprite();
   private canvas: HTMLCanvasElement | undefined;
+  private mouldCanvas: HTMLCanvasElement | undefined;
 
   constructor(private readonly farmBottom: number) {
     this.overlay.alpha = 0.45;
@@ -34,6 +38,7 @@ export class HeatLayer {
       this.mat.roundRect(x, this.farmBottom, width, 5, 1.5).fill(0x8a3b22);
       for (let wx = x + 4; wx < x + width - 2; wx += 6) this.mat.rect(wx, this.farmBottom + 1, 0.6, 3).fill({ color: 0xd9824f, alpha: 0.7 });
     }
+    this.drawMould(snapshot);
     if (!this.overlay.visible) return;
     const { width, height, cell, temperature } = snapshot;
     const canvas = (this.canvas ??= document.createElement('canvas'));
@@ -54,5 +59,28 @@ export class HeatLayer {
     texture.source.update();
     this.overlay.texture = texture;
     this.overlay.scale.set(cell);
+  }
+
+  private drawMould({ width, height, cell, mould }: HeatSnapshot): void {
+    this.mould.visible = mould !== null;
+    if (!mould) return;
+    const canvas = (this.mouldCanvas ??= document.createElement('canvas'));
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const image = ctx.createImageData(width, height);
+    for (let i = 0; i < width * height; i++) {
+      const m = mould[i]!;
+      image.data[4 * i] = 214;
+      image.data[4 * i + 1] = 226;
+      image.data[4 * i + 2] = 190;
+      image.data[4 * i + 3] = Math.round(255 * Math.min(0.85, 1.2 * m));
+    }
+    ctx.putImageData(image, 0, 0);
+    const texture = Texture.from(canvas, true);
+    texture.source.update();
+    this.mould.texture = texture;
+    this.mould.scale.set(cell);
   }
 }

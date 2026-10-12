@@ -35,6 +35,15 @@ export class ArenaLayer {
     this.food.clear();
     for (const d of snapshot.food) {
       const r = dropRadius(d.volume);
+      if (d.protein > 0 && d.mouldy) {
+        // An insect gone mouldy: grey and furred with pale threads.
+        this.food.ellipse(d.x, d.y, r * 1.3, r * 0.8).fill({ color: 0x4a4a3c, alpha: 0.95 });
+        this.food.ellipse(d.x, d.y, r * 1.6, r * 1.1).fill({ color: 0xd6e2be, alpha: 0.45 });
+        for (let a = 0; a < 6; a++) {
+          this.food.circle(d.x + r * Math.cos(a) * 0.9, d.y + r * Math.sin(a * 1.7) * 0.6, r * 0.25).fill({ color: 0xeef3e2, alpha: 0.6 });
+        }
+        continue;
+      }
       if (d.protein > 0) {
         // A crushed insect: a dark body with a glistening wet patch where the ants drink.
         this.food.ellipse(d.x, d.y, r * 1.3, r * 0.8).fill({ color: 0x3a2418, alpha: 0.95 });

@@ -107,6 +107,7 @@ function sendArena(w: World): void {
 
 function sendHeat(w: World): void {
   const temperature = Float32Array.from(w.farm.temperature);
+  const mould = w.farm.mouldy > 0 ? Float32Array.from(w.farm.mould) : null;
   post(
     {
       type: 'heat',
@@ -116,8 +117,9 @@ function sendHeat(w: World): void {
       temperature,
       mat: w.heatMat ? { ...w.heatMat } : null,
       room: w.params.roomTemperature,
+      mould,
     },
-    [temperature.buffer],
+    mould ? [temperature.buffer, mould.buffer] : [temperature.buffer],
   );
 }
 
@@ -138,8 +140,8 @@ onmessage = (e: MessageEvent<ToWorker>) => {
   const msg = e.data;
   if (msg.type === 'start') {
     // A keeper's room, a little cool for Lasius niger, with the heat mat under the middle of the farm.
-    // The soil dries unless the keeper waters it.
-    world = createWorld(msg.seed, { queen: true, params: { roomTemperature: PAGE_ROOM, waterFlow: true } });
+    // The soil dries unless the keeper waters it, and what is left to rot goes mouldy.
+    world = createWorld(msg.seed, { queen: true, params: { roomTemperature: PAGE_ROOM, waterFlow: true, mould: true } });
     setHeatMat(world, PAGE_MAT_X);
     // A first sugar drop, so a new tank has something to find.
     placeSugar(world, 100, 55, 40, 1);

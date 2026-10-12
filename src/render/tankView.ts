@@ -33,7 +33,7 @@ export class TankView {
     this.root.addChild(this.heat.mat);
     this.root.addChild(this.drawFarmFrame());
     this.root.addChild(this.soil);
-    this.root.addChild(this.heat.overlay);
+    this.root.addChild(this.heat.mould, this.heat.overlay);
     this.root.addChild(this.brood.root);
     this.farmAnts = new AntLayer(renderer, Place.farm);
     this.root.addChild(this.farmAnts.root);
