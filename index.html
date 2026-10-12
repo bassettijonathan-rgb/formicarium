@@ -18,6 +18,12 @@
       #hud button { background: #262b33; color: #d8dde3; border: 1px solid #3a404a; border-radius: 5px;
         padding: 3px 9px; font: inherit; cursor: pointer; }
       #hud button[aria-pressed='true'] { background: #3d4a5c; border-color: #6d84a3; }
+      #away { position: fixed; right: 12px; bottom: 12px; padding: 10px 12px; border-radius: 8px; width: min(360px, calc(100vw - 48px));
+        background: rgba(17, 19, 23, 0.9); border: 1px solid #3a404a; }
+      #away h2 { font-size: 15px; margin: 0 0 6px; font-weight: 600; }
+      #away p { margin: 3px 0; color: #c2cad4; }
+      #away button { margin-top: 8px; background: #262b33; color: #d8dde3; border: 1px solid #3a404a; border-radius: 5px;
+        padding: 3px 9px; font: inherit; cursor: pointer; }
     </style>
   </head>
   <body>
@@ -58,6 +64,7 @@
         <button id="new-tank">New tank</button>
       </div>
     </div>
+    <div id="away" hidden></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

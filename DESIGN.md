@@ -689,6 +689,37 @@ seed). The page shows the living workers, whether the queen lives, and the
 dead so far by cause. Seeds are not offered: Lasius niger hardly eats them;
 they come with a seed-harvesting species (M7).
 
+### 7.10 Keeping the tank (M6a)
+
+What M6a builds (`src/sim/keeper.ts`, `src/sim/save.ts`, `src/worker/store.ts`):
+
+1. **One tank, kept.** The page keeps one tank, as on a shelf, in the
+   browser's storage (IndexedDB). It is kept every 15 s while it runs and
+   when the page is hidden or closed, so at most a few seconds are lost.
+   Opening the page again opens the kept tank. Asking for another tank
+   (`?seed=N`, or the New tank button) asks first, since the kept colony
+   is lost.
+2. **What a save holds:** the seed, the keeper's log (every tool used, with
+   the step it was used at) and a snapshot of the world, which is plain
+   data stored as it is. The seed and the log rebuild the tank exactly
+   (`replayTank`); a test checks this, and that a tank loaded from a save
+   goes on exactly as it would have without being saved.
+3. **Saves outlive model changes.** State a save lacks (a model added
+   since) starts as in a new tank, state the model no longer has is
+   dropped, and the parameters are always the current model's: they are
+   the model, not the tank. A change that cannot be carried over raises
+   the save format; an old save is then set aside, not overwritten, and the
+   page says so.
+4. **Catching up (D7).** On reopening, the tank lives through the time it
+   was closed, at 1× (an hour away is a tank day), up to 3 tank days. It
+   runs as fast as it can, about a minute for 3 days with a young colony;
+   the page shows the progress and can skip the rest. It lives through it
+   even if it was paused, since a real tank does not pause.
+5. **The report.** Then the page says what happened while it was closed:
+   workers out of the cocoon, deaths by cause, the queen's death or the
+   colony's, the brood then and now, brood lost to drying or mould, mould
+   appearing or gone, food running out, nest dug and the soil drying.
+
 ---
 
 ## 8. Your role
@@ -1166,7 +1197,7 @@ Each milestone is one or a few small PRs, merged by Marco, with a link to play.
 | M3 | Colony life: queen, brood, development, trophallaxis, founding. In three PRs: M3a food flow (hunger, sharing, forager thresholds); M3b queen, brood and development, with the queen and brood as the heart of the nest (planned as M3c, brought forward by Marco 2026-10-11); M3c brood and the resting nest as the digging cue, folded into M3b (the digging cue itself is still open) |
 | M4 | Division of labour: response thresholds, age polyethism, brood sorting, midden. In three PRs: M4a fat, age and who forages (thresholds drift with each worker's fat; callows; protein delivered before going out); M4b brood sorting by stage; M4c corpses and the midden |
 | M5 | Tending: temperature, humidity, mould, feeding tools, colony death. In parts: M5a warmth (heat mat, temperature field, brood thermotaxis); M5b water (soil water, humidity, watering, brood drying out and hygrotaxis) and mould (prey and corpses); M5c colony death (hunger, drying out, heat) and the keeper's tools (clean the arena, damp overlay, new tank) |
-| M6 | Keeping it: saves, offline catch-up, ant inspector, graphs, timelapse |
+| M6 | Keeping it: saves, offline catch-up, ant inspector, graphs, timelapse. In parts: M6a saves and catching up while closed, with a report of what happened; M6b the ant inspector; M6c colony graphs and timelapse |
 | M7 | Optional extras: second colony and war, other species, nuptial flights |
 
 If a validation test in M1 or M2 cannot be made to pass with plausible
