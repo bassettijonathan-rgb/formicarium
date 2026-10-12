@@ -12,6 +12,7 @@
 import { type Arena, depositTrail, isBlocked, sampleTrail } from './arena';
 import type { Brood } from './brood';
 import type { Farm } from './farm';
+import { dieOfAge, holdCorpse, mayDropCorpse, tryPickUpCorpse } from './corpses';
 import { computeContacts, stepFarmAnt } from './farmAnts';
 import { type FoodDrop, dropRadius, foodQuality } from './food';
 import type { AntParams } from './params';
@@ -42,6 +43,10 @@ export const AntState = {
   sharing: 9,
   /** Carrying a brood item to where other brood lies (M3b). */
   carryingBrood: 10,
+  /** Carrying a corpse out of the nest, through the tube and away into the arena (M4c). */
+  carryingCorpse: 11,
+  /** Dead: a corpse, lying where it fell or where it was put down (M4c). */
+  dead: 12,
 } as const;
 
 export type AntState = (typeof AntState)[keyof typeof AntState];
@@ -165,6 +170,16 @@ export interface Ants {
   fat: Float64Array;
   /** Trips out of the farm to forage since the ant was born or poured in. */
   trips: Int32Array;
+  /** Workers: age at which the ant dies, tank days (0: never; M4c). */
+  lifespan: Float64Array;
+  /** The dead: tank days since death. */
+  deadFor: Float64Array;
+  /** The corpse the ant is carrying, or -1. */
+  corpseHeld: Int32Array;
+  /** The dead: the ant carrying this corpse, or -1. */
+  carriedBy: Int32Array;
+  /** Counts corpses picked up, put down or newly dead, so lookups know when corpses have moved. */
+  corpseVersion: number;
 }
 
 export function createAnts(count: number): Ants {
@@ -211,11 +226,16 @@ export function createAnts(count: number): Ants {
     age: new Float64Array(count),
     fat: new Float64Array(count),
     trips: new Int32Array(count),
+    lifespan: new Float64Array(count),
+    deadFor: new Float64Array(count),
+    corpseHeld: new Int32Array(count).fill(-1),
+    carriedBy: new Int32Array(count).fill(-1),
+    corpseVersion: 0,
   };
 }
 
 /** Array fields whose empty value is -1 rather than 0. */
-const MINUS_ONE: ReadonlySet<string> = new Set(['broodHeld', 'foodId', 'partner']);
+const MINUS_ONE: ReadonlySet<string> = new Set(['broodHeld', 'carriedBy', 'corpseHeld', 'foodId', 'partner']);
 
 /** Adds one ant at the end (a new worker eclosing) and returns its id. Every field starts empty. */
 export function addAnt(ants: Ants): number {
@@ -260,6 +280,8 @@ const MEMORY_RADIUS = 4;
 export const DT = 1 / STEPS_PER_SECOND;
 
 export interface AntContext {
+  /** The tank's seed, for streams drawn per ant (lifespans). */
+  seed: number;
   ants: Ants;
   arena: Arena;
   farm: Farm;
@@ -278,10 +300,18 @@ export function stepAnts(ctx: AntContext): void {
   else computeContacts(ctx);
   // Every worker burns the sugar in its crop on the life clock (D6); the lab nest has no metabolism.
   const burn = ctx.nestMode === 'farm' ? (params.burnRate / params.daySeconds) * DT : 0;
+  const days = DT / params.daySeconds;
   for (let i = 0; i < ants.count; i++) {
     const place = ants.place[i]!;
     if (place === Place.gone) continue;
-    if (ctx.nestMode === 'farm' && ants.caste[i] === Caste.worker) age(ctx, i);
+    if (ants.state[i] === AntState.dead) {
+      ants.deadFor[i]! += days;
+      continue;
+    }
+    if (ctx.nestMode === 'farm' && ants.caste[i] === Caste.worker) {
+      age(ctx, i);
+      if (dieOfAge(ctx, i)) continue;
+    }
     if (burn > 0 && ants.crop[i]! > 0) {
       // Sugar is burnt first; protein only once the sugar is gone.
       ants.crop[i] = Math.max(0, ants.crop[i]! - burn);
@@ -293,6 +323,7 @@ export function stepAnts(ctx: AntContext): void {
     else if (state === AntState.inNest) restInNest(ctx, i);
     else if (state === AntState.feeding) feed(ctx, i);
     else walk(ctx, i);
+    if (ants.corpseHeld[i]! >= 0) holdCorpse(ctx, i);
   }
 }
 
@@ -345,7 +376,7 @@ function walkTube(ctx: AntContext, i: number): void {
   // Out of the tube: path integration starts again from its mouth, the one landmark both ends share.
   ants.piX[i] = 0;
   ants.piY[i] = 0;
-  if (isOutbound(ants.state[i]!)) {
+  if (isOutbound(ants.state[i]!) || ants.state[i] === AntState.carryingCorpse) {
     ants.place[i] = Place.arena;
     ants.x[i] = arena.entranceX;
     ants.y[i] = arena.entranceY;
@@ -429,7 +460,8 @@ function walk(ctx: AntContext, i: number): void {
   const trailSum = trailL + trailR;
   // A scout out for protein with no insect in mind searches on its own: the trail leads to sugar as often as not.
   const scouting = state === AntState.exploring && ants.seekProtein[i] === 1;
-  if (!scouting && trailSum > params.trailThreshold) turn += params.trailTurn * DT * ((trailR - trailL) / trailSum);
+  const undertaker = state === AntState.carryingCorpse;
+  if (!scouting && !undertaker && trailSum > params.trailThreshold) turn += params.trailTurn * DT * ((trailR - trailL) / trailSum);
 
   // 3. Goals from path integration.
   const piDist = Math.hypot(ants.piX[i]!, ants.piY[i]!);
@@ -458,15 +490,16 @@ function walk(ctx: AntContext, i: number): void {
       goal = Math.atan2(dy, dx);
       goalStrength = params.goalTurn;
     }
-  } else if (state === AntState.exploring && piDist > 1) {
+  } else if ((state === AntState.exploring || undertaker) && piDist > 1) {
+    // Searching ants drift away from the nest; corpse carriers walk away from it (Diez et al. 2012).
     goal = Math.atan2(ants.piY[i]!, ants.piX[i]!);
-    goalStrength = params.outwardTurn;
+    goalStrength = undertaker ? params.goalTurn : params.outwardTurn;
   }
   if (goal !== undefined) {
     const off = goal - heading;
     turn += goalStrength * DT * Math.sin(off);
     // U-turns: an ant heading away from where it means to go sometimes turns right round.
-    if (state !== AntState.exploring) {
+    if (state !== AntState.exploring && !undertaker) {
       const away = -Math.cos(off);
       if (away > 0 && rng.chance(params.uTurnRate * away * DT)) turn += Math.PI;
     }
@@ -494,7 +527,9 @@ function walk(ctx: AntContext, i: number): void {
 
   // 8. Arrivals and decisions.
   const home = Math.hypot(nx - arena.entranceX, ny - arena.entranceY) < HOME_RADIUS;
-  if (now === AntState.returning || (now === AntState.homing && home)) {
+  if (now === AntState.carryingCorpse) {
+    mayDropCorpse(ctx, i);
+  } else if (now === AntState.returning || (now === AntState.homing && home)) {
     if (home) {
       if (ctx.nestMode === 'lab') enterNest(ctx, i);
       else enterTube(ctx, i);
@@ -506,6 +541,8 @@ function walk(ctx: AntContext, i: number): void {
       ants.state[i] = AntState.feeding;
       ants.foodId[i] = drop.id;
       ants.timer[i] = Math.round(params.feedTime * STEPS_PER_SECOND);
+    } else if ((now === AntState.exploring || now === AntState.homing) && tryPickUpCorpse(ctx, i)) {
+      // A searching or homing ant that comes on a corpse may take it away.
     } else if (now === AntState.exploring && rng.chance(DT / params.exploreTime)) {
       ants.state[i] = AntState.homing;
     }

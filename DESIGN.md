@@ -72,7 +72,7 @@ Each row has a recommendation. Approving the doc as written accepts all of them.
 | Development at 25 °C | egg ~16 days, larva ~12 days if fed, pupa ~14 days: first workers about 6 weeks after laying | Lasius niger, rough, from keepers' records at 24-27 °C; scaled by degree-days above 12 °C |
 | Larva's food | ~0.05 µL of protein-rich food over its stage | rough |
 | Queen's laying | up to ~10 eggs a tank day when fed, ~0.005 µL of protein per egg | rough, for a young colony |
-| Worker lifespan | ~1 year | queen ~15+ years (Lasius queens are famous for living 28) |
+| Worker lifespan | ~1 year: mean 310 tank days in the sim (M4c) | lab workers, Quque et al. 2023 (rough); queen ~15+ years (Lasius queens are famous for living 28), and does not die of age in the sim |
 
 ---
 
@@ -443,6 +443,25 @@ by, comes with the heat mat in M5. Food left inside too long grows **mould** tha
 spreads in damp soil and kills brood. Overfeeding is a real ant-keeping
 mistake, and the sim should punish it the same way.
 
+**Death and the midden (M4c).** Workers die of old age, each at an age drawn
+when it emerges from a Weibull distribution with a mean of 310 tank days and
+shape 3, so the risk of dying climbs steeply after the first months (about a
+year in the lab, Quque et al. 2023; rough). The queen does not die of age.
+A dead ant lies where it fell. For its first tank day it smells like a
+nestmate and is left alone; then the fatty acids of decay build up on it
+(Wilson et al. 1958), a cue felt only by touch. A worker that touches such a
+corpse picks it up, the less readily the more corpses lie round it, and
+carries it out the way a forager goes: up the fresh air, by the tube's
+draught and by its path integrator to the tube. In the arena it walks away
+from the entrance, as Lasius and Myrmica carriers do (Diez et al. 2012), and
+puts the corpse down now and then for no reason (0.012 per second, measured
+by Theraulaz et al. 2002) and much more readily where corpses already lie
+(Deneubourg et al. 1991). Nothing says where the midden is: corpses dropped
+at random draw more, and the arena's dead gather into a few piles, mostly
+against the far walls (section 9.7). A carrier that has not found the way
+out after 5 minutes puts its corpse down and another takes it up later.
+Refuse other than corpses (leftover prey) comes with mould in M5.
+
 ### 7.5 Who does what: fat, age and foraging (M4a)
 
 Nothing assigns a worker a job. Each has its own foraging threshold θ (M3a)
@@ -740,6 +759,46 @@ section 9.4, re-run with it, had 131, 133 and 136 workers on day 60 (139, 95
 and 156 without it). In one of them the queen ran out of protein from day 42
 and laid less, so its brood was smaller by the end.
 
+### 9.7 Results so far (cemetery formation and the midden, M4c)
+
+`npm run experiment -- cemetery [--corpses 200] [--no-piles]` and
+`midden`; `tests/science/cemetery.test.ts` checks seeds 1-3 (cemetery)
+and 1-2 (midden). Corpses dead long enough to smell of death are strewn at
+random over the 20 cm arena, with 40 workers in a lab nest behind the
+entrance; about a quarter of them are out at a time. A pile is 5 or more
+corpses within 5 mm of each other, directly or through others.
+
+| | Piles after 30 h (5 colonies) | Mean | Real (Theraulaz et al. 2002, 25 cm arena) | Share in piles at 1 h / 2 h / 30 h |
+|---|---|---|---|---|
+| 100 corpses | 2, 2, 1, 2, 2 | 1.8 | 1.73 | 66-76% / 94-97% / 100% |
+| 200 corpses | 2, 3, 2, 2, 2 | 2.2 | 2.07 | 56-71% / 84-96% / 99-100% |
+| Control: carriers ignore other corpses (100, 3 colonies) | 2-6 groups, changing hour to hour | | | 20-33% / 29-45% / 37-56% |
+
+The dead end up in about as many piles as Theraulaz et al. found, and with
+more corpses in slightly more piles, as they did. The piles form faster: most
+corpses are in piles within two hours, where in the real arenas the piles
+grew over most of a day; we do not know how many workers Theraulaz et al.
+had out, and more carriers gather corpses faster. Because carriers walk away
+from the nest, the piles lie against the far walls, mostly in the corners
+(mean distance from the entrance about 210 mm; strewn at random, 110 mm), as
+Diez et al. (2012) saw corpses taken to the remote parts of the foraging
+area. The control shows the walls are not what makes the piles: carriers
+that put corpses down regardless of other corpses still crowd them against
+the far walls, but in loose groups that come and go, never more than about
+half the dead in piles of 5.
+
+In the farm (`midden`), a colony of 60 settles in for 3 hours, then 10 of
+its resting workers die where they lie, in the nest. For the first hour (a
+tank day) the dead lie untouched; within the second, nearly all are carried
+up, through the tube and out into the arena (3 colonies: 10, 8 and 10 in the
+arena after 2 hours, and by 3 hours every corpse but one in one colony).
+Out there they end up in one or two piles in the
+far corners, about 210 mm from the entrance.
+
+Old age is slow at this scale: in the three 60-day colonies of section 9.4,
+re-run with M4c, 2, 4 and 3 workers died, every corpse was carried out to
+the arena, and the colonies still grew (157, 95 and 130 workers on day 60).
+
 ---
 
 ## 10. Architecture
@@ -793,6 +852,7 @@ parameters, I stop and report before changing the model.
 - Charbonneau & Dornhaus 2015. When doing nothing is something. J. Bioecon.
 - Deneubourg, Goss, Franks, Sendova-Franks, Detrain & Chrétien 1991. The dynamics of collective sorting: robot-like ants and ant-like robots. In From Animals to Animats (SAB 1990). MIT Press.
 - Depickère, Fresneau & Deneubourg 2004. Dynamics of aggregation in *Lasius niger* (Formicidae): influence of polyethism. Insectes Soc. 51, 81-90.
+- Diez, Deneubourg & Detrain 2012. Social prophylaxis through distant corpse removal in ants. Naturwissenschaften 99, 833-842.
 - Dussutour & Simpson 2009. Communal nutrition in ants. Curr. Biol.
 - Dussutour & Simpson 2012. Ant workers die young and colonies collapse when fed a high-protein diet. Proc. R. Soc. B.
 - Franks & Sendova-Franks 1992. Brood sorting by ants. Behav. Ecol. Sociobiol.

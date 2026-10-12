@@ -79,7 +79,12 @@ function sendArena(w: World): void {
   const trail = Float32Array.from(w.arena.trail);
   const wall = w.arena.wall.slice();
   let out = 0;
-  for (let i = 0; i < w.ants.count; i++) if (w.ants.place[i] === Place.arena || w.ants.place[i] === Place.tube) out++;
+  let alive = 0;
+  for (let i = 0; i < w.ants.count; i++) {
+    if (w.ants.place[i] === Place.gone || w.ants.state[i] === AntState.dead) continue;
+    alive++;
+    if (w.ants.place[i] === Place.arena || w.ants.place[i] === Place.tube) out++;
+  }
   post(
     {
       type: 'arena',
@@ -88,7 +93,7 @@ function sendArena(w: World): void {
       trail,
       wall,
       food: w.food.map((d) => ({ ...d })),
-      ants: w.ants.count,
+      ants: alive,
       out,
       stores: w.nestMode === 'farm' ? colonyCrop(w) : w.nest.stores,
     },

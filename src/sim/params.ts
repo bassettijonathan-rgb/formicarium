@@ -345,6 +345,42 @@ export interface AntParams {
   /** Ages of the workers the keeper starts with, tank days: drawn evenly between these (rough). */
   startAgeMin: number;
   startAgeMax: number;
+
+  /**
+   * Workers die of old age (M4c). Each worker's lifespan is drawn when it
+   * emerges (or, for the keeper's workers, given the age it already has)
+   * from a Weibull distribution with this mean, tank days, and shape: the
+   * risk of dying rises steeply with age, as in ageing ants. Lasius niger
+   * workers live about a year in the lab (Quque et al. 2023; rough); the
+   * queen does not die of age in the sim.
+   */
+  lifespanMean: number;
+  lifespanShape: number;
+  /**
+   * A corpse smells dead only after this long, tank days: workers ignore a
+   * fresh corpse until the fatty acids of decay build up on it (Wilson et al.
+   * 1958; rough). The cue is a contact cue, felt by the antennae.
+   */
+  corpseCueDays: number;
+  /**
+   * Corpse carrying after Deneubourg et al. (1991) and Theraulaz et al.
+   * (2002): a worker touching a corpse that smells dead picks it up at
+   * `corpsePickRate` per second times (`corpsePickHalf` / (`corpsePickHalf`
+   * + n))², and a carrier out of the nest puts it down at
+   * `corpseDropSpont` + `corpseDropRate` × (n / (`corpseDropHalf` + n))²
+   * per second, for n other corpses within `corpseSenseRadius` mm. Theraulaz
+   * et al. measured the spontaneous drop rate, 0.012/s; the others are rough.
+   */
+  corpsePickRate: number;
+  corpsePickHalf: number;
+  corpseDropRate: number;
+  corpseDropHalf: number;
+  corpseDropSpont: number;
+  corpseSenseRadius: number;
+  /** In the farm a carrier takes its corpse out to the tube; it gives up and drops it after this long, seconds (rough). */
+  corpseCarryMax: number;
+  /** False makes picking up and dropping ignore other corpses: the control for cemetery formation. */
+  corpseClustering: boolean;
 }
 
 export const DEFAULT_ANT_PARAMS: AntParams = {
@@ -469,4 +505,16 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   callowDays: 7,
   startAgeMin: 14,
   startAgeMax: 200,
+
+  lifespanMean: 310,
+  lifespanShape: 3,
+  corpseCueDays: 1,
+  corpsePickRate: 0.2,
+  corpsePickHalf: 6,
+  corpseDropRate: 1,
+  corpseDropHalf: 3,
+  corpseDropSpont: 0.012,
+  corpseSenseRadius: 5,
+  corpseCarryMax: 300,
+  corpseClustering: true,
 };
