@@ -11,7 +11,9 @@ export type ToWorker =
   /** The keeper removes all food from the arena. */
   | { type: 'clearFood' }
   /** The keeper puts the heat mat under the farm with its left edge at `x` mm, or takes it away (null). */
-  | { type: 'heatMat'; x: number | null };
+  | { type: 'heatMat'; x: number | null }
+  /** The keeper waters the farm from above at `x` mm (M5b). */
+  | { type: 'water'; x: number };
 
 /** Numbers per ant in `AntsSnapshot.ants`. */
 export const ANT_STRIDE = 7;

@@ -10,6 +10,7 @@
  */
 import { type Farm, addToField } from './farm';
 import { temperatureAt } from './heat';
+import { humidityAt } from './water';
 import type { AntParams } from './params';
 
 /** Stage of a brood item. Stored in saves, so append-only. */
@@ -37,6 +38,10 @@ export interface Brood {
   unfed: Float64Array;
   /** 1 while a worker carries the item. */
   carried: Uint8Array;
+  /** How long the item has lain in dry air, net of time in damp air, seconds of ant time (M5b). */
+  dry: Float64Array;
+  /** Brood that has died of drying out, since the tank was set up. */
+  dried: number;
 }
 
 export function createBrood(capacity = 0): Brood {
@@ -49,6 +54,8 @@ export function createBrood(capacity = 0): Brood {
     food: new Float64Array(capacity),
     unfed: new Float64Array(capacity),
     carried: new Uint8Array(capacity),
+    dry: new Float64Array(capacity),
+    dried: 0,
   };
 }
 
@@ -67,6 +74,7 @@ export function addBrood(brood: Brood, stage: BroodStage, x: number, y: number):
   brood.food[k] = 0;
   brood.unfed[k] = 0;
   brood.carried[k] = 0;
+  brood.dry[k] = 0;
   return k;
 }
 
@@ -83,6 +91,7 @@ function growBrood(brood: Brood, capacity: number): void {
   brood.food = grow(brood.food, (n) => new Float64Array(n));
   brood.unfed = grow(brood.unfed, (n) => new Float64Array(n));
   brood.carried = grow(brood.carried, (n) => new Uint8Array(n));
+  brood.dry = grow(brood.dry, (n) => new Float64Array(n));
 }
 
 /** Brood items of stage `from` or later within `radius` mm of (x, y), not counting item `skip` or items being carried. */
@@ -151,7 +160,7 @@ export function larvaHungry(brood: Brood, k: number, params: AntParams): boolean
  * Advances every item's development by `seconds` of ant time. Eggs hatch
  * into larvae; larvae eat their food as they grow and stop when it runs out;
  * pupae reach the point of eclosion and wait for a worker to help them out
- * of the cocoon (see `farmAnts.ts`).
+ * of the cocoon (see `farmAnts.ts`). Brood left in dry air dies.
  */
 export function stepBrood(brood: Brood, farm: Farm, params: AntParams, seconds: number): void {
   const days = seconds / params.daySeconds;
@@ -163,6 +172,14 @@ export function stepBrood(brood: Brood, farm: Farm, params: AntParams, seconds: 
     const egg = stageRate(params.eggDays, params, celsius) * days;
     const larva = stageRate(params.larvaDays, params, celsius) * days;
     const pupa = stageRate(params.pupaDays, params, celsius) * days;
+    // Brood in dry air loses water and dies in about `broodDryDays` (once put down); damp air lets it recover (M5b).
+    const damp = humidityAt(farm, brood.x[k]!, brood.y[k]!) >= params.broodDryHumidity;
+    brood.dry[k] = damp ? Math.max(0, brood.dry[k]! - seconds) : brood.dry[k]! + seconds;
+    if (brood.dry[k]! > params.broodDryDays * params.daySeconds && !brood.carried[k]) {
+      brood.stage[k] = BroodStage.none;
+      brood.dried++;
+      continue;
+    }
     if (stage === BroodStage.egg) {
       brood.progress[k]! += egg;
       if (brood.progress[k]! >= 1) {

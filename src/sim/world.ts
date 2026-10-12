@@ -14,6 +14,7 @@ import { type AntParams, DEFAULT_ANT_PARAMS } from './params';
 import { Purpose, Rng } from './rng';
 import { stepSoil } from './soil';
 import { type HeatMat, MAT_WIDTH, updateTemperature } from './heat';
+import { pourWater, updateHumidity, updateWater } from './water';
 import { STEPS_PER_SECOND } from './time';
 
 export type { Farm } from './farm';
@@ -62,6 +63,7 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
   const params = { ...DEFAULT_ANT_PARAMS, ...options.params };
   const farm = createFarm(new Rng(seed, Purpose.soil));
   farm.temperature.fill(params.roomTemperature);
+  if (params.waterFlow) updateHumidity(farm, params);
   const ants = createAnts(options.ants ?? 60);
   giveTraits(ants, params, seed);
   if (nestMode === 'farm') {
@@ -138,6 +140,8 @@ const EVAPORATE_EVERY = STEPS_PER_SECOND;
 /** The farm's chemical fields update every few seconds; they change slowly. */
 const FARM_FIELDS_EVERY = 2 * STEPS_PER_SECOND;
 const FARM_TRAIL_EVERY = 5 * STEPS_PER_SECOND;
+/** Soil water moves slowly (life clock); every 10 s of ant time is a 360th of a tank day. A multiple of `FARM_FIELDS_EVERY`. */
+const WATER_EVERY = 10 * STEPS_PER_SECOND;
 
 /** Advances the world by one step (1/20 s of ant time). */
 export function step(world: World): void {
@@ -168,6 +172,7 @@ export function step(world: World): void {
       updateField(farm, farm.digMark, seconds, params.digMarkHalfLife, 0);
       updateFresh(farm);
       updateTemperature(farm, world.heatMat, params, seconds);
+      if (world.step % WATER_EVERY === 0) updateWater(farm, params, WATER_EVERY / STEPS_PER_SECOND);
       stepBrood(world.brood, farm, params, seconds);
       scentBrood(world.brood, farm, params, seconds);
       updateField(farm, farm.broodScent, seconds, params.broodScentHalfLife, params.broodScentDiffusion, true);
@@ -268,6 +273,11 @@ export function addCorpse(world: World, place: Place, x: number, y: number, dead
 /** The keeper puts the heat mat under the farm with its left edge at `x` mm, or takes it away (null). */
 export function setHeatMat(world: World, x: number | null): void {
   world.heatMat = x === null ? null : { x: Math.max(0, Math.min(world.farm.width - MAT_WIDTH, x)), width: MAT_WIDTH };
+}
+
+/** The keeper waters the farm from above at `x` mm (M5b). Returns the water the soil took up, µL. */
+export function water(world: World, x: number): number {
+  return pourWater(world.farm, world.params, x);
 }
 
 /** Takes a drop away (the keeper cleaning up, or an experiment removing food). */

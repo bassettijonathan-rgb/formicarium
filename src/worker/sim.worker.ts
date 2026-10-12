@@ -7,7 +7,7 @@ import { AntState, Caste, Place } from '../sim/ants';
 import { BroodStage } from '../sim/brood';
 import { STEPS_PER_SECOND } from '../sim/time';
 import { FIELD_CELL } from '../sim/farm';
-import { colonyCrop, createWorld, placeProtein, placeSugar, removeFood, setHeatMat, step, type World } from '../sim/world';
+import { colonyCrop, createWorld, placeProtein, placeSugar, removeFood, setHeatMat, step, water, type World } from '../sim/world';
 import { ANT_STRIDE, type FromWorker, type ToWorker } from './protocol';
 
 const INTERVAL_MS = 50;
@@ -129,6 +129,7 @@ function applyPending(w: World): boolean {
     else if (msg.type === 'protein') placeProtein(w, msg.x, msg.y, msg.volume);
     else if (msg.type === 'clearFood') for (const d of [...w.food]) removeFood(w, d.id);
     else if (msg.type === 'heatMat') setHeatMat(w, msg.x);
+    else if (msg.type === 'water') water(w, msg.x);
   }
   return any;
 }
@@ -137,7 +138,8 @@ onmessage = (e: MessageEvent<ToWorker>) => {
   const msg = e.data;
   if (msg.type === 'start') {
     // A keeper's room, a little cool for Lasius niger, with the heat mat under the middle of the farm.
-    world = createWorld(msg.seed, { queen: true, params: { roomTemperature: PAGE_ROOM } });
+    // The soil dries unless the keeper waters it.
+    world = createWorld(msg.seed, { queen: true, params: { roomTemperature: PAGE_ROOM, waterFlow: true } });
     setHeatMat(world, PAGE_MAT_X);
     // A first sugar drop, so a new tank has something to find.
     placeSugar(world, 100, 55, 40, 1);

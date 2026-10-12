@@ -9,7 +9,7 @@
  * keeper's mat makes a warm corner rather than a warm farm. The arena and the
  * tube are at room temperature.
  */
-import { type Farm, FIELD_CELL } from './farm';
+import { type Farm, FIELD_CELL, smoothAt } from './farm';
 import type { AntParams } from './params';
 
 /** Where the keeper has put the heat mat: under the farm's bottom edge from `x` to `x + width`, mm. */
@@ -55,23 +55,9 @@ export function updateTemperature(farm: Farm, mat: HeatMat | null, params: AntPa
   }
 }
 
-/** Temperature at (x, y) in the farm, °C, interpolated between field-cell centres (edges held at the edge cells). */
+/** Temperature at (x, y) in the farm, °C, interpolated between field-cell centres. */
 export function temperatureAt(farm: Farm, x: number, y: number): number {
-  const w = farm.fieldWidth;
-  const h = farm.fieldHeight;
-  const fx = Math.min(w - 1, Math.max(0, x / FIELD_CELL - 0.5));
-  const fy = Math.min(h - 1, Math.max(0, y / FIELD_CELL - 0.5));
-  const x0 = Math.min(w - 2, Math.floor(fx));
-  const y0 = Math.min(h - 2, Math.floor(fy));
-  const tx = fx - x0;
-  const ty = fy - y0;
-  const t = farm.temperature;
-  const i = y0 * w + x0;
-  // Where the four cells agree (a farm at one temperature) the value is exact.
-  if (t[i] === t[i + 1] && t[i] === t[i + w] && t[i] === t[i + w + 1]) return t[i]!;
-  return (
-    t[i]! * (1 - tx) * (1 - ty) + t[i + 1]! * tx * (1 - ty) + t[i + w]! * (1 - tx) * ty + t[i + w + 1]! * tx * ty
-  );
+  return smoothAt(farm, farm.temperature, x, y);
 }
 
 /** Walking speed at temperature `celsius`, mm/s: it doubles every `speedDoubling` °C (Hurlbert et al. 2008). */

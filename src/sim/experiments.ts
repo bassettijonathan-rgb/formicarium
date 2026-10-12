@@ -8,12 +8,13 @@ import { BroodStage, addBrood, broodCounts } from './brood';
 import { isLiveWorker } from './corpses';
 import { FIELD_CELL, excavatedArea } from './farm';
 import { temperatureAt } from './heat';
+import { humidityAt } from './water';
 import { Material } from './materials';
 import { Purpose, Rng } from './rng';
 import { doubleBridge, foodChoice, Tally } from './lab';
 import type { AntParams } from './params';
 import { STEPS_PER_SECOND } from './time';
-import { addCorpse, colonyCrop, createWorld, killAnt, setHeatMat, placeProtein, placeSugar, removeAnt, removeFood, step, type World } from './world';
+import { addCorpse, colonyCrop, createWorld, killAnt, setHeatMat, placeProtein, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
 
 export interface RunOptions {
   seed: number;
@@ -215,7 +216,15 @@ export interface GrowthDay {
   crops: number;
   /** Mean temperature where the brood lies, °C (NaN with no brood). */
   broodTemperature: number;
+  /** Mean relative humidity where the brood lies, 0-1 (NaN with no brood), and brood dead of drying out so far (M5b). */
+  broodHumidity: number;
+  dried: number;
+  /** Water in the farm's soil, mean fraction of saturation. */
+  soilWater: number;
 }
+
+/** Where the keeper of the growth runs pours water: three taps along the farm, mm. */
+const KEEPER_POURS = [50, 150, 250];
 
 /**
  * Colony growth (DESIGN.md section 7.1): a queen and her workers in the
@@ -223,7 +232,9 @@ export interface GrowthDay {
  * false (the control), a crushed insect every tank day. Reports the brood
  * and workers at the end of each day.
  */
-export function runColonyGrowth(opts: RunOptions & { days: number; protein?: boolean; matX?: number }): GrowthDay[] {
+export function runColonyGrowth(
+  opts: RunOptions & { days: number; protein?: boolean; matX?: number; waterEvery?: number },
+): GrowthDay[] {
   const world = createWorld(opts.seed, { ants: opts.ants ?? 60, queen: true, params: opts.params ?? {} });
   if (opts.matX !== undefined) setHeatMat(world, opts.matX);
   const { params } = world;
@@ -235,6 +246,8 @@ export function runColonyGrowth(opts: RunOptions & { days: number; protein?: boo
     world.food = [];
     placeSugar(world, 60, y - 15, 40, 1);
     if (opts.protein !== false) placeProtein(world, 60, y + 15, 10);
+    // With `waterEvery`, the keeper also waters the farm every so many days (M5b).
+    if (opts.waterEvery && day > 1 && (day - 1) % opts.waterEvery === 0) for (const x of KEEPER_POURS) water(world, x);
     for (let s = 0; s < daySteps; s++) step(world);
     let workers = 0;
     let reserve = 0;
@@ -251,11 +264,20 @@ export function runColonyGrowth(opts: RunOptions & { days: number; protein?: boo
       } else if (world.ants.caste[i] === Caste.queen) reserve = world.ants.reserve[i]!;
     }
     let warmth = 0;
+    let damp = 0;
     let items = 0;
     for (let k = 0; k < world.brood.count; k++) {
       if (world.brood.stage[k] === BroodStage.none) continue;
       warmth += temperatureAt(world.farm, world.brood.x[k]!, world.brood.y[k]!);
+      damp += humidityAt(world.farm, world.brood.x[k]!, world.brood.y[k]!);
       items++;
+    }
+    let soil = 0;
+    let cells = 0;
+    for (let i = 0; i < world.farm.material.length; i++) {
+      if (world.farm.material[i] === Material.air) continue;
+      soil += world.farm.moisture[i]!;
+      cells++;
     }
     out.push({
       day,
@@ -266,6 +288,9 @@ export function runColonyGrowth(opts: RunOptions & { days: number; protein?: boo
       reserve,
       crops: crop / workers / params.cropLoad,
       broodTemperature: warmth / items,
+      broodHumidity: damp / items,
+      dried: world.brood.dried,
+      soilWater: soil / cells / 255,
     });
   }
   return out;
@@ -670,4 +695,55 @@ export function runBroodWarmth(opts: RunOptions & { hours: number; cold?: number
     nearByHour.push(m.near);
   }
   return { meanByHour, nearByHour };
+}
+
+export interface DampResult {
+  /** Mean relative humidity where the brood lies, at the start and at the end of each hour. */
+  meanByHour: number[];
+  /** Share of the brood lying in air at least nearly as humid as nurses keep it (`broodHumidity` less 5 points), likewise. */
+  dampByHour: number[];
+}
+
+/**
+ * Brood in a humidity gradient (M5b): the closed chamber of the brood
+ * experiments, its air at `dry` relative humidity at one end and `damp` at
+ * the other, held there (`waterFlow` off). Nurses carry the brood to where
+ * the air is as damp as they keep it.
+ */
+export function runBroodDamp(opts: RunOptions & { hours: number; dry?: number; damp?: number }): DampResult {
+  const { world, x0, x1 } = broodChamber(opts);
+  const { brood, farm, params } = world;
+  const dry = opts.dry ?? 0.6;
+  const damp = opts.damp ?? 1;
+  for (let fy = 0; fy < farm.fieldHeight; fy++) {
+    for (let fx = 0; fx < farm.fieldWidth; fx++) {
+      const x = (fx + 0.5) * FIELD_CELL;
+      const f = Math.min(1, Math.max(0, (x - x0) / (x1 - x0)));
+      farm.humidity[fy * farm.fieldWidth + fx] = dry + (damp - dry) * f;
+    }
+  }
+  const measure = () => {
+    let sum = 0;
+    let wet = 0;
+    let n = 0;
+    for (let k = 0; k < brood.count; k++) {
+      if (brood.stage[k] === BroodStage.none) continue;
+      const rh = humidityAt(farm, brood.x[k]!, brood.y[k]!);
+      sum += rh;
+      if (rh >= params.broodHumidity - 0.05) wet++;
+      n++;
+    }
+    return { mean: sum / n, damp: wet / n };
+  };
+  const first = measure();
+  const meanByHour = [first.mean];
+  const dampByHour = [first.damp];
+  const hourSteps = 3600 * STEPS_PER_SECOND;
+  for (let h = 0; h < opts.hours; h++) {
+    for (let s = 0; s < hourSteps; s++) step(world);
+    const m = measure();
+    meanByHour.push(m.mean);
+    dampByHour.push(m.damp);
+  }
+  return { meanByHour, dampByHour };
 }

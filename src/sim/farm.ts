@@ -14,6 +14,16 @@ import { FARM_HEIGHT, FARM_WIDTH, HEADSPACE, TUBE } from './tank';
 /** Size of a chemical-field cell, mm. */
 export const FIELD_CELL = 2;
 
+/**
+ * Water in freshly poured soil, which has drained for a while: it rises by
+ * this fraction of saturation from the surface to the bottom of the farm, and
+ * each material holds `RETENTION` more (clay) or less (sand) than loam. The
+ * soil-water model of M5b takes this drained state as the one water settles back to.
+ */
+export const DRAINED_RISE = 0.35;
+/** Indexed by `Material`. */
+export const RETENTION = [0, -0.12, 0, 0.12];
+
 export interface Farm {
   width: number;
   height: number;
@@ -49,6 +59,10 @@ export interface Farm {
   trail: Float64Array;
   /** Temperature per field cell, °C (M5a; see heat.ts). */
   temperature: Float64Array;
+  /** Relative humidity of the air per field cell, 0-1 (M5b; see water.ts). */
+  humidity: Float64Array;
+  /** Water per cell not yet whole units of `moisture`, carried between updates so none is lost to rounding (M5b). */
+  moistureRest: Float32Array;
   /** Where the tube opens into the farm, mm. */
   tubeX: number;
   tubeY: number;
@@ -84,8 +98,7 @@ export function createFarm(rng: Rng): Farm {
 
       // Water drains down, and clay holds more of it than sand.
       const depth = (y - surface[x]!) / (height - surface[x]!);
-      const retention = m === Material.clay ? 0.12 : m === Material.sand ? -0.12 : 0;
-      const w = 0.3 + 0.35 * depth + retention + 0.15 * (wetness(x, y) - 0.5);
+      const w = 0.3 + DRAINED_RISE * depth + RETENTION[m]! + 0.15 * (wetness(x, y) - 0.5);
       moisture[i] = Math.round(255 * Math.min(1, Math.max(0, w)));
     }
   }
@@ -108,6 +121,8 @@ export function createFarm(rng: Rng): Farm {
     fresh: new Float64Array(fieldWidth * fieldHeight),
     trail: new Float64Array(width * height),
     temperature: new Float64Array(fieldWidth * fieldHeight),
+    humidity: new Float64Array(fieldWidth * fieldHeight).fill(1),
+    moistureRest: new Float32Array(width * height),
     tubeX: width - 1.5,
     tubeY: TUBE.farmY,
   };
@@ -122,6 +137,28 @@ export function excavatedArea(farm: Farm): number {
     for (let y = farm.surface[x]!; y < farm.height; y++) if (farm.material[y * farm.width + x] === Material.air) area++;
   }
   return area;
+}
+
+/**
+ * The value of a field-grid `field` at (x, y), interpolated between field-cell
+ * centres (edges held at the edge cells). Where the four cells round (x, y)
+ * agree, the value is exact.
+ */
+export function smoothAt(farm: Farm, field: Float64Array, x: number, y: number): number {
+  const w = farm.fieldWidth;
+  const h = farm.fieldHeight;
+  const fx = Math.min(w - 1, Math.max(0, x / FIELD_CELL - 0.5));
+  const fy = Math.min(h - 1, Math.max(0, y / FIELD_CELL - 0.5));
+  const x0 = Math.min(w - 2, Math.floor(fx));
+  const y0 = Math.min(h - 2, Math.floor(fy));
+  const tx = fx - x0;
+  const ty = fy - y0;
+  const t = field;
+  const i = y0 * w + x0;
+  if (t[i] === t[i + 1] && t[i] === t[i + w] && t[i] === t[i + w + 1]) return t[i]!;
+  return (
+    t[i]! * (1 - tx) * (1 - ty) + t[i + 1]! * tx * (1 - ty) + t[i + w]! * (1 - tx) * ty + t[i + w + 1]! * tx * ty
+  );
 }
 
 /** True if cell (cx, cy) is not walkable: soil, or the glass frame and lid around the farm. */

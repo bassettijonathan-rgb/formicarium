@@ -546,6 +546,58 @@ What M5a builds (`src/sim/heat.ts`):
 Metabolism does not yet depend on temperature, and nothing yet dies of heat
 or cold; overheating comes with colony death in M5c.
 
+### 7.7 Water (M5b)
+
+What M5b builds (`src/sim/water.ts`). It runs on the life clock (D6), like
+brood development, because a farm dries over days, not minutes.
+
+1. **Water seeps through the soil** from cell to cell down its water
+   potential: wetter soil gives to drier, gravity pulls water down, and clay
+   holds more than sand at the same potential. Left alone, soil settles back
+   to the drained state it is poured in (section 3.2: wetter with depth,
+   clay wetter than sand). Water seeps at 50 mm² per tank day, far slower
+   than through real damp sand, to keep the update cheap (rough); dry soil
+   passes it slower still (its pores have emptied), so a dry crust slows
+   further drying, as in real soil.
+2. **It evaporates where soil meets the air**, at up to a whole saturation
+   per tank day from a wet face open to the headspace at 25 °C (rough: set so
+   the top of an unwatered farm dries in a few days and the depths hardly
+   change in a month), twice as fast every 12 °C warmer (the vapour
+   pressure of water, Tetens 1930), and slower down the tunnels, in
+   proportion to how much fresh air reaches the face (section 4.1). A face
+   stops giving water once its pores' air dries. So the surface dries
+   first, the soil over the heat mat faster, and the deep nest last.
+3. **Dry soil is weak.** A ceiling that dries is checked again; dry sand
+   spans only a quarter of what damp sand does (section 3.2), so the
+   tunnels of an unwatered farm cave in.
+4. **The air's humidity follows the soil**, on the 2 mm grid. The air in
+   soil pores is saturated until the soil is nearly dry (below 5% of
+   saturation, rough). The headspace under the lid is one body of air: it
+   takes up water from the soil surface and loses it to the room (50%
+   humidity) through the lid's vents, which sets it a quarter of the way
+   from the surface's pores to the room (rough): 88% over a damp surface,
+   less as the surface dries. Air in the tunnels has the humidity of the
+   soil around it, mixed with the headspace's as far as fresh air reaches.
+5. **The keeper waters the farm** with the Water tool: tap the farm and
+   1 mL soaks into the soil below, deepest under the pour, wetting each cell
+   it reaches up to 70% of saturation (field capacity, rough). One cell of
+   a farm 5 mm thick with 40% pore space holds 2 µL.
+6. **Brood dries out.** An egg, larva or pupa that has lain in air drier
+   than 75% humidity for a tank day (net of time in damp air) dies (rough:
+   keepers find brood shrivels within a day in a dry nest).
+7. **Nurses carry brood to damp air.** As with warmth, a nurse feels the
+   humidity at its antennae and body and notices differences of 2% (rough:
+   insect hygroreceptors respond to changes of a few percent). Brood lying
+   in air drier than 90% is picked up sooner where the nurse feels which way
+   is damper, and carriers turn towards the damper side and hold on to
+   their loads while they still feel damper air ahead (the same strengths
+   as for warmth; the stronger of the two pulls counts).
+
+With water flow off, the farm stays as poured and its air saturated: the
+earlier milestones ran this way, the experiments still do unless they say
+otherwise, and with it off the colony behaves exactly as before M5b
+(checked bit for bit). The page turns it on.
+
 ---
 
 ## 8. Your role
@@ -592,6 +644,8 @@ project. If one fails, we fix the model, not the test.
    feeding itself.
 10. **Brood thermotaxis** (Roces & Núñez 1989): in a temperature gradient,
    nurses carry the brood to the temperature they keep it at.
+11. **Brood hygrotaxis** (M5b; a qualitative check, as keepers describe it):
+   in a humidity gradient, nurses carry the brood to damp air.
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -866,6 +920,45 @@ which way is warmer. Real colonies nest down onto a mat's warmth; here the
 colony would have to dig down to it first. Whether the patch should reach
 further (a warmer mat, or slower loss through the glass) is open.
 
+### 9.9 Results so far (water, M5b)
+
+**Brood hygrotaxis.** `npm run experiment -- damp [--no-hygro]`;
+`tests/science/damp.test.ts` checks seeds 1-3. The closed chamber of
+section 9.6, its air held at 60% humidity at one end and saturated at the
+other, with 15 eggs, 15 larvae and 15 pupae strewn through it.
+
+| | Mean humidity at the brood, start → 1 h → 2 h | In air of 85% or more, start → 1 h → 2 h |
+|---|---|---|
+| Seed 1 | 80% → 92% → 92% | 29% → 100% → 100% |
+| Seed 2 | 79% → 96% → 96% | 38% → 100% → 100% |
+| Seed 3 | 78% → 94% → 94% | 29% → 100% → 100% |
+| Control: nurses ignore humidity | 78-80% → 75-84% → 82-86% | 29-38% → 13-33% → 29-46% |
+
+With a coarser sense of humidity, first tried (differences of 5% rather
+than 2%), one chamber in three kept a third of its brood in the dry: the
+gradient here is gentle, and antennae 2 mm apart feel well under 1% across it.
+
+**A colony that is watered, and one that is not.** Section 9.4's colonies
+on the page's terms (room at 22 °C, mat under the middle), with the soil's
+water moving, for 30 tank days; `npm run experiment -- growth --days 30
+--room 22 --mat 110 --soil-water` (unwatered) or `--water 5` (the keeper
+pours 1 mL at each of three spots every 5 days).
+
+| | Brood dead of drying out by day 30 | Eggs + larvae on day 30 | Soil water on day 30 |
+|---|---|---|---|
+| Unwatered, seeds 1-3 | 23, 79, 73 | 13, 25, 23 | 35-38% |
+| Watered every 5 days, seeds 1-3 | 0, 25, 23 | 83, 45, 104 | 42-43% |
+
+An unwatered farm loses only a few percent of its water in a month, but
+it loses it from the surface, where this colony keeps its brood: its nest
+at 22 °C is a shallow pit open to the headspace (section 9.8), so the brood
+lies in the headspace's air, which dries with the surface. Eggs are what
+die, mostly in piles round the queen. Watering keeps the surface damp, and
+the colonies raise three to eight times as much brood. A first version gave
+air with no soil near it the room's humidity; then even watered colonies
+lost their egg piles in the open pit, until the headspace was made one
+body of air between the surface's and the room's (section 7.7).
+
 ---
 
 ## 10. Architecture
@@ -897,7 +990,7 @@ Each milestone is one or a few small PRs, merged by Marco, with a link to play.
 | M2 | Soil and digging: side-view farm, soil physics, ants dig tunnels and chambers that scale with colony size |
 | M3 | Colony life: queen, brood, development, trophallaxis, founding. In three PRs: M3a food flow (hunger, sharing, forager thresholds); M3b queen, brood and development, with the queen and brood as the heart of the nest (planned as M3c, brought forward by Marco 2026-10-11); M3c brood and the resting nest as the digging cue, folded into M3b (the digging cue itself is still open) |
 | M4 | Division of labour: response thresholds, age polyethism, brood sorting, midden. In three PRs: M4a fat, age and who forages (thresholds drift with each worker's fat; callows; protein delivered before going out); M4b brood sorting by stage; M4c corpses and the midden |
-| M5 | Tending: temperature, humidity, mould, feeding tools, colony death. In parts: M5a warmth (heat mat, temperature field, brood thermotaxis); M5b water and mould; M5c colony death and the keeper's tools |
+| M5 | Tending: temperature, humidity, mould, feeding tools, colony death. In parts: M5a warmth (heat mat, temperature field, brood thermotaxis); M5b water (soil water, humidity, watering, brood drying out and hygrotaxis) and mould (prey and corpses); M5c colony death and the keeper's tools |
 | M6 | Keeping it: saves, offline catch-up, ant inspector, graphs, timelapse |
 | M7 | Optional extras: second colony and war, other species, nuptial flights |
 
