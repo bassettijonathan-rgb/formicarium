@@ -5,17 +5,19 @@
  *   npm run experiment -- symmetric | choice | equal-choice | decay
  *   npm run experiment -- nest [--ants 40] [--hours 12] [--no-crowd]
  *   npm run experiment -- spread [--ants 50] [--minutes 60] [--no-sharing] [--satiated]
- *   npm run experiment -- growth [--days 50] [--no-protein] [--room 22] [--mat 110]
+ *   npm run experiment -- growth [--days 50] [--no-protein] [--room 22] [--mat 110] [--soil-water | --water 5]
  *   npm run experiment -- division [--days 4] [--after 6] [--no-fat]
  *   npm run experiment -- sorting [--hours 3] [--mixed]
  *   npm run experiment -- cemetery [--hours 30] [--corpses 100] [--no-piles]
  *   npm run experiment -- midden [--hours 3]
  *   npm run experiment -- warmth [--hours 3] [--no-thermo]
+ *   npm run experiment -- damp [--hours 3] [--no-hygro]
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
  */
 import type { AntParams } from '../src/sim/params';
 import {
   runBroodSorting,
+  runBroodDamp,
   runBroodWarmth,
   runCemetery,
   runColonyGrowth,
@@ -40,6 +42,7 @@ let after = 6;
 let protein = true;
 let corpses = 100;
 let matX: number | undefined;
+let waterEvery = 0;
 const params: Partial<AntParams> = {};
 for (let i = 0; i < rest.length; i++) {
   if (rest[i] === '--runs') runs = Number(rest[++i]);
@@ -60,6 +63,12 @@ for (let i = 0; i < rest.length; i++) {
   else if (rest[i] === '--corpses') corpses = Number(rest[++i]);
   else if (rest[i] === '--no-piles') params.corpseClustering = false;
   else if (rest[i] === '--no-thermo') params.thermotaxis = false;
+  else if (rest[i] === '--soil-water') params.waterFlow = true;
+  else if (rest[i] === '--no-hygro') params.hygrotaxis = false;
+  else if (rest[i] === '--water') {
+    waterEvery = Number(rest[++i]);
+    params.waterFlow = true;
+  }
   else if (rest[i] === '--mixed') {
     // The control of section 9.6: count brood of every stage, as piling does.
     params.broodOtherWeight = 1;
@@ -104,7 +113,15 @@ for (let seed = first; seed < first + runs; seed++) {
     );
   } else if (name === 'growth') {
     const length = days || 50;
-    const r = runColonyGrowth({ seed, ants: ants || 60, days: length, protein, params, ...(matX === undefined ? {} : { matX }) });
+    const r = runColonyGrowth({
+      seed,
+      ants: ants || 60,
+      days: length,
+      protein,
+      params,
+      waterEvery,
+      ...(matX === undefined ? {} : { matX }),
+    });
     const every = Math.max(1, Math.round(length / 10));
     const rows = r.filter((d) => d.day % every === 0 || d.day === length);
     console.log(
@@ -113,7 +130,8 @@ for (let seed = first; seed < first + runs; seed++) {
           .map(
             (d) =>
               `d${d.day} ${d.eggs}e ${d.larvae}l ${d.pupae}p ${d.workers}w ${d.dead} dead (${d.deadInFarm} in) ` +
-              `q${d.reserve.toFixed(2)} c${Math.round(100 * d.crops)}% ${d.broodTemperature.toFixed(1)}°C`,
+              `q${d.reserve.toFixed(2)} c${Math.round(100 * d.crops)}% ${d.broodTemperature.toFixed(1)}°C` +
+              (params.waterFlow ? ` RH${Math.round(100 * d.broodHumidity)}% ${d.dried} dried soil ${pct(d.soilWater)}` : ''),
           )
           .join(' | '),
     );
@@ -158,9 +176,15 @@ for (let seed = first; seed < first + runs; seed++) {
       `seed ${seed}: mean brood temperature by hour ${r.meanByHour.map((t) => t.toFixed(1)).join(' ')} °C; ` +
         `within 2 °C of the preferred ${r.nearByHour.map(pct).join(' ')}`,
     );
+  } else if (name === 'damp') {
+    const r = runBroodDamp({ seed, hours: hours || 3, ...(ants ? { ants } : {}), params });
+    console.log(
+      `seed ${seed}: mean humidity at the brood by hour ${r.meanByHour.map(pct).join(' ')}; ` +
+        `in air damp enough ${r.dampByHour.map(pct).join(' ')}`,
+    );
   } else {
     throw new Error(
-      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden or warmth',
+      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth or damp',
     );
   }
 }

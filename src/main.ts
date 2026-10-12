@@ -5,7 +5,7 @@
 import { Application } from 'pixi.js';
 import { Camera } from './render/camera';
 import { ARENA_X, TankView } from './render/tankView';
-import { ARENA_SIZE } from './sim/tank';
+import { ARENA_SIZE, FARM_HEIGHT, FARM_WIDTH } from './sim/tank';
 import { formatAntTime } from './sim/time';
 import { BroodStage } from './sim/brood';
 import { BROOD_STRIDE, type FromWorker, type ToWorker } from './worker/protocol';
@@ -65,10 +65,15 @@ async function start(): Promise<void> {
     view.farmAnts.update(now);
   });
 
-  // Feeding: tap the arena floor to put a drop (or an insect) there.
+  // Feeding: tap the arena floor to put a drop (or an insect) there. Watering: with the Water tool, tap the farm.
   let food = '1';
+  let watering = false;
   camera.onTap = (px, py) => {
     const p = view.root.toLocal({ x: px, y: py });
+    if (watering && p.x >= 0 && p.x < FARM_WIDTH && p.y >= 0 && p.y < FARM_HEIGHT) {
+      send({ type: 'water', x: p.x });
+      return;
+    }
     const x = p.x - ARENA_X;
     const y = p.y;
     if (x > 2 && y > 2 && x < ARENA_SIZE - 2 && y < ARENA_SIZE - 2) {
@@ -84,6 +89,11 @@ async function start(): Promise<void> {
     });
   }
   document.getElementById('clear')!.addEventListener('click', () => send({ type: 'clearFood' }));
+  const waterButton = document.getElementById('water')!;
+  waterButton.addEventListener('click', () => {
+    watering = waterButton.getAttribute('aria-pressed') !== 'true';
+    waterButton.setAttribute('aria-pressed', String(watering));
+  });
   const trailsButton = document.getElementById('trails')!;
   trailsButton.addEventListener('click', () => {
     const on = trailsButton.getAttribute('aria-pressed') !== 'true';

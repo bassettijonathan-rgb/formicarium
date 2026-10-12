@@ -432,6 +432,67 @@ export interface AntParams {
   thermoHold: number;
   /** False: nurses ignore temperature (the control for brood thermotaxis). */
   thermotaxis: boolean;
+
+  // --- Water (M5b) ---
+
+  /**
+   * True: the soil's water moves. It seeps from wet soil to dry, drains down,
+   * evaporates where soil meets the air, and the air's humidity follows the
+   * soil. False keeps the farm as it was poured, its air saturated: M1-M5a
+   * ran this way, and so do the experiments unless they say otherwise.
+   */
+  waterFlow: boolean;
+  /**
+   * How fast a soil face open to the headspace dries while it is wet: a
+   * fraction of saturation per tank day at 25 °C (rough: set so the top of an
+   * unwatered farm dries in a few days, the deep nest in a few weeks, as
+   * keepers find). Faces inside tunnels dry slower, the less fresh air reaches them.
+   */
+  evaporation: number;
+  /**
+   * Evaporation doubles for every this many °C warmer, about 12: the
+   * saturation vapour pressure of water is 3.2 kPa at 25 °C and 6.3 kPa at
+   * 37 °C (Clausius-Clapeyron; Tetens 1930).
+   */
+  vapourDoubling: number;
+  /**
+   * How fast water seeps through the soil from wet to dry, mm² per tank day
+   * (rough, and slow: damp sand passes water hundreds of times faster, but a
+   * faster scheme costs more steps. So a drying face crusts over before water
+   * from deep in the soil reaches it, which real soil does too, only later).
+   */
+  seepage: number;
+  /** Soil drier than this (fraction of saturation) passes water less, in proportion: a dry crust slows drying (rough). */
+  seepDry: number;
+  /**
+   * Air in soil is saturated with water vapour until the soil is nearly dry;
+   * below this water content (fraction of saturation) its humidity falls in
+   * proportion (rough: sandy soil holds a few percent of water at the point
+   * where its air starts to dry).
+   */
+  airDryBelow: number;
+  /** Relative humidity of the room, 0-1. */
+  roomHumidity: number;
+  /** The headspace's humidity lies this far from the soil surface's towards the room's: how much the lid's vents let it mix, 0-1 (rough). */
+  ventilation: number;
+  /**
+   * Water a keeper pours with one tap of the Water tool, µL. It soaks the
+   * soil below, column by column, up to `fieldCapacity`. One cell of a farm
+   * 5 mm thick with 40% pore space holds 2 µL when saturated.
+   */
+  pourVolume: number;
+  /** Soil holds water up to this fraction of saturation against gravity; more drains away (rough). */
+  fieldCapacity: number;
+  /** Brood lying in air drier than this relative humidity dries out (rough). */
+  broodDryHumidity: number;
+  /** Tank days in dry air that kill an egg, larva or pupa (rough: keepers find eggs shrivel within a day). */
+  broodDryDays: number;
+  /** Nurses carry brood to air at least this humid (rough: brood chambers are kept near saturation). */
+  broodHumidity: number;
+  /** The smallest difference in relative humidity an ant notices across its antennae, 0-1 (rough: insect hygroreceptors respond to changes of a few percent). */
+  hygroSense: number;
+  /** False: nurses ignore humidity (the control for brood hygrotaxis). */
+  hygrotaxis: boolean;
 }
 
 export const DEFAULT_ANT_PARAMS: AntParams = {
@@ -581,4 +642,20 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   thermoPick: 4,
   thermoHold: 9,
   thermotaxis: true,
+
+  waterFlow: false,
+  evaporation: 1,
+  vapourDoubling: 12,
+  seepage: 50,
+  seepDry: 0.15,
+  airDryBelow: 0.05,
+  roomHumidity: 0.5,
+  ventilation: 0.25,
+  pourVolume: 1000,
+  fieldCapacity: 0.7,
+  broodDryHumidity: 0.75,
+  broodDryDays: 1,
+  broodHumidity: 0.9,
+  hygroSense: 0.02,
+  hygrotaxis: true,
 };
