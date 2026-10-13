@@ -51,7 +51,7 @@ Each row has a recommendation. Approving the doc as written accepts all of them.
 | D6 | Two clocks | Ants **move in real time** (1 s of sim = 1 s of ant life at 1x). Development (egg to adult, queen laying rate, ageing) runs **compressed**, default 1 real day of the tank = 1 hour of play, adjustable. Every ratio inside each clock stays real. | One clock: real Lasius takes ~2 months egg to worker and years to grow, too slow to watch. |
 | D7 | Does the tank live while the tab is closed? | **Yes, capped.** On reopening, the sim catches up headless at max speed for the time you were away, up to 3 tank-days, then shows a short log of what happened ("12 workers eclosed, mould in chamber 3"). | Paused while closed (no aquarium feeling). |
 | D8 | Scale | Tank 30 x 20 cm at 1 mm cells (300 x 200 soil grid), arena 20 x 20 cm (40 x 30 cm from L2, section 3.3; the validation experiments keep 20 x 20). Up to **2,000 ants** at 60 fps. Real Lasius colonies reach 10,000+; this is a young colony, which is what ant farms hold anyway. | Bigger tanks later if performance allows. |
-| D9 | What can you do? | Feed (sugar water, protein: insects, seeds), water the soil, move the heat mat, add fresh soil, clean the arena, start a new tank. Observation tools: pheromone and temperature overlays, follow an ant, ant inspector with its life history, colony graphs, timelapse. | Interventions like "introduce a second colony" or "add a predator" are M7, after the core is solid. |
+| D9 | What can you do? | Feed (sugar water, protein: insects, seeds), water the soil (since 2026-10-13 the farm waters itself, section 7.7), move the heat mat, add fresh soil, clean the arena, start a new tank. Observation tools: pheromone and temperature overlays, follow an ant, ant inspector with its life history, colony graphs, timelapse. | Interventions like "introduce a second colony" or "add a predator" are M7, after the core is solid. |
 | D10 | Can the colony die? | **Yes.** Starvation, drying out, overheating, mould, or the queen dying of age. A dead tank stays viewable with its history. | Invulnerable queen. |
 | D11 | Rendering | **PixiJS (WebGL)**: ants drawn by code (head, thorax, waist, gaster, elbowed antennae, six legs in a tripod gait), smooth zoom from the whole tank down to one ant's legs, cheap overlays such as glowing trails. Soil and smell layers are uploaded from typed arrays as textures. Chosen by Marco 2026-10-11. | Canvas 2D: simpler, but about 2,000 animated ants is its limit and smooth zoom and glow are costly. |
 | D12 | Repo | A **new repo** (e.g. `bassettijonathan-rgb/formicarium`), deployed to GitHub Pages so you can open the tank from a link. You create it once you approve this doc. | Reuse colony repo. |
@@ -84,7 +84,7 @@ Each row has a recommendation. Approving the doc as written accepts all of them.
   moisture 0-1, packed/loose flag.
 - **Temperature:** diffuses from the heat mat and room; soil conducts, air
   less so. Ants move brood along it.
-- **Humidity:** from soil moisture; dries over time unless watered.
+- **Humidity:** from soil moisture. The page's farm waters itself and never dries (section 7.7); in the experiments soil can dry unless watered.
 - **Pheromone fields** (section 5): trail, alarm, building, nest odour, and
   the necrophoric cue from corpses.
 
@@ -613,7 +613,18 @@ brood development, because a farm dries over days, not minutes.
    from the surface's pores to the room (rough): 88% over a damp surface,
    less as the surface dries. Air in the tunnels has the humidity of the
    soil around it, mixed with the headspace's as far as fresh air reaches.
-5. **The keeper waters the farm** with the Water tool: tap the farm and
+5. **The farm waters itself** on the page (`selfWatering`; Marco's choice,
+   2026-10-13: "I don't like to have to water the formicarium. I think it's
+   better if the humidity is always optimal"). A reservoir under the sand
+   tops every soil cell back up to the drained state it was poured in, the
+   profile a water table at the bottom of the farm holds (section 3.2:
+   wetter with depth, clay wetter than sand). Water still seeps and
+   evaporates, so wetter patches settle and the surface gives water to the
+   headspace, but no cell dries below its drained state: the nest's air
+   stays saturated, the headspace at 88%, brood and adults never dry out,
+   and tunnels never cave in from drying. A tank saved before this is wetted
+   back up when it is next opened. Without it (the experiments with water
+   flow on), the keeper waters the farm: tap the farm and
    1 mL soaks into the soil below, deepest under the pour, wetting each cell
    it reaches up to 70% of saturation (field capacity, rough). One cell of
    a farm 5 mm thick with 40% pore space holds 2 µL.
@@ -631,7 +642,8 @@ brood development, because a farm dries over days, not minutes.
 With water flow off, the farm stays as poured and its air saturated: the
 earlier milestones ran this way, the experiments still do unless they say
 otherwise, and with it off the colony behaves exactly as before M5b
-(checked bit for bit). The page turns it on.
+(checked bit for bit). The page turns it on, with the farm watering itself
+(item 5).
 
 ### 7.8 Mould (M5b)
 
@@ -718,9 +730,10 @@ All this is `mortal`, off in the experiments unless they say otherwise
 
 The keeper's tools (section 8) on the page after M5c: food (rich or weak
 sugar, an insect), clear food, **clean the arena** (the dead lying there and
-food gone mouldy are taken out; fresh food stays), the heat mat, water,
+food gone mouldy are taken out; fresh food stays), the heat mat,
 overlays for trails, warmth and **damp**, and **a new tank** (the next
-seed). The page shows the living workers, whether the queen lives, and the
+seed). The Water tool was taken off the page on 2026-10-13, when the farm
+began to water itself (section 7.7). The page shows the living workers, whether the queen lives, and the
 dead so far by cause. Seeds are not offered: Lasius niger hardly eats them;
 they come with a seed-harvesting species (M7).
 
@@ -809,7 +822,7 @@ Tools on the left, overlays on the right. Every tool is an ordinary command
 logged with its tick, which keeps saves deterministic and replayable.
 
 - **Feed:** drop sugar drop, insect piece or seeds in the arena.
-- **Water:** wet a region of soil.
+- **Water:** wet a region of soil (off the page since the farm waters itself, section 7.7; kept as a command for old saves and the experiments).
 - **Heat mat:** drag along the bottom; ants move brood along the gradient.
 - **Clean:** remove refuse and old food from the arena.
 - **Look:** pheromone overlay per field, temperature, humidity; click an ant to

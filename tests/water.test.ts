@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { AntState } from '../src/sim/ants';
 import { BroodStage, addBrood, createBrood, stepBrood } from '../src/sim/brood';
 import { type Farm, updateFresh } from '../src/sim/farm';
+import { createTank } from '../src/sim/keeper';
 import { Material } from '../src/sim/materials';
 import { type AntParams, DEFAULT_ANT_PARAMS } from '../src/sim/params';
 import { Purpose, Rng } from '../src/sim/rng';
 import { stepSoil } from '../src/sim/soil';
 import { STEPS_PER_SECOND } from '../src/sim/time';
-import { POUR_WIDTH, humidityAt, pourWater, updateHumidity, updateWater } from '../src/sim/water';
+import { POUR_WIDTH, drainedWater, humidityAt, pourWater, updateHumidity, updateWater } from '../src/sim/water';
 import { createWorld, step, water } from '../src/sim/world';
 
 const WET: Partial<AntParams> = { waterFlow: true };
@@ -39,6 +40,17 @@ function totalWater(farm: Farm): number {
   let sum = 0;
   for (let i = 0; i < farm.material.length; i++) if (farm.material[i] !== Material.air) sum += farm.moisture[i]! + farm.moistureRest[i]!;
   return sum;
+}
+
+/** How far the driest soil cell is below its drained water, fraction of saturation (0 or less: none is drier). */
+function belowDrained(farm: Farm): number {
+  let worst = -Infinity;
+  for (let i = 0; i < farm.material.length; i++) {
+    const m = farm.material[i]! as Material;
+    if (m === Material.air) continue;
+    worst = Math.max(worst, drainedWater(m, Math.floor(i / farm.width)) - farm.moisture[i]! / 255);
+  }
+  return worst;
 }
 
 function airCells(farm: Farm, x0: number, y0: number, x1: number, y1: number): number {
@@ -216,6 +228,36 @@ describe('water (M5b)', () => {
       if (ants.x[0]! > 150) damper++;
     }
     expect(damper).toBeGreaterThanOrEqual(16);
+  }, 300_000);
+
+  it('a self-watering farm never dries, even warm, and its headspace stays damp', () => {
+    const w = createWorld(1, { ants: 0, params: { ...WET, selfWatering: true } });
+    const { farm, params } = w;
+    farm.temperature.fill(35);
+    const deep = band(farm, 80, 200);
+    soak(farm, params, 4);
+    // No cell drier than the drained soil it was poured as (within rounding), the depths as they were.
+    expect(belowDrained(farm)).toBeLessThanOrEqual(0.5 / 255);
+    expect(band(farm, 0, 2)).toBeGreaterThan(0.15);
+    expect(Math.abs(band(farm, 80, 200) - deep)).toBeLessThan(0.03);
+    // The headspace stays as damp as over freshly poured soil, the nest's air saturated.
+    const damp = 1 + (params.roomHumidity - 1) * params.ventilation;
+    expect(humidityAt(farm, 150, 2)).toBeCloseTo(damp, 5);
+    expect(humidityAt(farm, 150, 150)).toBe(1);
+  }, 300_000);
+
+  it('the page\'s tank waters itself', () => {
+    const { params } = createTank(1);
+    expect(params.waterFlow && params.selfWatering).toBe(true);
+  });
+
+  it('a farm that has already dried is topped back up at its next update (an old tank loaded)', () => {
+    const w = createWorld(1, { ants: 0, params: { ...WET, selfWatering: true } });
+    w.farm.moisture.fill(0);
+    expect(belowDrained(w.farm)).toBeGreaterThan(0.1);
+    updateWater(w.farm, w.params, 10);
+    expect(belowDrained(w.farm)).toBeLessThanOrEqual(0.5 / 255);
+    expect(Math.min(...w.farm.humidity)).toBeGreaterThan(0.85);
   }, 300_000);
 
   it('humidity is recomputed from the soil when the farm is set up with water flow on', () => {

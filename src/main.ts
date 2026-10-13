@@ -7,7 +7,6 @@ import { Application } from 'pixi.js';
 import { Camera } from './render/camera';
 import { TankView } from './render/tankView';
 import { ArenaLayer } from './render/arenaLayer';
-import { FARM_HEIGHT, FARM_WIDTH } from './sim/tank';
 import { STEPS_PER_SECOND, formatAntTime } from './sim/time';
 import type { KeeperCommand } from './sim/keeper';
 import type { AntCard } from './sim/inspect';
@@ -287,21 +286,16 @@ async function start(): Promise<void> {
     }
   });
 
-  // Feeding: tap the arena floor to put a drop (or an insect) there. Watering: with the Water tool, tap the farm.
+  // Feeding: tap the arena floor to put a drop (or an insect) there. The farm waters itself.
   let food = '1';
-  let watering = false;
   camera.onTap = (px, py) => {
     const p = view.root.toLocal({ x: px, y: py });
     // A tap on an ant (within a finger's width) opens the inspector on it.
     const reach = Math.max(1.5, 14 / camera.scale);
     let ant = view.farmAnts.nearest(p.x, p.y, reach);
     if (ant < 0) ant = view.arena.ants.nearest(p.x, p.y, reach);
-    if (ant >= 0 && !watering) {
+    if (ant >= 0) {
       inspect(ant);
-      return;
-    }
-    if (watering && p.x >= 0 && p.x < FARM_WIDTH && p.y >= 0 && p.y < FARM_HEIGHT) {
-      command({ type: 'water', x: p.x });
       return;
     }
     // The point on the arena's floor under the tap (the worker refuses food put on a stone).
@@ -322,11 +316,6 @@ async function start(): Promise<void> {
   document.getElementById('clean')!.addEventListener('click', () => command({ type: 'clean' }));
   document.getElementById('new-tank')!.addEventListener('click', () => {
     if (confirm(`Start a new tank? The colony in tank ${seed} will be lost.`)) location.search = `?seed=${seed + 1}&new`;
-  });
-  const waterButton = document.getElementById('water')!;
-  waterButton.addEventListener('click', () => {
-    watering = waterButton.getAttribute('aria-pressed') !== 'true';
-    waterButton.setAttribute('aria-pressed', String(watering));
   });
   const trailsButton = document.getElementById('trails')!;
   trailsButton.addEventListener('click', () => {
