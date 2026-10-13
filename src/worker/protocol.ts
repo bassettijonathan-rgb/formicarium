@@ -58,7 +58,7 @@ export interface ArenaSnapshot {
   trail: Float32Array;
   /** The stones, bark, water tube, leaves, twigs and moss on the floor (DESIGN.md A4). */
   decor: Decoration[];
-  food: { id: number; x: number; y: number; volume: number; concentration: number; protein: number; mouldy: boolean }[];
+  food: { id: number; x: number; y: number; volume: number; concentration: number; protein: number; mouldy: boolean; reach?: number }[];
   /** All workers; those out foraging (in the arena or the tube); sugar water in the colony's crops (µL). */
   ants: number;
   out: number;

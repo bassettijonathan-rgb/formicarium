@@ -56,7 +56,7 @@
       <p id="status">Setting up the tank…</p>
       <p id="counts"></p>
       <p id="outside"></p>
-      <p>Tap an ant to inspect and follow it. Tap the arena floor to put down a drop of sugar water. Drag to move, scroll or pinch to zoom.</p>
+      <p>Tap an ant to inspect and follow it. Tap the arena floor or a feeding dish to put down a drop of sugar water. Drag to move, scroll or pinch to zoom.</p>
       <div class="row">
         <button data-sugar="1" aria-pressed="true">Rich sugar (1 M)</button>
         <button data-sugar="0.1">Weak sugar (0.1 M)</button>
@@ -66,6 +66,18 @@
         <button id="trails" aria-pressed="true">Show trails</button>
         <button id="from-above" aria-pressed="false">Arena from above</button>
       </div>
+      <div class="row">
+        <span style="align-self: center; color: #9aa4b1">Put in the arena:</span>
+        <button data-put="dish">Feeding dish</button>
+        <button data-put="feeder">Sugar feeder</button>
+        <button data-put="stone">Stone</button>
+        <button data-put="bark">Cork bark</button>
+        <button data-put="branch">Branch</button>
+        <button data-put="move">Move</button>
+        <button data-put="remove">Take out</button>
+        <button id="refill">Refill feeders</button>
+      </div>
+      <p id="put-hint" hidden></p>
       <div class="row">
         <span style="align-self: center; color: #9aa4b1">Heat mat:</span>
         <button data-mat="off">Off</button>

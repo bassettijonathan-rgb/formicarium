@@ -9,6 +9,8 @@ import { TankView } from './render/tankView';
 import { ArenaLayer } from './render/arenaLayer';
 import { STEPS_PER_SECOND, formatAntTime } from './sim/time';
 import type { KeeperCommand } from './sim/keeper';
+import type { Item } from './sim/objects';
+import { type Decoration, decorationAt } from './sim/decor';
 import type { AntCard } from './sim/inspect';
 import { drawGraphs } from './ui/graphs';
 import { Timelapse } from './ui/timelapse';
@@ -85,6 +87,8 @@ async function start(): Promise<void> {
 
   /** The step at which the colony died out, or -1 while it lives (from the arena snapshots). */
   let diedOut = -1;
+  /** After the keeper puts in or moves an object: the decorations as they were, until the snapshots show whether it fitted. */
+  let fitCheck: { before: readonly Decoration[]; snapshots: number } | null = null;
   const worker = new Worker(new URL('./worker/sim.worker.ts', import.meta.url), { type: 'module' });
   const send = (msg: ToWorker) => worker.postMessage(msg);
   const command = (c: KeeperCommand) => send({ type: 'command', command: c });
@@ -128,6 +132,11 @@ async function start(): Promise<void> {
       view.heat.setHeat(msg);
     } else if (msg.type === 'arena') {
       view.arena.setArena(msg);
+      if (fitCheck && view.arena.decorations !== fitCheck.before) fitCheck = null;
+      else if (fitCheck && ++fitCheck.snapshots >= 3) {
+        fitCheck = null;
+        showPutHint("That doesn't fit there: things can't cover the tube's mouth, touch the glass, or stand on each other or on food.", 5000);
+      }
       diedOut = msg.diedOut;
       const d = msg.deaths;
       const died = [
@@ -288,8 +297,69 @@ async function start(): Promise<void> {
 
   // Feeding: tap the arena floor to put a drop (or an insect) there. The farm waters itself.
   let food = '1';
+  // The keeper's objects (DESIGN.md B3): with a tool chosen, the next tap puts an object in, or picks one to move or take out.
+  let tool: string | null = null;
+  /** The decoration picked to move, waiting for the tap that says where it goes. */
+  let moving = -1;
+  const putButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-put]')];
+  const putHint = document.getElementById('put-hint')!;
+  let hintTimer = 0;
+  /** Shows a line under the object buttons (none if empty), for `ms` or until the next one. */
+  function showPutHint(text: string, ms = 0): void {
+    window.clearTimeout(hintTimer);
+    putHint.textContent = text;
+    putHint.hidden = text === '';
+    if (ms > 0) hintTimer = window.setTimeout(() => (putHint.hidden = true), ms);
+  }
+  const NAMES: Record<string, string> = { stone: 'stone', bark: 'cork bark', tube: 'water tube', dish: 'feeding dish', feeder: 'sugar feeder', branch: 'branch', twig: 'twig', leaf: 'leaf', moss: 'moss' };
+  const chooseTool = (next: string | null, hint = '') => {
+    tool = next;
+    moving = -1;
+    for (const b of putButtons) b.setAttribute('aria-pressed', String(b.dataset.put === next));
+    showPutHint(hint);
+  };
+  for (const button of putButtons) {
+    button.addEventListener('click', () => {
+      const put = button.dataset.put!;
+      if (tool === put) chooseTool(null);
+      else if (put === 'move') chooseTool(put, 'Tap the thing to move.');
+      else if (put === 'remove') chooseTool(put, 'Tap the thing to take out.');
+      else chooseTool(put, `Tap where the ${NAMES[put]} should go. It can't cover the tube's mouth or stand on something else.`);
+    });
+  }
+  /** The decoration seen under a tap, or -1. */
+  const picked = (p: { x: number; y: number }) => {
+    const { u, v } = view.arena.surfaceAt(p.x, p.y);
+    return decorationAt([...view.arena.decorations], u, v);
+  };
+  /** A keeper's tap with an object tool chosen. */
+  const useTool = (p: { x: number; y: number }) => {
+    const { u: x, v: y } = view.arena.toFloor(p.x, p.y);
+    if (tool === 'move' && moving < 0) {
+      moving = picked(p);
+      const d = view.arena.decorations[moving];
+      if (d) {
+        putHint.textContent = `Tap where the ${NAMES[d.kind]} should go.`;
+        return;
+      }
+    } else if (tool === 'move') {
+      fitCheck = { before: view.arena.decorations, snapshots: 0 };
+      command({ type: 'move', index: moving, x, y });
+    } else if (tool === 'remove') {
+      const k = picked(p);
+      if (k >= 0) command({ type: 'remove', index: k });
+    } else if (tool) {
+      fitCheck = { before: view.arena.decorations, snapshots: 0 };
+      command({ type: 'put', item: tool as Item, x, y, concentration: food === 'protein' ? 1 : Number(food) });
+    }
+    chooseTool(null);
+  };
   camera.onTap = (px, py) => {
     const p = view.root.toLocal({ x: px, y: py });
+    if (tool) {
+      useTool(p);
+      return;
+    }
     // A tap on an ant (within a finger's width) opens the inspector on it.
     const reach = Math.max(1.5, 14 / camera.scale);
     let ant = view.farmAnts.nearest(p.x, p.y, reach);
@@ -298,13 +368,15 @@ async function start(): Promise<void> {
       inspect(ant);
       return;
     }
-    // The point on the arena's floor under the tap (the worker refuses food put on a stone).
-    const { u: x, v: y } = view.arena.toFloor(p.x, p.y);
+    // The point of the arena under the tap: on the floor, or in a dish (the worker refuses food put on a stone).
+    const { u: x, v: y } = view.arena.surfaceAt(p.x, p.y);
     if (x > 2 && y > 2 && x < view.arena.floorWidth - 2 && y < view.arena.floorHeight - 2) {
       if (food === 'protein') command({ type: 'protein', x, y, volume: INSECT_VOLUME });
       else command({ type: 'sugar', x, y, volume: DROP_VOLUME, concentration: Number(food) });
     }
   };
+  // The liquid feeders filled with the sugar chosen above (rich if an insect is chosen).
+  document.getElementById('refill')!.addEventListener('click', () => command({ type: 'refill', concentration: food === 'protein' ? 1 : Number(food) }));
   const sugarButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-sugar]')];
   for (const button of sugarButtons) {
     button.addEventListener('click', () => {

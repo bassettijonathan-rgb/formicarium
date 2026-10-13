@@ -17,11 +17,21 @@ export interface FoodDrop {
   /** Insects: how long it has lain, in tank days at 25 °C (M5b), and whether it has gone mouldy; ants leave mouldy food. */
   age: number;
   mouldy: boolean;
+  /**
+   * The sugar water in a liquid feeder (B5): how far from its middle ants can
+   * drink, mm (the wet cotton plug's face), instead of the drop's own size.
+   */
+  reach?: number;
 }
 
 /** Radius of a drop sitting on the floor as a hemisphere, mm. */
 export function dropRadius(volume: number): number {
   return Math.cbrt((3 * volume) / (2 * Math.PI));
+}
+
+/** How far from its middle an ant can drink from the food, mm: a drop's radius, or a feeder's cotton. */
+export function foodReach(drop: Pick<FoodDrop, 'volume' | 'reach'>): number {
+  return drop.reach ?? dropRadius(drop.volume);
 }
 
 /**

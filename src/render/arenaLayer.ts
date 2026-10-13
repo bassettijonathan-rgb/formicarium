@@ -9,8 +9,8 @@
  */
 import { Container, Graphics, PerspectiveMesh, type Renderer, Texture } from 'pixi.js';
 import { Place } from '../sim/ants';
-import { type Decoration, buildRelief } from '../sim/decor';
-import { dropRadius } from '../sim/food';
+import { DISH_WALL, type Decoration, buildRelief, standing } from '../sim/decor';
+import { foodReach } from '../sim/food';
 import { TANK_ARENA, TUBE } from '../sim/tank';
 import type { ArenaSnapshot } from '../worker/protocol';
 import { AntLayer } from './antLayer';
@@ -43,6 +43,10 @@ export class ArenaLayer {
   private readonly floor: PerspectiveMesh;
   private readonly trail: PerspectiveMesh;
   private readonly food = new Graphics();
+  /** Low things the ants walk into and food lies in (the feeding dishes), under the food and the ants. */
+  private readonly low = new Graphics();
+  /** The sugar water in each liquid feeder, redrawn as the ants drink it, by the feeder's index in `decor`. */
+  private feederLiquid = new Map<number, Graphics>();
   /** The stones, bark and tube standing on the floor, sorted with the ants. */
   private obstacles: Graphics[] = [];
   private readonly front = new Graphics();
@@ -64,7 +68,7 @@ export class ArenaLayer {
     this.floor = new PerspectiveMesh({ texture: Texture.WHITE, verticesX: 24, verticesY: 24 });
     this.trail = new PerspectiveMesh({ texture: Texture.EMPTY, verticesX: 24, verticesY: 24 });
     this.trail.alpha = 0.6;
-    this.root.addChild(this.back, this.floor, this.trail, this.food, this.ants.root, this.front);
+    this.root.addChild(this.back, this.floor, this.trail, this.low, this.food, this.ants.root, this.front);
     this.layout();
   }
 
@@ -87,6 +91,27 @@ export class ArenaLayer {
   /** The floor point (arena mm) under a scene point, for taps. */
   toFloor(x: number, y: number): { u: number; v: number } {
     return this.projection.toFloor(x, y);
+  }
+
+  /** The decorations as last drawn, in the tank's order (the keeper's move and take-out commands name them by index). */
+  get decorations(): readonly Decoration[] {
+    return this.decor;
+  }
+
+  /**
+   * The point of the arena (mm) seen at a scene point: on top of a stone, the
+   * bark or a dish if one is in the way, else on the floor. A raised surface
+   * shows higher up the screen than the floor under it, so this looks along
+   * the floor in front of the floor point for the nearest ground tall enough
+   * to reach up to the tapped point.
+   */
+  surfaceAt(x: number, y: number): { u: number; v: number } {
+    const floor = this.projection.toFloor(x, y);
+    for (let v = Math.min(this.height, floor.v + 80); v > floor.v; v -= 0.25) {
+      const h = this.heightAt(floor.u, v);
+      if (h > 0 && this.projection.toScene(floor.u, v, h).y <= y) return { u: floor.u, v };
+    }
+    return floor;
   }
 
   /** Where lines on the desk running away from the viewer meet in the angled view, for drawing the desk to match. */
@@ -134,6 +159,7 @@ export class ArenaLayer {
     }
     this.drawTrail(snapshot);
     this.drawFood(snapshot);
+    this.drawFeederLevels(snapshot);
   }
 
   private makeProjection(tilt: number): Projection {
@@ -201,10 +227,9 @@ export class ArenaLayer {
     if (cx < 0 || cy < 0 || cx >= this.width || cy >= this.height) return y;
     const k = this.standing[cy * this.width + cx] ?? 0;
     if (k === 0) return y;
-    // Only the stones, the bark and the tube stand up, and they are drawn at their middle's y.
-    const d = this.decor[k - 1] as Extract<Decoration, { kind: 'stone' | 'bark' | 'tube' }>;
-    const top = d.kind === 'tube' ? 2 * d.radius : d.height;
-    if (y >= d.y || this.heightAt(x, y) > 0.5 * top) return d.y + 0.5;
+    // What stands up is drawn at its middle's y.
+    const { y: middle, top } = standing(this.decor[k - 1]!);
+    if (y >= middle || this.heightAt(x, y) > 0.5 * top) return middle + 0.5;
     return y;
   }
 
@@ -278,19 +303,118 @@ export class ArenaLayer {
     edge(front, [W, 0, H], [W, D, H], 0.6);
   }
 
-  /** The stones, the bark and the water tube, standing up from the floor. */
+  /** The stones, the bark, the tubes and branches standing up from the floor, and the feeding dishes. */
   private drawObstacles(): void {
-    for (const g of this.obstacles) g.destroy();
+    for (const g of this.obstacles) g.destroy({ children: true });
     this.obstacles = [];
-    for (const d of this.decor) {
+    this.feederLiquid.clear();
+    this.low.clear();
+    this.decor.forEach((d, k) => {
       let g: Graphics | null = null;
       if (d.kind === 'stone') g = this.stone(d);
       else if (d.kind === 'bark') g = this.bark(d);
       else if (d.kind === 'tube') g = this.waterTube(d);
-      if (!g) continue;
+      else if (d.kind === 'branch') g = this.branch(d);
+      else if (d.kind === 'feeder') g = this.feeder(d, k);
+      else if (d.kind === 'dish') this.dish(d);
+      if (!g) return;
       this.obstacles.push(g);
       this.ants.root.addChild(g);
+    });
+    if (this.last) this.drawFeederLevels(this.last);
+  }
+
+  /** A shallow clear plastic dish (B4): its floor, the wall's inner face, and the rim. Low enough to draw under the ants. */
+  private dish(d: Extract<Decoration, { kind: 'dish' }>): void {
+    const g = this.low;
+    const p = this.projection;
+    const ring = (r: number, h: number): number[] => {
+      const pts: number[] = [];
+      for (let k = 0; k < 40; k++) {
+        const a = (2 * Math.PI * k) / 40;
+        const q = p.toScene(d.x + r * Math.cos(a), d.y + r * Math.sin(a), h);
+        pts.push(q.x, q.y);
+      }
+      return pts;
+    };
+    const k = p.toScene(d.x, d.y).k;
+    g.poly(ring(d.radius + 1.5, 0)).fill({ color: 0x3a2a18, alpha: 0.18 });
+    g.poly(ring(d.radius, d.rim)).fill({ color: 0xe9eef0, alpha: 0.55 });
+    g.poly(ring(d.radius - DISH_WALL, d.base)).fill({ color: 0xf4f7f8, alpha: 0.75 });
+    g.poly(ring(d.radius - DISH_WALL * 0.5, d.rim)).stroke({ color: 0xffffff, alpha: 0.9, width: DISH_WALL * k });
+  }
+
+  /** The liquid feeder (B5): a glass test tube lying on the floor, sugar water behind a cotton plug. */
+  private feeder(d: Extract<Decoration, { kind: 'feeder' }>, index: number): Graphics {
+    const g = new Graphics();
+    const p = this.projection;
+    const r = d.radius;
+    const line = (x0: number, x1: number, h: number, dv: number, width: number, colour: number, alpha: number) => {
+      const a = p.toScene(x0, d.y + dv, h);
+      const b = p.toScene(x1, d.y + dv, h);
+      g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ color: colour, alpha, width: width * a.k, cap: 'round' });
+    };
+    const shadow = p.toScene((d.x0 + d.x1) / 2, d.y + r * 0.6, 0);
+    g.ellipse(shadow.x, shadow.y, ((d.x1 - d.x0) / 2 + r) * shadow.k, r * 0.5 * shadow.k).fill({ color: 0x3a2a18, alpha: 0.15 });
+    line(d.x0, d.x1, r, 0, 2 * r, 0xdde9ee, 0.45);
+    const liquid = new Graphics();
+    g.addChild(liquid);
+    this.feederLiquid.set(index, liquid);
+    const cotton = new Graphics();
+    g.addChild(cotton);
+    const a = p.toScene(d.x0 + 1, d.y, r);
+    const b = p.toScene(d.x0 + 13, d.y, r);
+    cotton.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ color: 0xf4efe4, alpha: 0.97, width: 1.8 * r * a.k, cap: 'round' });
+    const hl = new Graphics();
+    g.addChild(hl);
+    const h0 = p.toScene(d.x0 + 3, d.y - 0.35 * r, 1.75 * r);
+    const h1 = p.toScene(d.x1 - 2, d.y - 0.35 * r, 1.75 * r);
+    hl.moveTo(h0.x, h0.y).lineTo(h1.x, h1.y).stroke({ color: 0xffffff, alpha: 0.6, width: 0.25 * r * h0.k, cap: 'round' });
+    g.zIndex = d.y;
+    return g;
+  }
+
+  /** How full each liquid feeder is: the sugar water fills it from the cotton toward the closed end. */
+  private drawFeederLevels(snapshot: ArenaSnapshot): void {
+    const p = this.projection;
+    for (const [index, g] of this.feederLiquid) {
+      const d = this.decor[index];
+      if (!d || d.kind !== 'feeder') continue;
+      const drop = snapshot.food.find((f) => f.reach && f.x === d.x0 && f.y === d.y);
+      const full = drop ? Math.min(1, drop.volume / d.capacity) : 0;
+      g.clear();
+      if (full <= 0) continue;
+      const start = d.x0 + 13;
+      const end = start + (d.x1 - 1 - start) * full;
+      const a = p.toScene(start, d.y, d.radius * 0.95);
+      const b = p.toScene(end, d.y, d.radius * 0.95);
+      const colour = drop!.concentration >= 0.5 ? 0xd9a43b : 0xe8d28f;
+      g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ color: colour, alpha: 0.7, width: 1.6 * d.radius * a.k, cap: 'round' });
     }
+  }
+
+  /** A round branch lying on the floor (B3), bark-brown and lit from above. */
+  private branch(d: Extract<Decoration, { kind: 'branch' }>): Graphics {
+    const g = new Graphics();
+    const p = this.projection;
+    const r = d.radius;
+    const nx = -(d.y1 - d.y0);
+    const ny = d.x1 - d.x0;
+    const n = Math.hypot(nx, ny) || 1;
+    const shadowA = p.toScene(d.x0 + (nx / n) * r * 0.8, d.y0 + (ny / n) * r * 0.8, 0);
+    const shadowB = p.toScene(d.x1 + (nx / n) * r * 0.8, d.y1 + (ny / n) * r * 0.8, 0);
+    g.moveTo(shadowA.x, shadowA.y).lineTo(shadowB.x, shadowB.y).stroke({ color: 0x3a2a18, alpha: 0.2, width: 2 * r * shadowA.k, cap: 'round' });
+    for (const [lift, width, colour] of [
+      [1, 2, 0x4a3220],
+      [1.3, 1.3, 0x6e4c30],
+      [1.75, 0.45, 0x9a7650],
+    ] as const) {
+      const a = p.toScene(d.x0, d.y0, lift * r);
+      const b = p.toScene(d.x1, d.y1, lift * r);
+      g.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ color: colour, width: width * r * a.k, cap: 'round' });
+    }
+    g.zIndex = standing(d).y;
+    return g;
   }
 
   /**
@@ -405,11 +529,13 @@ export class ArenaLayer {
   private drawFood(snapshot: ArenaSnapshot): void {
     const g = this.food.clear();
     for (const d of snapshot.food) {
-      // Each drop is drawn round its own middle, then laid on the floor in perspective.
-      const at = this.projection.toScene(d.x, d.y);
+      // A feeder's sugar water is drawn inside its tube.
+      if (d.reach) continue;
+      // Each drop is drawn round its own middle, then laid on the floor (or the dish) in perspective.
+      const at = this.projection.toScene(d.x, d.y, this.heightAt(d.x, d.y));
       const s = this.projection.stretch(d.x, d.y);
       g.setTransform(s.sx, 0, 0, s.sy, at.x, at.y);
-      const r = dropRadius(d.volume);
+      const r = foodReach(d);
       if (d.protein > 0 && d.mouldy) {
         // An insect gone mouldy: grey and furred with pale threads.
         g.ellipse(0, 0, r * 1.3, r * 0.8).fill({ color: 0x4a4a3c, alpha: 0.95 });
