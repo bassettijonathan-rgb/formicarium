@@ -357,13 +357,18 @@ colony spread through a big nest (20 workers over 8-9 of 20 chambers,
 resting workers only to shelter, colony odour and brood. Lasius niger
 workers also stop more readily, and stay stopped longer, beside nestmates
 already resting (Depickère et al. 2004). So in a bought nest, a wandering
-worker touching `n` resting nestmates (up to 4) settles 1 + 2n times as
-readily and rests 1 + 2n times as long (`restJoin`, `restStay`, rough);
-past 8 touching (`restCrowd`, rough: they lie at most a few deep in a
-5 mm chamber) it settles (n - 8)² + 1 times less readily; and wandering
-workers turn toward colony odour as strongly as ants going home, not a
-quarter as strongly. A colony now gathers in a few chambers and fills more
-as it grows (9.13). The sand farm keeps its old rules: its validations
+worker touching `n` resting nestmates (up to 8) settles 0.2 + 3n times as
+readily as it would alone in the sand farm, and rests 1 + 5n times as long
+(`restAlone`, `restJoin`, `restStay`, rough): on its own it seldom stops,
+and walks on until it meets resting nestmates. Past 8 touching
+(`restCrowd`, rough: they lie at most a few deep in a 5 mm chamber) it
+settles (n - 8)² + 1 times less readily; and wandering workers turn toward
+colony odour as strongly as ants going home, not a quarter as strongly. A
+colony now gathers in a few chambers and fills more as it grows (9.13).
+(The first version, with lone workers settling as readily as in the sand
+and joining 1 + 2n times as readily up to 4, kept 20 workers in 1-2
+chambers only in the two tanks it was tried on; in six more it used 3-10.
+Nests 3 checked eight tanks and strengthened it.) The sand farm keeps its old rules: its validations
 (digging, nest size, food flow, 9.1-9.3) were tuned without these, and in a
 dug nest the tunnels themselves keep the colony together.
 

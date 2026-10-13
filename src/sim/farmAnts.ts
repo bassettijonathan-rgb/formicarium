@@ -520,7 +520,10 @@ function rest(ctx: AntContext, i: number): void {
   addToField(farm, farm.odour, ants.x[i]!, ants.y[i]!, params.odourDeposit * (queen ? params.queenOdourGain : 1) * DT);
   if (queen) layEggs(ctx, i);
   if (setOffToForage(ctx, i)) return;
-  if (--ants.timer[i]! <= 0) ants.state[i] = AntState.wandering;
+  // In a bought nest a worker packed in too tight gets up sooner, the sooner the tighter (Amé et al. 2006; Nests 3).
+  const packed = params.aggregation && ctx.farm.table && !queen ? Math.max(0, restingNear[i]! - params.restCrowd) : 0;
+  ants.timer[i]! -= 1 + packed * packed;
+  if (ants.timer[i]! <= 0) ants.state[i] = AntState.wandering;
 }
 
 /**

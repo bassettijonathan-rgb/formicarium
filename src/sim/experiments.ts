@@ -1169,6 +1169,14 @@ export function runNestRoom(opts: RunOptions & { hours: number; brood?: number; 
     let used = 0;
     while (held < 0.9 * resting) held += inChamber[used++]!;
     chambersByHour.push(used);
+    if ((globalThis as { DUMP?: boolean }).DUMP) {
+      let er = 0, ew = 0, nr = 0, nw = 0;
+      for (let i = 0; i < ants.count; i++) {
+        if (ants.caste[i] !== Caste.worker || ants.place[i] !== Place.farm) continue;
+        if (ants.state[i] === AntState.resting) { er += ants.encounters[i]!; nr++; } else if (ants.state[i] === AntState.wandering) { ew += ants.encounters[i]!; nw++; }
+      }
+      console.log(`  encounters resting ${(er / nr).toFixed(2)} (${nr}), wandering ${(ew / nw).toFixed(2)} (${nw})`);
+    }
     if ((globalThis as { DUMP?: boolean }).DUMP && h === opts.hours - 1) {
       const S = 3;
       const rows: string[] = [];
@@ -1310,7 +1318,13 @@ export function runMovingHouse(opts: RunOptions & { hours: number; brood?: numbe
           const x = brood.x[k]!, y = brood.y[k]!;
           if (inNest(x, y)) { bn++; tN.push(temperatureAt(farm, x, y)); hN.push(humidityAt(farm, x, y)); } else { tT.push(temperatureAt(farm, x, y)); hT.push(humidityAt(farm, x, y)); }
         }
-        for (let i = 0; i < ants.count; i++) { if (ants.site[i] === 1) s1++; if (ants.site[i] === 2) s2++; if (ants.restless[i]! > 0) rl++; }
+        let er = 0, ew = 0, nr = 0, nw = 0;
+        for (let i = 0; i < ants.count; i++) {
+          if (ants.site[i] === 1) s1++; if (ants.site[i] === 2) s2++; if (ants.restless[i]! > 0) rl++;
+          if (ants.caste[i] !== Caste.worker || ants.place[i] !== Place.farm) continue;
+          if (ants.state[i] === AntState.resting) { er += ants.encounters[i]!; nr++; } else if (ants.state[i] === AntState.wandering) { ew += ants.encounters[i]!; nw++; }
+        }
+        console.log(`  encounters resting ${(er / nr).toFixed(2)} (${nr}), wandering ${(ew / nw).toFixed(2)} (${nw})`);
         const m = (a: number[]) => (a.length ? (a.reduce((p, c) => p + c, 0) / a.length).toFixed(2) : '-');
         console.log(`h${h} +${s / 20 / 60}min brood nest ${bn} carried ${bc}; site1 ${s1} site2 ${s2} restless ${rl}; temp tube ${m(tT)} nest ${m(tN)}; hum tube ${m(hT)} nest ${m(hN)}; queen ${ants.x[q]!.toFixed(0)},${ants.y[q]!.toFixed(0)}`);
       }
