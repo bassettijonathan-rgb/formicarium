@@ -825,8 +825,9 @@ All of it is drawing: nothing here reaches the simulation.
 
 - **V1 The room.** The tank stands on a wooden desk in front of a big window
   (`src/render/room/`). The farm's frame is clear glass. The air above the
-  soil is see-through, so the window shows through the headspace. Tunnel
-  mouths and shafts narrower than 6 mm stay dark.
+  soil is see-through, so the window shows through the headspace, down into
+  the gaps between spoil heaps as far as the ground nearby. Tunnel mouths and
+  shafts into the ground narrower than 6 mm stay dark.
 - **V2 The view.** West-north-west over Legnano: roofs and chimney pots, San
   Magno's bell tower and dome, an old mill chimney, and Monte Rosa on the
   horizon. Monte Rosa is 4634 m high and 90 km away, at azimuth ~295° and
