@@ -10,10 +10,12 @@
  * as it is (a structured clone). Real time never enters the simulation: the
  * page measures how long it was closed and asks for that many steps.
  */
-import { Cause, createAnts } from './ants';
+import { Cause, Place, createAnts } from './ants';
+import { dropRadius } from './food';
 import { createBrood } from './brood';
 import type { Census } from './history';
-import { type LoggedCommand, createTank } from './keeper';
+import { type LoggedCommand, createTank, furnishArena } from './keeper';
+import { TANK_ARENA } from './tank';
 import { STEPS_PER_SECOND } from './time';
 import type { World } from './world';
 
@@ -60,7 +62,36 @@ export function loadWorld(save: Save): World | null {
   template.brood = createBrood(saved.brood?.stage?.length ?? 0);
   fill(saved as unknown as Record<string, unknown>, template as unknown as Record<string, unknown>);
   saved.params = template.params;
+  if (saved.arena.width !== template.arena.width || saved.arena.height !== template.arena.height) moveIntoBigArena(saved);
   return saved;
+}
+
+/**
+ * A tank saved before the arena grew (DESIGN.md A2) moves into the new box:
+ * the old floor goes in at the tube's end, so the ants, the food, the dead
+ * and the trails keep their places relative to the tube's mouth, and the
+ * decorations are laid out round them.
+ */
+function moveIntoBigArena(world: World): void {
+  const old = world.arena;
+  const offset = TANK_ARENA.height / 2 - old.entranceY;
+  const inArena: number[] = [];
+  for (let i = 0; i < world.ants.count; i++) if (world.ants.place[i] === Place.arena) inArena.push(i);
+  furnishArena(world, [
+    ...inArena.map((i) => ({ x: world.ants.x[i]!, y: world.ants.y[i]! + offset, radius: 8 })),
+    ...world.food.map((d) => ({ x: d.x, y: d.y + offset, radius: dropRadius(d.volume) + 8 })),
+  ]);
+  const arena = world.arena;
+  for (let y = 0; y < old.height; y++) {
+    const ny = y + offset;
+    if (ny < 0 || ny >= arena.height) continue;
+    for (let x = 0; x < Math.min(old.width, arena.width); x++) {
+      const cell = ny * arena.width + x;
+      if (!arena.wall[cell]) arena.trail[cell] = old.trail[y * old.width + x]!;
+    }
+  }
+  for (const i of inArena) world.ants.y[i]! += offset;
+  for (const d of world.food) d.y += offset;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {

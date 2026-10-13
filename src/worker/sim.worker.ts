@@ -93,7 +93,6 @@ function sendAnts(w: World): void {
 
 function sendArena(w: World): void {
   const trail = Float32Array.from(w.arena.trail);
-  const wall = w.arena.wall.slice();
   let out = 0;
   let alive = 0;
   let queen = false;
@@ -112,7 +111,7 @@ function sendArena(w: World): void {
       width: w.arena.width,
       height: w.arena.height,
       trail,
-      wall,
+      decor: w.decor,
       food: w.food.map((d) => ({ ...d })),
       ants: alive,
       out,
@@ -121,7 +120,7 @@ function sendArena(w: World): void {
       deaths: deathsBy(w),
       diedOut: w.diedOut,
     },
-    [trail.buffer, wall.buffer],
+    [trail.buffer],
   );
 }
 

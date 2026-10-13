@@ -50,7 +50,7 @@ Each row has a recommendation. Approving the doc as written accepts all of them.
 | D5 | Who does which job? | **Response thresholds** (Bonabeau et al. 1996): each ant has its own threshold per task stimulus (hungry larvae, dirty chamber, food smell) and that threshold drifts with age and experience. Young ants nurse, old ants forage, with no rule saying so. | Fixed castes by age. |
 | D6 | Two clocks | Ants **move in real time** (1 s of sim = 1 s of ant life at 1x). Development (egg to adult, queen laying rate, ageing) runs **compressed**, default 1 real day of the tank = 1 hour of play, adjustable. Every ratio inside each clock stays real. | One clock: real Lasius takes ~2 months egg to worker and years to grow, too slow to watch. |
 | D7 | Does the tank live while the tab is closed? | **Yes, capped.** On reopening, the sim catches up headless at max speed for the time you were away, up to 3 tank-days, then shows a short log of what happened ("12 workers eclosed, mould in chamber 3"). | Paused while closed (no aquarium feeling). |
-| D8 | Scale | Tank 30 x 20 cm at 1 mm cells (300 x 200 soil grid), arena 20 x 20 cm. Up to **2,000 ants** at 60 fps. Real Lasius colonies reach 10,000+; this is a young colony, which is what ant farms hold anyway. | Bigger tanks later if performance allows. |
+| D8 | Scale | Tank 30 x 20 cm at 1 mm cells (300 x 200 soil grid), arena 20 x 20 cm (40 x 30 cm from L2, section 3.3; the validation experiments keep 20 x 20). Up to **2,000 ants** at 60 fps. Real Lasius colonies reach 10,000+; this is a young colony, which is what ant farms hold anyway. | Bigger tanks later if performance allows. |
 | D9 | What can you do? | Feed (sugar water, protein: insects, seeds), water the soil, move the heat mat, add fresh soil, clean the arena, start a new tank. Observation tools: pheromone and temperature overlays, follow an ant, ant inspector with its life history, colony graphs, timelapse. | Interventions like "introduce a second colony" or "add a predator" are M7, after the core is solid. |
 | D10 | Can the colony die? | **Yes.** Starvation, drying out, overheating, mould, or the queen dying of age. A dead tank stays viewable with its history. | Invulnerable queen. |
 | D11 | Rendering | **PixiJS (WebGL)**: ants drawn by code (head, thorax, waist, gaster, elbowed antennae, six legs in a tripod gait), smooth zoom from the whole tank down to one ant's legs, cheap overlays such as glowing trails. Soil and smell layers are uploaded from typed arrays as textures. Chosen by Marco 2026-10-11. | Canvas 2D: simpler, but about 2,000 animated ants is its limit and smooth zoom and glow are costly. |
@@ -107,9 +107,44 @@ walk on, so used tunnels get sturdier, is left for later.)
 
 ### 3.3 The arena and the tube
 
-A flat, top-down foraging arena joined to the farm by a tube. Food goes here.
-Most trail-pheromone behaviour (D3) plays out here, so it is drawn top-down
-next to the side-view farm.
+A flat foraging arena joined to the farm by a tube. Food goes here. Most
+trail-pheromone behaviour (D3) plays out here.
+
+Asked by Marco on 2026-10-13: a bigger arena, seen from an angle, with
+decorations inside. Approved the same day (choices A1 to A4, L2):
+
+- **A1 Size.** The keeper's arena is 40 x 30 cm of floor with 10 cm glass
+  walls (`TANK_ARENA`), a common outworld size. The tube enters halfway along
+  the left wall. The lab experiments of section 9 keep their 20 x 20 cm
+  arena, so their results are unchanged.
+- **A2 Old tanks.** A tank saved with the old arena moves into the new one
+  when loaded: the old floor lands against the left wall, centred on the
+  tube, so ants, food and trails keep their places relative to the tube.
+  Decorations are laid round where ants and food already are.
+- **A3 The view.** A pinhole camera 1.3 m away looks down at the desk at 40
+  degrees (`src/render/projection.ts`): the far end is smaller, the glass
+  walls stand up and the near wall is drawn over everything inside. The
+  floor, its decorations and the trail are pictures laid on it in perspective
+  (PixiJS `PerspectiveMesh`). Each ant is placed by the camera and flattened
+  in depth. Ants and the things standing on the floor are drawn far to near,
+  so a stone hides an ant behind it. A tap is mapped back to the floor point
+  under it, for feeding and the inspector. The desk's planks run to the same
+  vanishing point. A switch shows the arena straight from above, as before,
+  which reads trails best. The simulation stays a flat floor in mm: the
+  camera is drawing only.
+- **A4 Decorations.** Each new tank lays out from its seed (`src/sim/decor.ts`):
+  a water tube with a cotton plug along the back wall, a piece of cork bark,
+  5 to 7 stones, 3 to 5 dry leaves, 2 twigs and 2 cushions of moss, on a
+  fine-sand floor. The tube's mouth and the first drop of sugar are kept
+  clear, and obstacles leave at least 12 mm between each other and the walls.
+  The stones, the bark and the water tube are obstacles: they are written
+  into the arena's wall grid, so ants meet them as they meet any wall, by
+  bumping and sliding along their edges (local rules only, section 0).
+  Leaves, twigs and moss are flat and walked over. Ants do not climb (that
+  needs 3D). Food put down on an obstacle is refused. In tests, foragers
+  never stand inside an obstacle; with sugar 36 cm from the tube, 6 of 6
+  bare arenas and 5 of 6 decorated ones found it within 10 minutes: the
+  obstacles slow the search a little, as they should.
 
 ---
 

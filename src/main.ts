@@ -5,8 +5,9 @@
  */
 import { Application } from 'pixi.js';
 import { Camera } from './render/camera';
-import { ARENA_X, TankView } from './render/tankView';
-import { ARENA_SIZE, FARM_HEIGHT, FARM_WIDTH } from './sim/tank';
+import { TankView } from './render/tankView';
+import { ArenaLayer } from './render/arenaLayer';
+import { FARM_HEIGHT, FARM_WIDTH } from './sim/tank';
 import { STEPS_PER_SECOND, formatAntTime } from './sim/time';
 import type { KeeperCommand } from './sim/keeper';
 import type { AntCard } from './sim/inspect';
@@ -45,7 +46,7 @@ async function start(): Promise<void> {
   const view = new TankView(app.renderer);
   app.stage.addChild(view.root);
   // The keeper's room behind the tank, lit by Legnano's real sky (DESIGN.md section 8.1).
-  const room = new RoomLayer();
+  const room = new RoomLayer(ArenaLayer.vanishingPoint);
   view.root.addChildAt(room.root, 0);
   view.root.addChildAt(room.lampGlow, view.root.getChildIndex(view.lit) + 1);
   const outsideLine = document.getElementById('outside')!;
@@ -71,7 +72,7 @@ async function start(): Promise<void> {
   };
   const camera = new Camera(view.root, stage);
   const hud = document.getElementById('hud')!;
-  const fit = () => camera.fit(TankView.bounds, hud.getBoundingClientRect().bottom);
+  const fit = () => camera.fit(view.bounds, hud.getBoundingClientRect().bottom);
   fit();
   document.getElementById('fit')!.addEventListener('click', fit);
   // The controls fold away to a line, to leave the window and the tank in view.
@@ -194,8 +195,7 @@ async function start(): Promise<void> {
   const inspectedAt = () => {
     const inFarm = view.farmAnts.positionOf(inspected);
     if (inFarm) return inFarm;
-    const inArena = view.arena.ants.positionOf(inspected);
-    return inArena ? { x: inArena.x + ARENA_X, y: inArena.y } : null;
+    return view.arena.ants.positionOf(inspected);
   };
 
   // The colony graphs and the timelapse (M6c), refreshed every few seconds while open.
@@ -295,7 +295,7 @@ async function start(): Promise<void> {
     // A tap on an ant (within a finger's width) opens the inspector on it.
     const reach = Math.max(1.5, 14 / camera.scale);
     let ant = view.farmAnts.nearest(p.x, p.y, reach);
-    if (ant < 0) ant = view.arena.ants.nearest(p.x - ARENA_X, p.y, reach);
+    if (ant < 0) ant = view.arena.ants.nearest(p.x, p.y, reach);
     if (ant >= 0 && !watering) {
       inspect(ant);
       return;
@@ -304,9 +304,9 @@ async function start(): Promise<void> {
       command({ type: 'water', x: p.x });
       return;
     }
-    const x = p.x - ARENA_X;
-    const y = p.y;
-    if (x > 2 && y > 2 && x < ARENA_SIZE - 2 && y < ARENA_SIZE - 2) {
+    // The point on the arena's floor under the tap (the worker refuses food put on a stone).
+    const { u: x, v: y } = view.arena.toFloor(p.x, p.y);
+    if (x > 2 && y > 2 && x < view.arena.floorWidth - 2 && y < view.arena.floorHeight - 2) {
       if (food === 'protein') command({ type: 'protein', x, y, volume: INSECT_VOLUME });
       else command({ type: 'sugar', x, y, volume: DROP_VOLUME, concentration: Number(food) });
     }
@@ -333,6 +333,13 @@ async function start(): Promise<void> {
     const on = trailsButton.getAttribute('aria-pressed') !== 'true';
     trailsButton.setAttribute('aria-pressed', String(on));
     view.arena.showTrails = on;
+  });
+  // The arena at an angle (DESIGN.md A3), or straight from above, which shows trails best.
+  const aboveButton = document.getElementById('from-above')!;
+  aboveButton.addEventListener('click', () => {
+    view.arena.angled = !view.arena.angled;
+    aboveButton.setAttribute('aria-pressed', String(!view.arena.angled));
+    fit();
   });
 
   // The farm's overlay shows warmth or damp, or neither.
