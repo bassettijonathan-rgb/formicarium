@@ -112,4 +112,30 @@ describe("the farm's headspace", () => {
     expect(alpha(5, 5)).toBe(255);
     expect(alpha(0, 3)).toBe(255);
   });
+
+  it('clears a narrow slot between two spoil heaps down to the ground, but not a shaft into it', () => {
+    // 60 x 30 cells: ground from row 20; two steep heaps up to row 8 with a 3-cell slot between them;
+    // a one-cell shaft at column 50 down to row 27; a hollow inside the left heap; a crumb of spoil hanging at (5, 15).
+    const width = 60;
+    const height = 30;
+    const material = new Uint8Array(width * height);
+    const solid = (x: number, y: number) => {
+      if (y >= 20) return !(x === 50 && y < 28);
+      if (x === 5 && y === 15) return true;
+      if (y >= 8 && ((x >= 10 && x <= 24) || (x >= 28 && x <= 42))) return !(x === 15 && y === 12);
+      return false;
+    };
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) material[y * width + x] = solid(x, y) ? Material.sand : Material.air;
+    const rgba = new Uint8ClampedArray(4 * width * height).fill(255);
+    clearHeadspace(material, width, height, rgba);
+    const alpha = (x: number, y: number) => rgba[4 * (y * width + x) + 3];
+    expect(alpha(26, 9)).toBe(0);
+    expect(alpha(26, 19)).toBe(0);
+    expect(alpha(50, 19)).toBe(0);
+    expect(alpha(50, 21)).toBe(255);
+    expect(alpha(50, 27)).toBe(255);
+    expect(alpha(15, 12)).toBe(255);
+    expect(alpha(5, 19)).toBe(0);
+    expect(alpha(5, 15)).toBe(255);
+  });
 });

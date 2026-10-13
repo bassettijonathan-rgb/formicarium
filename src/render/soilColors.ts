@@ -61,28 +61,53 @@ function grainJitter(i: number): number {
 }
 
 /**
- * Air above the soil is see-through where the surface is at least this wide, mm:
- * the headspace shows the room behind, but a narrow shaft into the soil stays dark.
+ * A shaft or tunnel mouth narrower than this, in mm, going down into the ground
+ * stays dark; the air above the ground is see-through (the room shows behind).
  */
 const OPEN_AIR = 6;
 
+/** Solid thinner than this, in mm, hanging over air does not roof it over. */
+const THIN_ROOF = 3;
+
+/** How far either side the ground between spoil heaps is looked for, mm. */
+const GROUND_REACH = 30;
+
 /**
  * Makes the air above the soil surface see-through (alpha 0), so the headspace
- * shows the room behind the farm. The surface of each column is the shallowest
- * first solid cell within OPEN_AIR / 2 columns either side, so tunnel mouths
- * and narrow shafts stay dark like the rest of the nest.
+ * shows the room behind the farm. A column is clear from the lid down to its
+ * first solid cell, but never deeper than the ground nearby: the deepest
+ * stretch of surface at least OPEN_AIR + 1 mm wide within GROUND_REACH mm. So a
+ * slot between two spoil heaps clears down to the ground, while tunnel mouths
+ * and shafts going down into the soil stay dark like the rest of the nest.
  */
 export function clearHeadspace(material: Uint8Array, width: number, height: number, rgba: Uint8ClampedArray): void {
+  // Each column's first solid cell with something under it: a crumb of damp spoil
+  // hanging over a hole (thinner than THIN_ROOF) does not darken the air below it.
   const first = new Int32Array(width);
   for (let x = 0; x < width; x++) {
     let y = 0;
-    while (y < height && material[y * width + x] === Material.air) y++;
+    for (;;) {
+      while (y < height && material[y * width + x] === Material.air) y++;
+      let run = 0;
+      while (y + run < height && run < THIN_ROOF && material[(y + run) * width + x] !== Material.air) run++;
+      if (run >= THIN_ROOF || y + run >= height) break;
+      y += run;
+    }
     first[x] = y;
   }
+  const at = (x: number) => Math.min(width - 1, Math.max(0, x));
+  // The surface with anything narrower than OPEN_AIR + 1 columns filled in.
   const reach = Math.floor(OPEN_AIR / 2);
+  const wide = new Int32Array(width);
   for (let x = 0; x < width; x++) {
     let surface = height;
-    for (let dx = -reach; dx <= reach; dx++) surface = Math.min(surface, first[Math.min(width - 1, Math.max(0, x + dx))]!);
-    for (let y = 0; y < surface; y++) rgba[4 * (y * width + x) + 3] = 0;
+    for (let dx = -reach; dx <= reach; dx++) surface = Math.min(surface, first[at(x + dx)]!);
+    wide[x] = surface;
+  }
+  for (let x = 0; x < width; x++) {
+    let ground = 0;
+    for (let dx = -GROUND_REACH; dx <= GROUND_REACH; dx++) ground = Math.max(ground, wide[at(x + dx)]!);
+    const clear = Math.min(first[x]!, ground);
+    for (let y = 0; y < clear; y++) if (material[y * width + x] === Material.air) rgba[4 * (y * width + x) + 3] = 0;
   }
 }
