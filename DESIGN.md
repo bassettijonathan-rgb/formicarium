@@ -173,12 +173,24 @@ they took them apart". He approved this plan as drafted
 - **Arena 1 (built, A5): climbing.** B1: a relief (height map), not full 3D.
   B2: stones, bark and the water tube are climbed; the glass walls are not
   (fluon); no overhangs.
-- **Arena 2: placing objects.** B3: a keeper tool to place, move and remove a
-  feeding dish, a liquid feeder, a flat stone, cork bark and a twig bridge
-  (decorations too), each a logged command. B4: a shallow plastic dish 35 mm
-  across with a 4 mm rim; food tapped in it stays in it, and Clean arena
-  empties it. B5: a test tube of sugar water with a cotton plug lying on
-  the floor; ants drink at the cotton; 2 mL lasts many tank days; Refill.
+- **Arena 2 (built): placing objects.** B3: a "Put in the arena" row on the
+  page puts in a feeding dish, a sugar feeder, a stone, cork bark or a
+  branch (6 mm thick, 9-13 cm long, a bridge to climb), and moves or takes
+  out any of them, the tank's own decorations included. Each is a logged
+  keeper command (`put`, `move`, `remove`, `refill`), so replays stay exact;
+  a stone's, bark's or branch's shape comes from the seed and the step. An
+  object is refused over the tube's mouth (25 mm), against the glass, on
+  anything else that stands up, or on food; leaves and moss lie flat and can
+  be covered. After each change the relief is rebuilt. B4: the dish is 35 mm
+  across, a 1.2 mm wall 4 mm high round a 1 mm floor; food tapped inside
+  stays inside and moves with the dish, and Clean arena empties it.
+  B5: the feeder is a test tube 80 mm long and 15 mm across lying on the
+  floor, its cotton plug at the left end; its 2 mL of sugar water is one
+  food source the ants drink from at the cotton's face (reach 7.5 mm, the
+  tube's radius), so it never spreads; its level shows through the glass,
+  and Refill tops every feeder up with the sugar chosen on the page.
+  Tested: ants climb into a dish to sugar in it (3 of 3 lab colonies in
+  15 minutes) and drink at a feeder's cotton.
 - **Arena 3: feeder insects.** B6: fruit fly (about 2.5 mm, 1 mg), small
   cricket (about 12 mm, 40 mg), mealworm (about 22 mm, 120 mg), dead, given
   whole, opened or in pieces, each with real parts. B7: ants drink at open
@@ -869,7 +881,8 @@ logged with its tick, which keeps saves deterministic and replayable.
 - **Feed:** drop sugar drop, insect piece or seeds in the arena.
 - **Water:** wet a region of soil (off the page since the farm waters itself, section 7.7; kept as a command for old saves and the experiments).
 - **Heat mat:** drag along the bottom; ants move brood along the gradient.
-- **Clean:** remove refuse and old food from the arena.
+- **Clean:** remove refuse and old food from the arena, and empty the feeding dishes.
+- **Put in the arena:** a feeding dish, a sugar feeder, a stone, cork bark or a branch; move or take out anything standing there; refill the feeders (section 3.4).
 - **Look:** pheromone overlay per field, temperature, humidity; click an ant to
   follow it; colony graphs (population by stage, crop fullness, task mix over
   time); timelapse of nest growth.

@@ -15,7 +15,7 @@ import type { Farm } from './farm';
 import { dieOfAge, endure, holdCorpse, mayDropCorpse, tryPickUpCorpse } from './corpses';
 import { computeContacts, stepFarmAnt } from './farmAnts';
 import { speedAt } from './heat';
-import { type FoodDrop, dropRadius, foodQuality } from './food';
+import { type FoodDrop, foodQuality, foodReach } from './food';
 import type { AntParams } from './params';
 import type { Rng } from './rng';
 import { STEPS_PER_SECOND } from './time';
@@ -747,7 +747,7 @@ function nearestDrop(ctx: AntContext, i: number, x: number, y: number, range: nu
   for (const drop of ctx.food) {
     const protein = drop.protein > 0 ? 1 : 0;
     if (drop.volume <= 0 || drop.mouldy || (protein !== seek && !(protein === 1 && preyToo))) continue;
-    const gap = Math.hypot(drop.x - x, drop.y - y) - dropRadius(drop.volume);
+    const gap = Math.hypot(drop.x - x, drop.y - y) - foodReach(drop);
     if (gap <= bestGap) {
       best = drop;
       bestGap = gap;

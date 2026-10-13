@@ -23,7 +23,17 @@ export type Decoration =
   /** A twig lying on the floor, from one end to the other, with a side shoot at `fork` of its length. */
   | { kind: 'twig'; x0: number; y0: number; x1: number; y1: number; width: number; fork: number }
   /** A cushion of moss, flat enough to walk over. */
-  | { kind: 'moss'; x: number; y: number; radius: number };
+  | { kind: 'moss'; x: number; y: number; radius: number }
+  /** The keeper's feeding dish (B4): a shallow plastic dish, its floor `base` mm thick and its rim `rim` mm high. */
+  | { kind: 'dish'; x: number; y: number; radius: number; rim: number; base: number }
+  /**
+   * The keeper's liquid feeder (B5): a test tube of sugar water lying on the
+   * floor from (x0, y) to (x1, y), its cotton plug at x0, holding `capacity`
+   * µL when full. The sugar water itself is a food drop at the plug.
+   */
+  | { kind: 'feeder'; x0: number; x1: number; y: number; radius: number; capacity: number }
+  /** A round branch lying on the floor (B3), from one end to the other, thick enough to climb along. */
+  | { kind: 'branch'; x0: number; y0: number; x1: number; y1: number; radius: number };
 
 /** Places a new tank's first food goes and the ants come in: decorations keep clear of them. */
 export interface KeepClear {
@@ -37,7 +47,25 @@ const GAP = 12;
 
 /** True if the decoration stands up from the floor (and ants climb it). */
 export function isObstacle(d: Decoration): boolean {
-  return d.kind === 'stone' || d.kind === 'bark' || d.kind === 'tube';
+  return d.kind === 'stone' || d.kind === 'bark' || d.kind === 'tube' || d.kind === 'dish' || d.kind === 'feeder' || d.kind === 'branch';
+}
+
+/** Where a decoration that stands up is drawn in depth (the floor y of its middle), and its highest point, mm. */
+export function standing(d: Decoration): { y: number; top: number } {
+  switch (d.kind) {
+    case 'stone':
+    case 'bark':
+      return { y: d.y, top: d.height };
+    case 'tube':
+    case 'feeder':
+      return { y: d.y, top: 2 * d.radius };
+    case 'dish':
+      return { y: d.y, top: d.rim };
+    case 'branch':
+      return { y: (d.y0 + d.y1) / 2, top: 2 * d.radius };
+    default:
+      return { y: 0, top: 0 };
+  }
 }
 
 /** Lays out a tank's decorations from its seed, clear of `keepClear` and of each other. */
@@ -168,14 +196,85 @@ export function reliefOf(d: Decoration, x: number, y: number): number {
       const q = (u / d.length) ** 2 + (v / (d.width / 2)) ** 2;
       return q < 1 ? d.height * Math.sqrt(1 - q) : 0;
     }
-    case 'tube': {
+    case 'tube':
+    case 'feeder': {
       const dx = x < d.x0 ? d.x0 - x : x > d.x1 ? x - d.x1 : 0;
       const off = Math.hypot(dx, y - d.y);
       return off < d.radius ? d.radius + Math.sqrt(d.radius * d.radius - off * off) : 0;
     }
+    case 'branch': {
+      const off = segmentDistance(x, y, d.x0, d.y0, d.x1, d.y1);
+      return off < d.radius ? d.radius + Math.sqrt(d.radius * d.radius - off * off) : 0;
+    }
+    case 'dish': {
+      const r = Math.hypot(x - d.x, y - d.y);
+      return r > d.radius ? 0 : r > d.radius - DISH_WALL ? d.rim : d.base;
+    }
     default:
       return 0;
   }
+}
+
+/** The thickness of the feeding dish's wall, mm. */
+export const DISH_WALL = 1.2;
+
+/** True if (x, y) is on the floor inside a feeding dish, where food put down stays (B4). */
+export function inDish(d: Decoration, x: number, y: number): boolean {
+  return d.kind === 'dish' && Math.hypot(x - d.x, y - d.y) < d.radius - DISH_WALL - 0.5;
+}
+
+function segmentDistance(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+/**
+ * The decoration under the floor point (x, y), as an index into `decor`, or
+ * -1: things that stand up first (the nearest to the viewer if several),
+ * then flat ones. For the keeper's move and remove tools.
+ */
+export function decorationAt(decor: Decoration[], x: number, y: number): number {
+  let best = -1;
+  let bestY = -Infinity;
+  decor.forEach((d, k) => {
+    if (isObstacle(d) && reliefOf(d, x, y) > 0 && standing(d).y > bestY) {
+      best = k;
+      bestY = standing(d).y;
+    }
+  });
+  if (best >= 0) return best;
+  for (let k = decor.length - 1; k >= 0; k--) {
+    const d = decor[k]!;
+    if (d.kind === 'moss' && Math.hypot(x - d.x, y - d.y) < d.radius) return k;
+    if (d.kind === 'twig' && segmentDistance(x, y, d.x0, d.y0, d.x1, d.y1) < 3) return k;
+    if (d.kind === 'leaf') {
+      const c = Math.cos(-d.angle);
+      const s = Math.sin(-d.angle);
+      const u = (x - d.x) * c - (y - d.y) * s;
+      const v = (x - d.x) * s + (y - d.y) * c;
+      if ((u / (d.length / 2)) ** 2 + (v / (d.width / 2)) ** 2 <= 1) return k;
+    }
+  }
+  return -1;
+}
+
+/** The decoration moved by (dx, dy) mm. */
+export function shifted(d: Decoration, dx: number, dy: number): Decoration {
+  if ('x0' in d) {
+    const out = { ...d, x0: d.x0 + dx, x1: d.x1 + dx };
+    if ('y0' in out) return { ...out, y0: out.y0 + dy, y1: out.y1 + dy };
+    return { ...out, y: (out as { y: number }).y + dy } as Decoration;
+  }
+  return { ...d, x: d.x + dx, y: d.y + dy };
+}
+
+/** A point the decoration is moved by: its middle on the floor. */
+export function middleOf(d: Decoration): { x: number; y: number } {
+  if ('x0' in d) return { x: (d.x0 + d.x1) / 2, y: 'y0' in d ? (d.y0 + d.y1) / 2 : d.y };
+  return { x: d.x, y: d.y };
 }
 
 /** The relief of a floor `width` x `height` mm with these decorations: the surface's height over each cell's centre, mm. */
@@ -203,9 +302,28 @@ function footprint(d: Decoration): [number, number, number, number] {
     case 'bark':
       return [d.x - d.length, d.y - d.length, d.x + d.length, d.y + d.length];
     case 'tube':
+    case 'feeder':
       return [d.x0 - d.radius, d.y - d.radius, d.x1 + d.radius, d.y + d.radius];
+    case 'branch':
+      return [Math.min(d.x0, d.x1) - d.radius, Math.min(d.y0, d.y1) - d.radius, Math.max(d.x0, d.x1) + d.radius, Math.max(d.y0, d.y1) + d.radius];
+    case 'dish':
+      return [d.x - d.radius, d.y - d.radius, d.x + d.radius, d.y + d.radius];
     default:
       return [0, 0, -1, -1];
+  }
+}
+
+/** A box round where the decoration lies on the floor, flat ones included: x0, y0, x1, y1, mm. */
+export function extent(d: Decoration): [number, number, number, number] {
+  switch (d.kind) {
+    case 'leaf':
+      return [d.x - d.length / 2, d.y - d.length / 2, d.x + d.length / 2, d.y + d.length / 2];
+    case 'moss':
+      return [d.x - d.radius, d.y - d.radius, d.x + d.radius, d.y + d.radius];
+    case 'twig':
+      return [Math.min(d.x0, d.x1) - 2, Math.min(d.y0, d.y1) - 2, Math.max(d.x0, d.x1) + 2, Math.max(d.y0, d.y1) + 2];
+    default:
+      return footprint(d);
   }
 }
 

@@ -5,8 +5,9 @@
  * logged with the step it was applied at. A tank's seed and its log are
  * enough to rebuild it exactly, which is how saves stay deterministic.
  */
-import { createArena, isBlocked, reliefAt } from './arena';
+import { createArena } from './arena';
 import { layDecorations, stampDecorations } from './decor';
+import { type Item, canPutFood, emptyDishes, moveDecoration, putItem, refillFeeders, removeDecoration } from './objects';
 import { TANK_ARENA } from './tank';
 import {
   cleanArena,
@@ -31,8 +32,16 @@ export type KeeperCommand =
   | { type: 'heatMat'; x: number | null }
   /** Water poured on the farm from above at `x` mm (M5b). */
   | { type: 'water'; x: number }
-  /** The arena cleaned: the dead lying there and mouldy food taken out (M5c). */
-  | { type: 'clean' };
+  /** The arena cleaned: the dead lying there and mouldy food taken out (M5c), and the feeding dishes emptied (B4). */
+  | { type: 'clean' }
+  /** An object put in the arena with its middle at (x, y); a liquid feeder comes full of sugar water of `concentration` mol/L (B3-B5). */
+  | { type: 'put'; item: Item; x: number; y: number; concentration: number }
+  /** The decoration at `index` in the tank's list moved so its middle is at (x, y), with any food in it (B3). */
+  | { type: 'move'; index: number; x: number; y: number }
+  /** The decoration at `index` taken out, with any food in it (B3). */
+  | { type: 'remove'; index: number }
+  /** The liquid feeders filled to the top with sugar water of `concentration` mol/L (B5). */
+  | { type: 'refill'; concentration: number };
 
 /** A keeper's action and the step it was applied at, before that step ran. */
 export interface LoggedCommand {
@@ -79,20 +88,15 @@ export function furnishArena(world: World, keepClear: { x: number; y: number; ra
   stampDecorations(world.arena, world.decor);
 }
 
-/** True if (x, y) is open floor: in the box and not on anything standing on it. */
-function onFloor(world: World, x: number, y: number): boolean {
-  return !isBlocked(world.arena, x, y) && reliefAt(world.arena, x, y) === 0;
-}
-
 /** Applies a keeper's action to the world. */
 export function applyCommand(world: World, command: KeeperCommand): void {
   switch (command.type) {
     case 'sugar':
-      // Food put down on a stone, the bark or the water tube would roll off, so it is refused.
-      if (onFloor(world, command.x, command.y)) placeSugar(world, command.x, command.y, command.volume, command.concentration);
+      // Food put down on a stone, the bark or a tube would roll off, so it is refused; in a dish it stays.
+      if (canPutFood(world, command.x, command.y)) placeSugar(world, command.x, command.y, command.volume, command.concentration);
       break;
     case 'protein':
-      if (onFloor(world, command.x, command.y)) placeProtein(world, command.x, command.y, command.volume);
+      if (canPutFood(world, command.x, command.y)) placeProtein(world, command.x, command.y, command.volume);
       break;
     case 'clearFood':
       for (const d of [...world.food]) removeFood(world, d.id);
@@ -105,6 +109,19 @@ export function applyCommand(world: World, command: KeeperCommand): void {
       break;
     case 'clean':
       cleanArena(world);
+      emptyDishes(world);
+      break;
+    case 'put':
+      putItem(world, command.item, command.x, command.y, command.concentration);
+      break;
+    case 'move':
+      moveDecoration(world, command.index, command.x, command.y);
+      break;
+    case 'remove':
+      removeDecoration(world, command.index);
+      break;
+    case 'refill':
+      refillFeeders(world, command.concentration);
       break;
   }
 }
