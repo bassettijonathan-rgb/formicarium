@@ -19,8 +19,8 @@ let shared: Texture[][] | undefined;
 let sharedPale: Texture[][] | undefined;
 let sharedDead: Texture | undefined;
 
-/** Where an ant at (x, y) on its floor is drawn, and how it is stretched across and in depth. */
-export type AntProjection = (x: number, y: number) => { x: number; y: number; sx: number; sy: number };
+/** Where an ant at (x, y) on its floor is drawn, how it is stretched across and in depth, and its drawing order (nearer is higher). */
+export type AntProjection = (x: number, y: number) => { x: number; y: number; sx: number; sy: number; z: number };
 
 export class AntLayer {
   readonly root = new Container();
@@ -115,7 +115,7 @@ export class AntLayer {
         ant.at.position.set(p.x, p.y);
         ant.at.scale.set(p.sx, p.sy);
         // Nearer ants are drawn over farther ones and over what they walk behind.
-        ant.at.zIndex = y;
+        ant.at.zIndex = p.z;
       } else ant.at.position.set(x, y);
       ant.body.rotation = prev.ants[o + 2]! + dh * k;
       const frame = Math.floor(((walked % STRIDE) / STRIDE) * GAIT_FRAMES) % GAIT_FRAMES;

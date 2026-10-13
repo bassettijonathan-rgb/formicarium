@@ -9,7 +9,7 @@
  */
 import { Container, Graphics, PerspectiveMesh, type Renderer, Texture } from 'pixi.js';
 import { Place } from '../sim/ants';
-import type { Decoration } from '../sim/decor';
+import { type Decoration, buildRelief } from '../sim/decor';
 import { dropRadius } from '../sim/food';
 import { TANK_ARENA, TUBE } from '../sim/tank';
 import type { ArenaSnapshot } from '../worker/protocol';
@@ -50,6 +50,9 @@ export class ArenaLayer {
   private readonly trailCanvas = document.createElement('canvas');
   private decor: Decoration[] = [];
   private decorKey = '';
+  /** The ground's height over each mm of floor (the simulation's relief, from the same shapes), and which decoration stands there (index + 1, 0 for none). */
+  private relief: Float32Array = new Float32Array(0);
+  private standing = new Uint8Array(0);
   private last: ArenaSnapshot | undefined;
   /** Called after the view changes (angled or from above), so the tube can follow its mouth. */
   onLayout: (() => void) | undefined;
@@ -124,6 +127,7 @@ export class ArenaLayer {
     if (key !== this.decorKey) {
       this.decorKey = key;
       this.decor = snapshot.decor;
+      this.measureRelief();
       paintFloor(this.floorCanvas, this.width, this.height, this.decor);
       this.floor.texture = canvasTexture(this.floorCanvas);
       this.drawObstacles();
@@ -149,13 +153,59 @@ export class ArenaLayer {
     this.floor.setCorners(...flat);
     this.trail.setCorners(...flat);
     this.ants.project = (x, y) => {
-      const at = p.toScene(x, y);
+      const at = p.toScene(x, y, this.heightAt(x, y));
       const s = p.stretch(x, y);
-      return { x: at.x, y: at.y, sx: s.sx, sy: s.sy };
+      return { x: at.x, y: at.y, sx: s.sx, sy: s.sy, z: this.order(x, y) };
     };
     this.drawGlass();
     this.drawObstacles();
     this.onLayout?.();
+  }
+
+  /** Builds the relief map and notes which decoration stands over each cell. */
+  private measureRelief(): void {
+    const { width: w, height: h } = this;
+    this.relief = buildRelief(w, h, this.decor);
+    this.standing = new Uint8Array(w * h);
+    this.decor.forEach((d, k) => {
+      const one = buildRelief(w, h, [d]);
+      for (let i = 0; i < one.length; i++) if (one[i]! > 0 && one[i]! >= this.relief[i]!) this.standing[i] = k + 1;
+    });
+  }
+
+  /** Height of the ground under an ant at (x, y), mm: on a stone, the bark or a tube, it walks on top (A5). */
+  private heightAt(x: number, y: number): number {
+    const cx = Math.floor(x);
+    const cy = Math.floor(y);
+    if (cx < 0 || cy < 0 || cx >= this.width || cy >= this.height || this.relief.length === 0) return 0;
+    // Bilinear between cell centres, as the simulation samples it.
+    const fx = x - 0.5;
+    const fy = y - 0.5;
+    const x0 = Math.floor(fx);
+    const y0 = Math.floor(fy);
+    const tx = fx - x0;
+    const ty = fy - y0;
+    const at = (i: number, j: number) => (i < 0 || j < 0 || i >= this.width || j >= this.height ? 0 : this.relief[j * this.width + i]!);
+    return at(x0, y0) * (1 - tx) * (1 - ty) + at(x0 + 1, y0) * tx * (1 - ty) + at(x0, y0 + 1) * (1 - tx) * ty + at(x0 + 1, y0 + 1) * tx * ty;
+  }
+
+  /**
+   * Drawing order of an ant at (x, y): its depth on the floor, as for the
+   * decorations (`zIndex` is their middle's y). An ant on a decoration is
+   * drawn over it where the viewer sees that part: its near half, or its
+   * upper part on the far side (the far foot of a stone is out of sight).
+   */
+  private order(x: number, y: number): number {
+    const cx = Math.floor(x);
+    const cy = Math.floor(y);
+    if (cx < 0 || cy < 0 || cx >= this.width || cy >= this.height) return y;
+    const k = this.standing[cy * this.width + cx] ?? 0;
+    if (k === 0) return y;
+    // Only the stones, the bark and the tube stand up, and they are drawn at their middle's y.
+    const d = this.decor[k - 1] as Extract<Decoration, { kind: 'stone' | 'bark' | 'tube' }>;
+    const top = d.kind === 'tube' ? 2 * d.radius : d.height;
+    if (y >= d.y || this.heightAt(x, y) > 0.5 * top) return d.y + 0.5;
+    return y;
   }
 
   /** The glass box: the far walls behind everything, the near wall over it, with the fluon band and the edges. */

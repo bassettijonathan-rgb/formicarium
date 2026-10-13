@@ -5,7 +5,7 @@
  * logged with the step it was applied at. A tank's seed and its log are
  * enough to rebuild it exactly, which is how saves stay deterministic.
  */
-import { createArena, isBlocked } from './arena';
+import { createArena, isBlocked, reliefAt } from './arena';
 import { layDecorations, stampDecorations } from './decor';
 import { TANK_ARENA } from './tank';
 import {
@@ -79,15 +79,20 @@ export function furnishArena(world: World, keepClear: { x: number; y: number; ra
   stampDecorations(world.arena, world.decor);
 }
 
+/** True if (x, y) is open floor: in the box and not on anything standing on it. */
+function onFloor(world: World, x: number, y: number): boolean {
+  return !isBlocked(world.arena, x, y) && reliefAt(world.arena, x, y) === 0;
+}
+
 /** Applies a keeper's action to the world. */
 export function applyCommand(world: World, command: KeeperCommand): void {
   switch (command.type) {
     case 'sugar':
-      // Food put down on a stone, the bark or the water tube would roll off out of reach, so it is refused.
-      if (!isBlocked(world.arena, command.x, command.y)) placeSugar(world, command.x, command.y, command.volume, command.concentration);
+      // Food put down on a stone, the bark or the water tube would roll off, so it is refused.
+      if (onFloor(world, command.x, command.y)) placeSugar(world, command.x, command.y, command.volume, command.concentration);
       break;
     case 'protein':
-      if (!isBlocked(world.arena, command.x, command.y)) placeProtein(world, command.x, command.y, command.volume);
+      if (onFloor(world, command.x, command.y)) placeProtein(world, command.x, command.y, command.volume);
       break;
     case 'clearFood':
       for (const d of [...world.food]) removeFood(world, d.id);

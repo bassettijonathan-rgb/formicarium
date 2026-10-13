@@ -9,7 +9,7 @@
  * passed the tube). Nothing here reads where other ants are beyond touching
  * range, or where food is beyond smelling range.
  */
-import { type Arena, depositTrail, isBlocked, sampleTrail } from './arena';
+import { type Arena, depositTrail, floorStep, isBlocked, sampleTrail } from './arena';
 import type { Brood } from './brood';
 import type { Farm } from './farm';
 import { dieOfAge, endure, holdCorpse, mayDropCorpse, tryPickUpCorpse } from './corpses';
@@ -634,8 +634,9 @@ function walk(ctx: AntContext, i: number): void {
   heading = wrapAngle(heading + turn);
 
   // 5. Move, sliding along walls when blocked, and update the path integrator.
-  // The arena is at room temperature; ants walk faster when it is warm (M5a).
-  const stepLength = speedAt(params, params.roomTemperature) * DT;
+  // The arena is at room temperature; ants walk faster when it is warm (M5a). Up and
+  // down a stone or the bark the same walking crosses less floor (A5).
+  const stepLength = floorStep(arena, x, y, heading, speedAt(params, params.roomTemperature) * DT);
   if (!moveAnt(ctx, i, heading, stepLength, (px, py) => isBlocked(arena, px, py))) return;
   const nx = ants.x[i]!;
   const ny = ants.y[i]!;
