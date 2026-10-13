@@ -9,9 +9,12 @@ import { createArena } from './arena';
 import { layDecorations, stampDecorations } from './decor';
 import { type Item, canPutFood, emptyDishes, moveDecoration, putItem, refillFeeders, removeDecoration } from './objects';
 import { TANK_ARENA } from './tank';
+import { Place } from './ants';
+import type { Cut, Insect } from './prey';
 import {
   cleanArena,
   createWorld,
+  placeInsect,
   placeProtein,
   placeSugar,
   removeFood,
@@ -41,7 +44,9 @@ export type KeeperCommand =
   /** The decoration at `index` taken out, with any food in it (B3). */
   | { type: 'remove'; index: number }
   /** The liquid feeders filled to the top with sugar water of `concentration` mol/L (B5). */
-  | { type: 'refill'; concentration: number };
+  | { type: 'refill'; concentration: number }
+  /** A dead feeder insect put in the arena with its middle at (x, y): whole, cut in two or in pieces (B6). */
+  | { type: 'insect'; insect: Insect; cut: Cut; x: number; y: number };
 
 /** A keeper's action and the step it was applied at, before that step ran. */
 export interface LoggedCommand {
@@ -100,6 +105,8 @@ export function applyCommand(world: World, command: KeeperCommand): void {
       break;
     case 'clearFood':
       for (const d of [...world.food]) removeFood(world, d.id);
+      // And the insects lying in the arena (not those already in an ant's mandibles).
+      world.prey = world.prey.filter((p) => p.place !== Place.arena || p.carriedBy >= 0);
       break;
     case 'heatMat':
       setHeatMat(world, command.x);
@@ -122,6 +129,9 @@ export function applyCommand(world: World, command: KeeperCommand): void {
       break;
     case 'refill':
       refillFeeders(world, command.concentration);
+      break;
+    case 'insect':
+      if (canPutFood(world, command.x, command.y)) placeInsect(world, command.insect, command.cut, command.x, command.y);
       break;
   }
 }

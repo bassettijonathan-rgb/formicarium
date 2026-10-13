@@ -5,7 +5,9 @@
  */
 import { Graphics } from 'pixi.js';
 import { BroodStage } from '../sim/brood';
-import { BROOD_STRIDE } from '../worker/protocol';
+import { BROOD_STRIDE, type PieceView } from '../worker/protocol';
+import { Place } from '../sim/ants';
+import { drawPiece } from './insects';
 
 const EGG = 0xf4f1e8;
 const LARVA = 0xf2ede0;
@@ -15,9 +17,16 @@ const COCOON = 0xd9c9a3;
 export class BroodLayer {
   readonly root = new Graphics();
 
-  setBrood(brood: Float32Array): void {
+  /** Draws the brood, and the pieces of insect lying in the farm (`prey`, Arena 3). */
+  setBrood(brood: Float32Array, prey: readonly PieceView[] = []): void {
     const g = this.root;
     g.clear();
+    for (const p of prey) {
+      if (p.place !== Place.farm) continue;
+      g.setTransform(Math.cos(p.angle), Math.sin(p.angle), -Math.sin(p.angle), Math.cos(p.angle), p.x, p.y);
+      drawPiece(g, p);
+    }
+    g.resetTransform();
     for (let o = 0; o < brood.length; o += BROOD_STRIDE) {
       const x = brood[o]!;
       const y = brood[o + 1]!;

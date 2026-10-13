@@ -26,6 +26,7 @@ import {
 } from './ants';
 import { BroodStage, addBrood, broodLike, broodNear, larvaHungry, larvaStarved } from './brood';
 import { drawLifespan, dropCorpse, tryPickUpCorpse } from './corpses';
+import { mayPutDownPiece, sipPiece, tryPickUpRefuse } from './prey';
 import { addToField, cellSolid, isBlockedFarm, isSoil, openAbove, sampleField, type Farm } from './farm';
 import { speedAt, temperatureAt } from './heat';
 import { mouldAt } from './mould';
@@ -462,6 +463,13 @@ export function stepFarmAnt(ctx: AntContext, i: number): void {
   const state = ctx.ants.state[i]!;
   // A worker resting or about the nest that touches a corpse smelling of death may carry it out.
   if ((state === AntState.resting || state === AntState.wandering) && tryPickUpCorpse(ctx, i)) return;
+  // A worker touching a piece of insect brought in drinks from it now and then, and carries out a husk
+  // or a mouldy piece as it would a corpse (Arena 3, B8).
+  const { ants } = ctx;
+  if (ctx.prey.length > 0 && (state === AntState.resting || state === AntState.wandering) && ants.caste[i] === Caste.worker && ants.pieceHeld[i]! < 0) {
+    if (tryPickUpRefuse(ctx, i)) return;
+    sipPiece(ctx, i);
+  }
   if (state === AntState.resting) rest(ctx, i);
   else if (state === AntState.sharing) share(ctx, i);
   else walkFarm(ctx, i);
@@ -516,7 +524,7 @@ function setOffToForage(ctx: AntContext, i: number): boolean {
   if (ants.age[i]! < params.callowDays) return false; // nor does a callow, newly out of its cocoon
   // A worker carrying protein for the brood takes it there before it goes out again; without this a
   // lean forager, keen to go out, carries the insect back and forth and the larvae starve.
-  if (ants.cropProtein[i]! >= params.nurseLoad) return false;
+  if (ants.cropProtein[i]! >= params.nurseLoad || ants.pieceHeld[i]! >= 0) return false;
   const hungry = hunger(ctx, i);
   // An ant already carrying protein has some for the brood: it feels the need to fetch more less.
   const need = ants.broodNeed[i]! * Math.max(0, 1 - ants.cropProtein[i]! / params.cropLoad);
@@ -583,7 +591,7 @@ function walkFarm(ctx: AntContext, i: number): void {
   // follows the brood scent only inside the soil; in the open she goes back in by the colony odour.
   let toBrood = false;
   const queen = ants.caste[i] === Caste.queen;
-  const carrier = !queen && ants.cropProtein[i]! >= params.nurseLoad;
+  const carrier = !queen && (ants.cropProtein[i]! >= params.nurseLoad || ants.pieceHeld[i]! >= 0);
   if ((inbound || state === AntState.wandering) && (carrier || (queen && !outside))) {
     const bl = sampleField(farm, farm.broodScent, lx, ly);
     const br = sampleField(farm, farm.broodScent, rx, ry);
@@ -708,6 +716,8 @@ function walkFarm(ctx: AntContext, i: number): void {
       const near = Math.hypot(ants.digX[i]! - ants.piX[i]!, ants.digY[i]! - ants.piY[i]!) < 2;
       if (near || ++ants.timer[i]! > params.digReturnTime * STEPS_PER_SECOND) ants.hasDigSite[i] = 0;
     }
+    // A worker bringing in a piece of insect puts it down by the brood (B8).
+    if (ants.pieceHeld[i]! >= 0) mayPutDownPiece(ctx, i, broodAround(ctx, nx, ny, i) > 0);
     if (setOffToForage(ctx, i)) return;
     if (ants.caste[i] === Caste.worker && tryDig(ctx, i)) return;
     const enclosed = enclosure(ctx, nx, ny);
@@ -719,7 +729,7 @@ function walkFarm(ctx: AntContext, i: number): void {
       : broodAround(ctx, nx, ny, i);
     // A worker with protein for the brood does not settle until it is by the brood. The queen, who lives
     // among her brood, settles away from it only reluctantly (she must lie somewhere to lay the first eggs).
-    const alone = queen ? params.queenSettleAlone : ants.cropProtein[i]! >= params.nurseLoad ? 0 : 1;
+    const alone = queen ? params.queenSettleAlone : ants.cropProtein[i]! >= params.nurseLoad || ants.pieceHeld[i]! >= 0 ? 0 : 1;
     const onBrood = alone + (params.broodRestGain * n) / (n + params.broodDropHalf);
     if (rng.chance(params.restRate * enclosed * (1 + params.restOdourGain * nestLike) * onBrood * DT)) {
       ants.state[i] = AntState.resting;
@@ -794,7 +804,7 @@ function tryDig(ctx: AntContext, i: number): boolean {
   // Past here, loose grains block a way: debris in a tunnel, or spoil over the ant's own hole.
   const clearing = farm.loose[face] === 1;
   // An ant with protein for the brood takes it there before taking up digging, but clears its way.
-  const errand = ants.cropProtein[i]! >= params.nurseLoad;
+  const errand = ants.cropProtein[i]! >= params.nurseLoad || ants.pieceHeld[i]! >= 0;
   if (errand && !clearing) return false;
   const cx = face % farm.width;
   const cy = (face - cx) / farm.width;

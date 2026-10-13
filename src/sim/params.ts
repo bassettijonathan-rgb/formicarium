@@ -562,6 +562,35 @@ export interface AntParams {
   heatDeath: number;
   /** Tank days above `heatDeath` that kill an adult (rough: about an hour). */
   heatDeathDays: number;
+
+  // --- Feeder insects (Arena 3, DESIGN.md 3.4) ---
+
+  /**
+   * The heaviest piece of an insect one worker carries home, mg (rough: a
+   * Lasius niger worker weighs about a milligram and carries a fruit fly whole).
+   */
+  preyCarryMax: number;
+  /**
+   * Seconds a worker bites at an insect it can neither carry nor drink from
+   * before it goes home for help, laying trail (rough). Trail laying follows
+   * whether a forager can take its find home alone, not the prey's size
+   * (Detrain & Deneubourg 1997).
+   */
+  preyGiveUp: number;
+  /**
+   * How strongly a worker lays trail on the way home from an insect it could
+   * not take home alone, on the scale of a full crop of the best sugar (rough).
+   */
+  preyTrail: number;
+  /**
+   * Seconds a worker drinks at an open insect to fill its crop (rough: longer
+   * than at sugar water, for the juice is thick and chewed out of the tissue).
+   */
+  preyDrinkTime: number;
+  /** A worker that carried a piece into the farm puts it down by the brood, or after this many seconds anyway (rough). */
+  preyDropTime: number;
+  /** How often a worker in the farm touching a piece of insect drinks from it, per second (rough). */
+  pieceSipRate: number;
 }
 
 export const DEFAULT_ANT_PARAMS: AntParams = {
@@ -749,4 +778,11 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   adultDryDays: 2,
   heatDeath: 40,
   heatDeathDays: 1 / 24,
+
+  preyCarryMax: 2,
+  preyGiveUp: 120,
+  preyTrail: 0.6,
+  preyDrinkTime: 300,
+  preyDropTime: 300,
+  pieceSipRate: 0.2,
 };

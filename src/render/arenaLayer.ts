@@ -11,8 +11,9 @@ import { Container, Graphics, PerspectiveMesh, type Renderer, Texture } from 'pi
 import { Place } from '../sim/ants';
 import { DISH_WALL, type Decoration, buildRelief, standing } from '../sim/decor';
 import { foodReach } from '../sim/food';
+import { drawPiece } from './insects';
 import { TANK_ARENA, TUBE } from '../sim/tank';
-import type { ArenaSnapshot } from '../worker/protocol';
+import type { ArenaSnapshot, PieceView } from '../worker/protocol';
 import { AntLayer } from './antLayer';
 import { paintFloor } from './arenaFloor';
 import { type Projection, makeProjection } from './projection';
@@ -43,6 +44,8 @@ export class ArenaLayer {
   private readonly floor: PerspectiveMesh;
   private readonly trail: PerspectiveMesh;
   private readonly food = new Graphics();
+  /** The pieces of feeder insects lying in the arena (Arena 3), under the ants. */
+  private readonly insects = new Graphics();
   /** Low things the ants walk into and food lies in (the feeding dishes), under the food and the ants. */
   private readonly low = new Graphics();
   /** The sugar water in each liquid feeder, redrawn as the ants drink it, by the feeder's index in `decor`. */
@@ -68,7 +71,7 @@ export class ArenaLayer {
     this.floor = new PerspectiveMesh({ texture: Texture.WHITE, verticesX: 24, verticesY: 24 });
     this.trail = new PerspectiveMesh({ texture: Texture.EMPTY, verticesX: 24, verticesY: 24 });
     this.trail.alpha = 0.6;
-    this.root.addChild(this.back, this.floor, this.trail, this.low, this.food, this.ants.root, this.front);
+    this.root.addChild(this.back, this.floor, this.trail, this.low, this.food, this.insects, this.ants.root, this.front);
     this.layout();
   }
 
@@ -524,6 +527,21 @@ export class ArenaLayer {
     ctx.putImageData(image, 0, 0);
     if (this.trail.texture.source.resource === canvas) this.trail.texture.source.update();
     else this.trail.texture = canvasTexture(canvas);
+  }
+
+  /** Draws the pieces of insect lying in the arena, each on the ground where it lies, turned and seen in perspective. */
+  setPieces(prey: readonly PieceView[]): void {
+    const g = this.insects.clear();
+    for (const p of prey) {
+      if (p.place !== Place.arena) continue;
+      const at = this.projection.toScene(p.x, p.y, this.heightAt(p.x, p.y));
+      const s = this.projection.stretch(p.x, p.y);
+      const c = Math.cos(p.angle);
+      const n = Math.sin(p.angle);
+      g.setTransform(s.sx * c, s.sy * n, -s.sx * n, s.sy * c, at.x, at.y);
+      drawPiece(g, p);
+    }
+    g.resetTransform();
   }
 
   private drawFood(snapshot: ArenaSnapshot): void {

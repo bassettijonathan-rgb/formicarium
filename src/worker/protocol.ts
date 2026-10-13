@@ -4,6 +4,7 @@ import type { Census } from '../sim/history';
 import type { AntCard } from '../sim/inspect';
 import type { KeeperCommand } from '../sim/keeper';
 import type { Decoration } from '../sim/decor';
+import type { Insect, Part } from '../sim/prey';
 
 export type ToWorker =
   /**
@@ -45,6 +46,10 @@ export interface AntsSnapshot {
   callow: Uint8Array;
   /** Brood in the farm, `BROOD_STRIDE` numbers each: x, y (mm), `BroodStage`, size (mm). */
   brood: Float32Array;
+  /** Pieces of feeder insects lying in the arena or the farm (Arena 3). */
+  prey: PieceView[];
+  /** Pieces being carried, by the ant carrying each. */
+  carried: { ant: number; piece: PieceView }[];
 }
 
 /** Numbers per brood item in `AntsSnapshot.brood`. */
@@ -132,3 +137,19 @@ export interface HistorySnapshot {
   daySeconds: number;
   cropLoad: number;
 }
+
+/** What the renderer needs of a piece: where it lies, what it is and how it looks. */
+export interface PieceView {
+  x: number;
+  y: number;
+  angle: number;
+  place: number;
+  insect: Insect;
+  part: Part;
+  length: number;
+  width: number;
+  /** 0 whole skin, 1 cut open, 2 a dry husk, 3 mouldy. */
+  look: number;
+}
+
+export const Look = { closed: 0, open: 1, husk: 2, mouldy: 3 } as const;

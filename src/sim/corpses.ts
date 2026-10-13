@@ -15,6 +15,7 @@ import { temperatureAt } from './heat';
 import type { AntParams } from './params';
 import { Purpose, Rng } from './rng';
 import { humidityAt } from './water';
+import { dropPiece } from './prey';
 
 /** Where a carried corpse is held, ahead of the carrier's centre, mm. */
 const CORPSE_AHEAD = 3;
@@ -58,7 +59,8 @@ function handsFree(state: number): boolean {
     state !== AntState.carryingBrood &&
     state !== AntState.carryingCorpse &&
     state !== AntState.sharing &&
-    state !== AntState.feeding
+    state !== AntState.feeding &&
+    state !== AntState.atPrey
   );
 }
 
@@ -71,7 +73,7 @@ export function dieOfAge(ctx: AntContext, i: number): boolean {
   const { ants } = ctx;
   const lifespan = ants.lifespan[i]!;
   if (lifespan <= 0 || ants.age[i]! < lifespan) return false;
-  if (ants.place[i] === Place.tube || !handsFree(ants.state[i]!)) return false;
+  if (ants.place[i] === Place.tube || !handsFree(ants.state[i]!) || ants.pieceHeld[i]! >= 0) return false;
   die(ctx, i, Cause.age);
   return true;
 }
@@ -108,7 +110,7 @@ export function endure(ctx: AntContext, i: number): boolean {
         : ants.heat[i]! >= params.heatDeathDays
           ? Cause.heat
           : Cause.none;
-  if (cause === Cause.none || ants.place[i] === Place.tube || !handsFree(ants.state[i]!)) return false;
+  if (cause === Cause.none || ants.place[i] === Place.tube || !handsFree(ants.state[i]!) || ants.pieceHeld[i]! >= 0) return false;
   die(ctx, i, cause);
   return true;
 }
@@ -295,6 +297,8 @@ export function dropCorpse(ctx: AntContext, i: number): void {
     ants.carriedBy[k] = -1;
   }
   ants.corpseHeld[i] = -1;
+  // Or the husk of an insect, or a mouldy piece (Arena 3).
+  if (ants.pieceHeld[i]! >= 0) dropPiece(ctx, i);
   ants.state[i] = ants.place[i] === Place.arena ? AntState.homing : AntState.wandering;
   ants.timer[i] = 0;
   ants.corpseVersion++;

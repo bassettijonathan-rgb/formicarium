@@ -3,6 +3,7 @@
  * learn about one ant by watching it, in words. Read only; never changes the
  * world.
  */
+import type { Part } from './prey';
 import { AntState, Caste, Cause, Place } from './ants';
 import { BroodStage } from './brood';
 import { MATERIAL_NAMES } from './materials';
@@ -35,6 +36,16 @@ const CAUSE_NAMES: Record<number, string> = {
 const days = (d: number) => `${d < 10 ? d.toFixed(1) : Math.round(d)} ${d === 1 ? 'day' : 'days'}`;
 const ul = (v: number) => `${v < 0.1 ? v.toFixed(3) : v.toFixed(2)} µL`;
 
+const PART_NAMES: Record<Part, string> = {
+  fly: 'fruit fly',
+  head: 'head',
+  thorax: 'thorax',
+  abdomen: 'abdomen',
+  hindLeg: 'hind leg',
+  leg: 'leg',
+  section: 'piece',
+};
+
 /** What ant `i` is doing, in words. */
 export function doing(world: World, i: number): string {
   const { ants, brood } = world;
@@ -43,6 +54,11 @@ export function doing(world: World, i: number): string {
   if (place === Place.gone) return 'taken out of the tank';
   const farm = place === Place.farm;
   const tube = place === Place.tube;
+  const held = world.prey.find((p) => p.id === ants.pieceHeld[i]);
+  if (held && state !== AntState.carryingCorpse) {
+    const what = held.part === 'fly' ? 'a fruit fly' : `a ${PART_NAMES[held.part]} of a ${held.insect}`;
+    return tube ? `in the tube, carrying ${what} home` : farm ? `taking ${what} to the brood` : `carrying ${what} home`;
+  }
   switch (state) {
     case AntState.dead:
       return ants.carriedBy[i]! >= 0 ? 'dead, being carried by a nestmate' : 'dead';
@@ -76,7 +92,11 @@ export function doing(world: World, i: number): string {
       return `carrying ${k >= 0 ? (BROOD_NAMES[brood.stage[k]!] ?? 'brood') : 'brood'} to the rest of the brood`;
     }
     case AntState.carryingCorpse:
-      return 'carrying a dead nestmate out of the nest';
+      return held ? `carrying what is left of a ${held.insect} out of the nest` : 'carrying a dead nestmate out of the nest';
+    case AntState.atPrey: {
+      const p = world.prey.find((q) => q.id === ants.preyId[i]);
+      return p ? `at a ${p.insect}, biting it apart and drinking its juices` : 'at an insect';
+    }
     default:
       return 'about its business';
   }

@@ -17,6 +17,7 @@ import { AntState, type Ants, Place } from './ants';
 import { type Farm, FIELD_CELL, smoothAt } from './farm';
 import type { FoodDrop } from './food';
 import type { AntParams } from './params';
+import type { Piece } from './prey';
 
 /** How thickly mould covers a corpse when it starts, 0-1. */
 const MOULD_SEED = 0.02;
@@ -38,7 +39,7 @@ export function corpseMould(params: AntParams, deadFor: number, warmth: number):
 }
 
 /** Lets mould grow, spread and die back for `seconds` of ant time (life clock). Does nothing unless `mould` is on. */
-export function updateMould(farm: Farm, ants: Ants, params: AntParams, seconds: number): void {
+export function updateMould(farm: Farm, ants: Ants, params: AntParams, seconds: number, prey: readonly Piece[] = []): void {
   if (!params.mould) return;
   const days = seconds / params.daySeconds;
   const w = farm.fieldWidth;
@@ -60,6 +61,18 @@ export function updateMould(farm: Farm, ants: Ants, params: AntParams, seconds: 
     if (farm.humidity[f]! < params.mouldHumidity) continue;
     const warmth = Math.pow(2, (farm.temperature[f]! - 25) / params.mouldDoubling);
     source[f] = Math.max(source[f]!, corpseMould(params, ants.deadFor[i]!, warmth));
+    any = true;
+  }
+  // A piece of insect left uneaten in the nest feeds mould as a corpse does, from when it went mouldy (Arena 3, B8).
+  for (const p of prey) {
+    if (!p.mouldy || p.place !== Place.farm || p.carriedBy >= 0) continue;
+    const fx = Math.min(w - 1, Math.max(0, Math.floor(p.x / FIELD_CELL)));
+    const fy = Math.min(h - 1, Math.max(0, Math.floor(p.y / FIELD_CELL)));
+    const f = fy * w + fx;
+    if (farm.humidity[f]! < params.mouldHumidity) continue;
+    const warmth = Math.pow(2, (farm.temperature[f]! - 25) / params.mouldDoubling);
+    const since = p.age - params.preyMouldDays + params.corpseMouldDays;
+    source[f] = Math.max(source[f]!, corpseMould(params, since, warmth));
     any = true;
   }
   if (!any && farm.mouldy === 0) return; // nothing to grow on, and no mould left
