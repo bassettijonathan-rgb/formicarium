@@ -10,14 +10,33 @@
  * inner face of the far wall of each chamber shows above the floor.
  */
 import { Material } from '../sim/materials';
+import type { NestMaterial } from '../sim/nest';
 
-/** Ytong as [r, g, b]: the block's sawn top, the chamber floors, and the walls' faces in shadow. */
-const TOP = [222, 219, 210] as const;
-const FLOOR = [196, 191, 180] as const;
-const FACE = [160, 155, 146] as const;
-/** How much the wettest ytong darkens, as a fraction of its dry brightness. */
-const WET_DARKENING = 0.42;
-/** Water (fraction of saturation) at which ytong looks wettest. */
+/** How a material looks. */
+interface Look {
+  /** As [r, g, b]: the block's top, the chamber floors, and the walls' faces in shadow. */
+  top: readonly number[];
+  floor: readonly number[];
+  face: readonly number[];
+  /** How much the wettest block darkens, as a fraction of its dry brightness. */
+  wetDarkening: number;
+  /** How strong the fine speckle is (ytong's pores), and how many pixels are dark pores. */
+  speckle: number;
+  pores: number;
+  /** Wood's grain: bands along the board. */
+  grain: boolean;
+  /** How opaque the walls are: acrylic is clear. */
+  wallAlpha: number;
+}
+
+const LOOKS: Record<NestMaterial, Look> = {
+  ytong: { top: [222, 219, 210], floor: [196, 191, 180], face: [160, 155, 146], wetDarkening: 0.42, speckle: 0.1, pores: 0.04, grain: false, wallAlpha: 1 },
+  plaster: { top: [242, 240, 234], floor: [228, 225, 218], face: [190, 187, 180], wetDarkening: 0.28, speckle: 0.03, pores: 0.004, grain: false, wallAlpha: 1 },
+  // Clear acrylic: the desk shows through its floor, its walls are glassy.
+  acrylic: { top: [214, 228, 236], floor: [146, 120, 96], face: [236, 244, 248], wetDarkening: 0, speckle: 0, pores: 0, grain: false, wallAlpha: 0.42 },
+  wood: { top: [190, 136, 86], floor: [156, 104, 62], face: [112, 72, 42], wetDarkening: 0.3, speckle: 0.04, pores: 0, grain: true, wallAlpha: 1 },
+};
+/** Water (fraction of saturation) at which a block looks wettest. */
 const WETTEST = 0.6;
 
 export interface NestPictures {
@@ -41,7 +60,9 @@ export function paintNest(
   h: number,
   scale: number,
   lift: number,
+  kind: NestMaterial = 'ytong',
 ): NestPictures {
+  const look = LOOKS[kind];
   const W = w * scale;
   const H = h * scale;
   // The cells are a mm across; a carving's edges are smooth curves. Blur the open-or-wall cells a little
@@ -74,10 +95,10 @@ export function paintNest(
 
   const floor = new Uint8ClampedArray(W * H * 4);
   for (let i = 0; i < W * H; i++) {
-    const k = shade(i, wet[i]!);
-    floor[4 * i] = FLOOR[0] * k;
-    floor[4 * i + 1] = FLOOR[1] * k;
-    floor[4 * i + 2] = FLOOR[2] * k;
+    const k = shade(look, i, wet[i]!) * grainAt(look, i % W, Math.floor(i / W), scale);
+    floor[4 * i] = look.floor[0]! * k;
+    floor[4 * i + 1] = look.floor[1]! * k;
+    floor[4 * i + 2] = look.floor[2]! * k;
     floor[4 * i + 3] = 255; // opaque: the walls are drawn over it, and nothing under the block shows through their edges
   }
 
@@ -101,10 +122,10 @@ export function paintNest(
       }
       const at = Math.min(H - 1, Math.max(0, r)) * W + px;
       if (top > 0) {
-        const k = shade(at + 7919, wet[at]!) * (0.94 + 0.12 * jitter(at * 31 + 3));
-        mix(walls, o, TOP, k, top, face, depth);
+        const k = shade(look, at + 7919, wet[at]!) * (1 - look.speckle * 0.6 + look.speckle * 1.2 * jitter(at * 31 + 3)) * grainAt(look, px, r, scale);
+        mix(walls, o, look, k, top, face, depth);
       } else if (face > 0) {
-        mix(walls, o, TOP, 0, 0, face, depth);
+        mix(walls, o, look, 0, 0, face, depth);
       }
     }
   }
@@ -112,20 +133,32 @@ export function paintNest(
 }
 
 /** Writes a wall pixel: the top (`top` of it) over a face in shadow (`face` of it, darker deeper down). */
-function mix(out: Uint8ClampedArray, o: number, rgb: readonly number[], k: number, top: number, face: number, depth: number): void {
+function mix(out: Uint8ClampedArray, o: number, look: Look, k: number, top: number, face: number, depth: number): void {
   const f = 0.92 - 0.25 * depth;
   const alpha = Math.max(top, face);
   for (let c = 0; c < 3; c++) {
-    const faceColour = FACE[c]! * f;
-    const v = top * rgb[c]! * k + (1 - top) * faceColour;
+    const faceColour = look.face[c]! * f;
+    const v = top * look.top[c]! * k + (1 - top) * faceColour;
     out[o + c] = alpha > 0 ? v : 0;
   }
-  out[o + 3] = 255 * alpha;
+  // Clear acrylic: its top lets the floor show through, its cut faces catch the light more.
+  out[o + 3] = 255 * alpha * (look.wallAlpha + (1 - look.wallAlpha) * (1 - top) * 0.6);
 }
 
-/** Brightness of ytong at a pixel: darker where wet, with the fine pores' speckle. */
-function shade(i: number, wet: number): number {
-  return (1 - WET_DARKENING * wet) * (0.9 + 0.1 * jitter(i)) * (jitter(i + 104729) < 0.04 ? 0.82 : 1);
+/** Brightness of the block at a pixel: darker where wet, with the fine speckle and the pores. */
+function shade(look: Look, i: number, wet: number): number {
+  return (1 - look.wetDarkening * wet) * (1 - look.speckle + look.speckle * jitter(i)) * (jitter(i + 104729) < look.pores ? 0.82 : 1);
+}
+
+/** Wood's grain at a pixel: wavy bands along the board, a few mm apart. */
+function grainAt(look: Look, px: number, py: number, scale: number): number {
+  if (!look.grain) return 1;
+  const x = px / scale;
+  const y = py / scale;
+  // Growth rings cut along the board: wavy, unevenly spaced, with thin darker late-wood lines.
+  const v = y * 1.3 + 3 * Math.sin(x / 41 + y / 29) + 1.1 * Math.sin(x / 13 - y / 7);
+  const ring = Math.sin(v);
+  return 0.95 + 0.04 * Math.sin(v * 0.37) - (ring > 0.88 ? 0.07 * (ring - 0.88) / 0.12 : 0);
 }
 
 function smooth(t: number): number {

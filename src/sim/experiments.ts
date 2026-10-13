@@ -14,10 +14,10 @@ import { Purpose, Rng } from './rng';
 import { doubleBridge, foodChoice, Tally } from './lab';
 import type { AntParams } from './params';
 import { STEPS_PER_SECOND } from './time';
-import { addCorpse, colonyCrop, createWorld, deathsBy, killAnt, setHeatMat, placeInsect, placeProtein, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
+import { addCorpse, colonyCrop, createWorld, deathsBy, killAnt, setCover, setHeatMat, placeInsect, placeProtein, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
 import { createArena } from './arena';
 import type { Cut, Insect } from './prey';
-import type { NestLayout, NestSize } from './nest';
+import type { NestLayout, NestMaterial, NestSize } from './nest';
 import { TANK_ARENA } from './tank';
 
 export interface RunOptions {
@@ -960,7 +960,7 @@ export function runPrey(opts: RunOptions & { insect: Insect; cut: Cut; minutes: 
 
 /** A colony moved into a bought nest for an experiment: the workers and the brood strewn through its chambers. */
 function boughtNestColony(
-  opts: RunOptions & { size: NestSize; layout: NestLayout; brood?: number; queen?: boolean; tipped?: boolean },
+  opts: RunOptions & { size: NestSize; layout: NestLayout; material?: NestMaterial; brood?: number; queen?: boolean; tipped?: boolean },
 ): World {
   const params: Partial<AntParams> = {
     forageRate: 0,
@@ -970,7 +970,7 @@ function boughtNestColony(
     larvaStarveDays: 1e9,
     ...opts.params,
   };
-  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, queen: opts.queen ?? false, params, bought: { size: opts.size, layout: opts.layout } });
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, queen: opts.queen ?? false, params, bought: { size: opts.size, layout: opts.layout, material: opts.material ?? 'ytong' } });
   const { ants, brood, farm } = world;
   const rng = new Rng(opts.seed, Purpose.test);
   const open: number[] = [];
@@ -1044,6 +1044,65 @@ export function runNestDamp(opts: RunOptions & { hours: number; layout?: NestLay
     dampByHour.push(m.damp);
   }
   return { meanByHour, dampByHour, dampFloor: dampFloor / floor };
+}
+
+export interface NestDarkResult {
+  /** Share of the brood lying under the cover (in the covered half), at the start and the end of each hour. */
+  darkByHour: number[];
+  /** Share of the resting workers under the cover, likewise. */
+  restingDarkByHour: number[];
+}
+
+/**
+ * Darkness (Nests 2, DESIGN.md 9.14): a medium nest with its cover lifted
+ * from the water half, workers and brood strewn through all its chambers.
+ * Most brood should be under the cover within an hour (Temnothorax colonies
+ * offered a dark and a light nest choose the dark one, Franks et al. 2003).
+ * Unless `gradient`, the whole block is soaked, so light is the only
+ * difference between the halves; with it, the dark half is the dry one.
+ */
+export function runNestDark(
+  opts: RunOptions & { hours: number; layout?: NestLayout; material?: NestMaterial; gradient?: boolean },
+): NestDarkResult {
+  const world = boughtNestColony({
+    ...opts,
+    size: 'M',
+    layout: opts.layout ?? 'classic',
+    material: opts.material ?? 'ytong',
+    brood: 45,
+    params: { broodDryDays: 1e9, ...opts.params },
+  });
+  const { ants, brood, farm } = world;
+  if (!opts.gradient) farm.humidity.fill(0.97);
+  const half = farm.width / 2;
+  setCover(world, 0, half);
+  const measure = () => {
+    let dark = 0;
+    let n = 0;
+    for (let k = 0; k < brood.count; k++) {
+      if (brood.stage[k] === BroodStage.none) continue;
+      n++;
+      if (brood.x[k]! > half) dark++;
+    }
+    let resting = 0;
+    let restingDark = 0;
+    for (let i = 0; i < ants.count; i++) {
+      if (ants.place[i] !== Place.farm || ants.state[i] !== AntState.resting || ants.caste[i] !== Caste.worker) continue;
+      resting++;
+      if (ants.x[i]! > half) restingDark++;
+    }
+    return { dark: dark / n, restingDark: resting ? restingDark / resting : 0 };
+  };
+  const first = measure();
+  const darkByHour = [first.dark];
+  const restingDarkByHour = [first.restingDark];
+  for (let h = 0; h < opts.hours; h++) {
+    for (let s = 0; s < 3600 * STEPS_PER_SECOND; s++) step(world);
+    const m = measure();
+    darkByHour.push(m.dark);
+    restingDarkByHour.push(m.restingDark);
+  }
+  return { darkByHour, restingDarkByHour };
 }
 
 export interface NestRoomResult {

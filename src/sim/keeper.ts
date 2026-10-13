@@ -20,6 +20,7 @@ import {
   placeProtein,
   placeSugar,
   removeFood,
+  setCover,
   setHeatMat,
   step,
   water,
@@ -37,6 +38,8 @@ export type KeeperCommand =
   | { type: 'heatMat'; x: number | null }
   /** Water poured on the farm from above at `x` mm (M5b). */
   | { type: 'water'; x: number }
+  /** A bought nest's cover lifted from `from` to `to` mm across, or put back (`to` <= `from`) (Nests 2, N7). */
+  | { type: 'cover'; from: number; to: number }
   /** The arena cleaned: the dead lying there and mouldy food taken out (M5c), and the feeding dishes emptied (B4). */
   | { type: 'clean' }
   /** An object put in the arena with its middle at (x, y); a liquid feeder comes full of sugar water of `concentration` mol/L (B3-B5). */
@@ -117,6 +120,9 @@ export function applyCommand(world: World, command: KeeperCommand): void {
       break;
     case 'water':
       water(world, command.x);
+      break;
+    case 'cover':
+      setCover(world, command.from, command.to);
       break;
     case 'clean':
       cleanArena(world);

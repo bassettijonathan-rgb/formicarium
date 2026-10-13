@@ -297,10 +297,59 @@ the ants cannot dig, so what the colony does is choose where to live in it.
   walls and corners. Ants going out follow the fresh air from the tube, as
   they do along tunnels, and the tube's draught near its mouth. A new
   colony is tipped into the chamber nearest the nest's middle.
-- **Not yet:** other materials and covers (darkness), modules, the test
-  tube and moving house (Nests 2 and 3). Because a bought nest keeps its
-  shape, it has no timelapse.
+- **Not yet:** modules, the test tube and moving house (Nests 3). Because
+  a bought nest keeps its shape, it has no timelapse.
 - Validation: section 9, test 15.
+
+**Nests 2 (built): plaster, acrylic and wood; the cover and light**
+(`NEST_MATERIALS` and `lightAt` in `src/sim/nest.ts`).
+
+- **Materials (N2).** The same carvings come in four materials, each a new
+  hard `Material` (plaster 5, acrylic 6, wood 7); "New tank" offers them
+  with the sizes and layouts. They differ in four ways (rough values,
+  chosen to match how keepers describe them):
+
+  | | Water at the hole, reach | Vapour reach | Mat's warmth (share) | Mould spread, die-back |
+  |---|---|---|---|---|
+  | Ytong | 60%, 45 mm | 20 mm | 0.70 | 1, 1 |
+  | Plaster | 70%, 60 mm | 20 mm | 0.80 | 1.3, 1 |
+  | Acrylic | none; a wet sponge | 60 mm | 0.60 | 0.5, 1.5 |
+  | Wood | 35%, 30 mm, uneven | 20 mm | 0.56 | 1.5, 0.5 |
+
+  Plaster soaks water up a little farther than ytong, so more of the nest
+  is damp. Acrylic holds no water: a sponge (10 mm across) in the chamber
+  nearest the water end keeps the air on it saturated, and with no porous
+  walls to take the vapour up it spreads farther along the chambers, so
+  the air is humid round the sponge and the room's elsewhere. Wood holds a
+  little, unevenly: its water varies by up to ±60% along the grain (smooth
+  bands 30 mm long and 6 mm across, from the tank's seed). Warmth passes
+  as the materials conduct when damp (plaster about 0.5 W/m·K, damp ytong
+  0.3, acrylic 0.19, beech 0.16). Mould creeps readily through damp porous
+  plaster, hardly over smooth acrylic, and feeds on damp wood itself, so
+  it spreads farther and dies back more slowly there. A dry block is as
+  dry as the room, no drier (this also lifts the far end of a large ytong
+  nest from below the room's humidity to the room's).
+- **The cover and light (N7).** Every bought nest has a cover, on when the
+  tank starts. The keeper can lift it from the left or the right half, or
+  take it off ("Cover" on the page; a keeper command, so it is saved and
+  replayed). Under it the nest has 3% of the room's light (`COVER_LEAK`);
+  where it is lifted, all of it, fading over 4 mm under the cover's edge.
+  The page draws the cover as a tinted lid (a red film on acrylic, which
+  ants barely see), so the keeper still sees in. The sand farm's nest is
+  dark: it is dug into the soil.
+- **The ants and light.** Nest workers shun light and carry brood out of
+  it (keepers see it every time they lift a cover; Temnothorax colonies
+  choose a dark nest over a light one, Franks et al. 2003). An ant in the
+  light (above `lightSense`, 10% of the room's, fully at 20%): picks up
+  brood there as readily as an item lying alone, however thick the pile
+  (`lightPick`); counts it as a reason to move brood, as heat, dryness and
+  mould are (section 7.7), so it carries it on rather than putting it
+  down; and settles to rest a tenth as readily (`lightRest`). A brood
+  carrier sees which way is darker, 6 mm ahead and to each side
+  (`lightSight`), and turns that way, as it turns toward the right warmth
+  and damp. Light outweighs damp: with the cover lifted from the wet end
+  the brood goes to the dark, drier end (9.14).
+- Validation: section 9, test 16.
 
 ---
 
@@ -1072,6 +1121,10 @@ project. If one fails, we fix the model, not the test.
    chambers; and the floor a colony takes up grows in proportion to its
    workers, in a nest far bigger than it needs (Temnothorax colonies choose
    a nest whose area matches their size, Mallon & Franks 2000).
+16. **Darkness** (Nests 2; check 2 of the bought-nests plan): with the
+   cover lifted from half of a nest, most brood is under the cover within
+   an hour (Temnothorax colonies offered a dark and a light cavity choose
+   the dark one, Franks et al. 2003).
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -1534,6 +1587,30 @@ beside resting nestmates (Depickère et al. 2004), which the model does not
 have; that is the likely fix, needed before Nests 3, where a colony should
 move into a new module only when the first is full.
 
+### 9.14 Results so far (darkness, Nests 2)
+
+`npm run experiment -- nest-dark`; `tests/science/nestDark.test.ts` checks
+seeds 1-3 over 1 hour. A medium classic nest with its cover lifted from the
+left half (the water end), 60 workers and 45 eggs, larvae and pupae strewn
+through all its chambers (more of the floor is in the right half, so more
+than half starts under the cover). Share of the brood under the cover, at
+the start and after each hour:
+
+| Seed | Soaked ytong, as modelled | Soaked, ants ignoring light (control) | Ytong wet at the lit end | Acrylic, sponge at the lit end |
+|---|---|---|---|---|
+| 1 | 64% → 100% → 100% | 64% → 67% → 69% | 64% → 100% → 100% | 64% → 80% → 100% |
+| 2 | 58% → 100% → 100% | 58% → 49% → 62% | 58% → 100% → 100% | 58% → 98% → 98% |
+| 3 | 71% → 100% → 100% | 71% → 80% → 96% | 71% → 100% → 100% | 71% → 100% → 100% |
+
+Within an hour all the brood is in the dark, and 89-100% of the resting
+workers with it; without the dislike of light the brood drifts at random
+(49-80% after an hour). When the lit end is also the damp end, light wins:
+the brood goes to the dark, drier half, which in ytong is still damp near
+the cover's edge, and in acrylic is at the room's humidity. Keepers report
+that a colony moves its brood away from a lifted cover within minutes; how
+it weighs light against damp has not, as far as I know, been measured in
+Lasius niger, so that balance is the model's guess.
+
 ---
 
 ## 10. Architecture
@@ -1596,6 +1673,7 @@ parameters, I stop and report before changing the model.
 - Dussutour & Simpson 2009. Communal nutrition in ants. Curr. Biol.
 - Dussutour & Simpson 2012. Ant workers die young and colonies collapse when fed a high-protein diet. Proc. R. Soc. B.
 - Franks & Sendova-Franks 1992. Brood sorting by ants. Behav. Ecol. Sociobiol.
+- Franks, Mallon, Bray, Hamilton & Mischler 2003. Strategies for choosing between alternatives with different attributes: exemplified by house-hunting ants. Anim. Behav. 65, 215-223.
 - Goss, Aron, Deneubourg & Pasteels 1989. Self-organized shortcuts in the Argentine ant. Naturwissenschaften.
 - Greenwald, Eckmann & Feinerman 2018. Individual crop loads provide local control for collective food intake in ant colonies. eLife.
 - Hurlbert, Ballantyne & Powell 2008. Shaking a leg and hot to trot: the effects of body size and temperature on running speed in ants. Ecol. Entomol.

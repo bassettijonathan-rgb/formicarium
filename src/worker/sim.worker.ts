@@ -14,7 +14,7 @@ import { ANT_STRIDE, type FromWorker, Look, type PieceView, type ToWorker } from
 import { edible } from '../sim/prey';
 import { readSave, setAside, writeSave } from './store';
 import { inspectAnt } from '../sim/inspect';
-import { DEFAULT_NEST, type NestSetup } from '../sim/nest';
+import { DEFAULT_NEST, type NestSetup, nestMaterialName } from '../sim/nest';
 import { Purpose, Rng } from '../sim/rng';
 
 const INTERVAL_MS = 50;
@@ -51,7 +51,7 @@ function sendFarm(w: World): void {
   const loose = w.farm.loose.slice();
   const n = w.farm.nest;
   const nest = n
-    ? { size: n.size, layout: n.layout, depth: n.depth, thickness: n.thickness, waterX: n.waterX, waterY: n.waterY, waterRadius: n.waterRadius, tubeY: w.farm.tubeY }
+    ? { size: n.size, layout: n.layout, material: nestMaterialName(n.material), depth: n.depth, thickness: n.thickness, waterX: n.waterX, waterY: n.waterY, waterRadius: n.waterRadius, tubeY: w.farm.tubeY }
     : null;
   post({ type: 'farm', width: w.farm.width, height: w.farm.height, material, moisture, loose, nest }, [
     material.buffer,
@@ -159,6 +159,7 @@ function sendHeat(w: World): void {
       cell: FIELD_CELL,
       temperature,
       mat: w.heatMat ? { ...w.heatMat } : null,
+      lit: w.farm.nest ? { from: w.farm.nest.litFrom, to: w.farm.nest.litTo } : null,
       room: w.params.roomTemperature,
       mould,
       humidity,

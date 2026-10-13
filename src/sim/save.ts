@@ -16,6 +16,7 @@ import { createBrood } from './brood';
 import type { Census } from './history';
 import { stampDecorations } from './decor';
 import { type LoggedCommand, createTank, furnishArena } from './keeper';
+import { nestMaterialName } from './nest';
 import { TANK_ARENA } from './tank';
 import { STEPS_PER_SECOND } from './time';
 import type { World } from './world';
@@ -61,7 +62,8 @@ export function loadWorld(save: Save): World | null {
   // A tank saved before bought nests lives in the sand farm, and goes on doing so.
   saved.farm.nest ??= null;
   const bought = saved.farm.nest;
-  const template = createTank(save.seed, bought ? { size: bought.size, layout: bought.layout } : null);
+  // A nest saved before Nests 2 is ytong, its cover on.
+  const template = createTank(save.seed, bought ? { size: bought.size, layout: bought.layout, material: nestMaterialName(bought.material) } : null);
   template.ants = createAnts(saved.ants?.count ?? 0);
   template.brood = createBrood(saved.brood?.stage?.length ?? 0);
   fill(saved as unknown as Record<string, unknown>, template as unknown as Record<string, unknown>);

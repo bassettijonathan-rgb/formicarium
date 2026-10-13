@@ -16,6 +16,7 @@
 import { AntState, type Ants, Place } from './ants';
 import { type Farm, FIELD_CELL, smoothAt } from './farm';
 import type { FoodDrop } from './food';
+import { materialOf } from './nest';
 import type { AntParams } from './params';
 import type { Piece } from './prey';
 
@@ -78,7 +79,10 @@ export function updateMould(farm: Farm, ants: Ants, params: AntParams, seconds: 
   if (!any && farm.mouldy === 0) return; // nothing to grow on, and no mould left
   before.set(mould);
   // Explicit diffusion on the 2 mm grid, through damp cells only.
-  const k = Math.min(0.2, (params.mouldSpread * days) / (FIELD_CELL * FIELD_CELL));
+  // In a bought nest, its material decides how readily mould creeps through it and how fast it dies back (Nests 2).
+  const material = farm.nest ? materialOf(farm.nest) : undefined;
+  const k = Math.min(0.2, (params.mouldSpread * (material?.mouldSpread ?? 1) * days) / (FIELD_CELL * FIELD_CELL));
+  const decay = params.mouldDecay * (material?.mouldDecay ?? 1);
   const damp = (j: number) => farm.humidity[j]! >= params.mouldHumidity;
   let total = 0;
   for (let fy = 0; fy < h; fy++) {
@@ -96,7 +100,7 @@ export function updateMould(farm: Farm, ants: Ants, params: AntParams, seconds: 
         next += k * flow;
       }
       // Away from food, or in dry air, it dies back (fast in dry air); on a corpse it is as thick as the corpse's cover.
-      next *= 1 - Math.min(1, params.mouldDecay * (humid ? 1 : 10) * days);
+      next *= 1 - Math.min(1, decay * (humid ? 1 : 10) * days);
       next = Math.max(next, source[i]!);
       next = next < 1e-4 ? 0 : Math.min(1, next);
       mould[i] = next;

@@ -133,6 +133,7 @@ export class TankView {
   setHeat(snapshot: HeatSnapshot): void {
     this.heat.setHeat(snapshot);
     this.nest.setMat(snapshot.mat);
+    this.nest.setCover(snapshot.lit);
   }
 
   /** Repaints the soil, or the bought nest, from a snapshot of the farm's layers. */
