@@ -23,7 +23,7 @@ export const FIELD_CELL = 2;
  */
 export const DRAINED_RISE = 0.35;
 /** Indexed by `Material`; the walls of bought nests hold what the nest gives them (nest.ts). */
-export const RETENTION = [0, -0.12, 0, 0.12, 0];
+export const RETENTION = [0, -0.12, 0, 0.12, 0, 0, 0, 0];
 
 export interface Farm {
   width: number;

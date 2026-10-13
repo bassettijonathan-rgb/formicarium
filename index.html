@@ -98,6 +98,13 @@
         <button id="damp">Show damp</button>
         <span id="damp-note" style="align-self: center; color: #9aa4b1"></span>
       </div>
+      <div class="row" id="cover-row" hidden>
+        <span style="align-self: center; color: #9aa4b1">Cover:</span>
+        <button data-cover="on" aria-pressed="true">On</button>
+        <button data-cover="left">Lift left half</button>
+        <button data-cover="right">Lift right half</button>
+        <button data-cover="off">Off</button>
+      </div>
       <div class="row">
         <button data-speed="0">Pause</button>
         <button data-speed="1" aria-pressed="true">1×</button>
@@ -107,7 +114,11 @@
         <button id="fit">Fit view</button>
       </div>
       <div class="row">
-        <span style="align-self: center; color: #9aa4b1">New tank in a ytong nest:</span>
+        <span style="align-self: center; color: #9aa4b1">New tank in a bought nest:</span>
+        <button data-material="ytong">Ytong</button>
+        <button data-material="plaster">Plaster</button>
+        <button data-material="acrylic">Acrylic</button>
+        <button data-material="wood">Wood</button>
         <button data-size="S">Small</button>
         <button data-size="M">Medium</button>
         <button data-size="L">Large</button>

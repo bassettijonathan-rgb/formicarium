@@ -14,6 +14,11 @@
  * the ytong round it, mixed along the chambers, and the room's air comes in
  * through the tube. So the colony has a damp-to-dry range to choose from.
  *
+ * Nests 2 sells the same carvings in plaster, acrylic and wood, which hold
+ * water, pass warmth and grow mould differently (`NEST_MATERIALS`), and puts
+ * a cover on every nest: under it the nest is dark for the ants, and the
+ * keeper can lift it from part of the nest or all of it (`lightAt`).
+ *
  * The same `Farm` grid holds it as holds the sand farm: the cells are walls
  * or air, and the fields (smells, warmth, humidity, mould) work as before.
  */
@@ -25,15 +30,68 @@ import { poreHumidity } from './water';
 
 export type NestSize = 'S' | 'M' | 'L';
 export type NestLayout = 'classic' | 'organic' | 'honeycomb';
+export type NestMaterial = 'ytong' | 'plaster' | 'acrylic' | 'wood';
 
-/** What the keeper buys: a size and a layout (Nests 1 sells ytong only). */
+/** What the keeper buys: a size, a layout and a material (ytong unless said). */
 export interface NestSetup {
   size: NestSize;
   layout: NestLayout;
+  material?: NestMaterial;
 }
 
 /** The page's new tank: a medium classic ytong nest. */
-export const DEFAULT_NEST: NestSetup = { size: 'M', layout: 'classic' };
+export const DEFAULT_NEST: NestSetup = { size: 'M', layout: 'classic', material: 'ytong' };
+
+/** How a nest's material holds water, passes warmth and lets mould grow (N2, DESIGN.md 3.5). */
+export interface NestMaterialProps {
+  material: Material;
+  /**
+   * Water in the block round the water hole, fraction of saturation, and how
+   * far it reaches: it falls by e every `waterReach` mm from the hole's edge.
+   * Acrylic holds none (`sponge`: a wet sponge in one chamber instead).
+   */
+  waterAtHole: number;
+  waterReach: number;
+  sponge: boolean;
+  /** How unevenly the block holds its water, 0 (evenly) to 1: wood's grain soaks some bands more than others. */
+  uneven: number;
+  /** How far water vapour spreads along the chambers before the walls take it up, mm. */
+  vapourReach: number;
+  /** How much of the heat mat's warmth reaches the floor, as a multiple of ytong's (`nestMatShare`). */
+  heat: number;
+  /** How fast mould spreads from what it grows on, and how fast it dies back, as multiples of ytong's. */
+  mouldSpread: number;
+  mouldDecay: number;
+}
+
+/**
+ * The four materials. Rough values, chosen to match how keepers describe
+ * them (bought-nests.md): plaster soaks up water like ytong, a bit faster and
+ * farther; acrylic holds none, so only the air near its sponge is humid
+ * (and with no walls soaking vapour up it spreads farther along the
+ * chambers); wood holds a little, unevenly. Warmth passes as their
+ * conductivities when damp go (plaster about 0.5 W/m·K, damp ytong 0.3,
+ * acrylic 0.19, beech 0.16). Mould creeps through damp porous plaster
+ * readily, hardly over smooth acrylic, and feeds on damp wood itself, so it
+ * dies back slowly there.
+ */
+export const NEST_MATERIALS: Record<NestMaterial, NestMaterialProps> = {
+  ytong: { material: Material.ytong, waterAtHole: 0.6, waterReach: 45, sponge: false, uneven: 0, vapourReach: 20, heat: 1, mouldSpread: 1, mouldDecay: 1 },
+  plaster: { material: Material.plaster, waterAtHole: 0.7, waterReach: 60, sponge: false, uneven: 0, vapourReach: 20, heat: 1.15, mouldSpread: 1.3, mouldDecay: 1 },
+  acrylic: { material: Material.acrylic, waterAtHole: 0, waterReach: 1, sponge: true, uneven: 0, vapourReach: 60, heat: 0.85, mouldSpread: 0.5, mouldDecay: 1.5 },
+  wood: { material: Material.wood, waterAtHole: 0.35, waterReach: 30, sponge: false, uneven: 0.6, vapourReach: 20, heat: 0.8, mouldSpread: 1.5, mouldDecay: 0.5 },
+};
+
+/** The name of a nest's material, from the number stored in it. */
+export function nestMaterialName(material: Material): NestMaterial {
+  for (const name of Object.keys(NEST_MATERIALS) as NestMaterial[]) if (NEST_MATERIALS[name].material === material) return name;
+  return 'ytong';
+}
+
+/** How the material of `nest` behaves. */
+export function materialOf(nest: BoughtNest): NestMaterialProps {
+  return NEST_MATERIALS[nestMaterialName(nest.material)];
+}
 
 /** Floor size of each size of nest, mm (N4): a young colony, a few hundred workers, a thousand or more. */
 export const NEST_SIZES: Record<NestSize, { width: number; height: number }> = {
@@ -49,12 +107,17 @@ export interface BoughtNest {
   /** Depth of the chambers, and the block's thickness, mm. */
   depth: number;
   thickness: number;
-  /** The water hole: its middle and radius, mm. */
+  /** The water hole (in acrylic, the sponge): its middle and radius, mm. */
   waterX: number;
   waterY: number;
   waterRadius: number;
   /** Middles of the chambers, mm, in the order they were carved. */
   chambers: { x: number; y: number }[];
+  /** Seed of the wood's grain (how unevenly it holds water). */
+  grain: number;
+  /** Where the keeper has lifted the cover: from `litFrom` to `litTo` mm across; covered everywhere when they are equal (N7). */
+  litFrom: number;
+  litTo: number;
 }
 
 /** Chambers are 5 mm deep, as in bought nests (N4); the block is 25 mm thick. */
@@ -66,21 +129,17 @@ const EDGE = 3;
 /** Room left at the water end for the hole and the wall round it, mm. */
 const WATER_MARGIN = 30;
 
-/**
- * Water in the ytong round the hole, fraction of saturation, and how far it
- * reaches: it falls by e every `WATER_REACH` mm from the hole's edge. Rough
- * values chosen so a medium nest is wet at its water end and dry at the far
- * one, as keepers describe ytong nests (DESIGN.md 3.5).
- */
-const WATER_AT_HOLE = 0.6;
-const WATER_REACH = 45;
+/** The sponge in an acrylic nest's chamber nearest the water end, radius in mm. */
+const SPONGE_RADIUS = 5;
 
 /**
- * Water vapour spreads along the chambers about this far before the ytong
- * round it takes it back up or gives more, mm (rough): the air in a chamber
- * is a mix of the ytong under it and of its neighbours'.
+ * Light under the cover, as a share of the room's: the lid is tinted (or,
+ * on acrylic, a red film, which ants barely see), and a little light comes
+ * in round its edges (rough).
  */
-const VAPOUR_REACH = 20;
+export const COVER_LEAK = 0.03;
+/** Light spreads this far under the edge of a lifted cover, mm (rough: the lid sits 1-2 mm above the walls). */
+const COVER_EDGE = 4;
 
 /** Corridor widths, mm (N4: 3-4 mm), and the honeycomb's doors. */
 const CORRIDOR = { classic: 3.8, organic: 3.5, door: 2.6, port: 4 } as const;
@@ -103,23 +162,30 @@ export function createNest(rng: Rng, setup: NestSetup, params: AntParams): Farm 
   for (const c of chambers) if (Math.hypot(c.x - width, c.y - portY) < Math.hypot(near.x - width, near.y - portY)) near = c;
   carve.stroke(near.x, near.y, near.x, near.y, width, portY, CORRIDOR.port, true);
 
+  const props = NEST_MATERIALS[setup.material ?? 'ytong'];
+  // In acrylic the sponge lies in the chamber nearest the water end's middle.
+  let wet = chambers[0]!;
+  for (const c of chambers) if (Math.hypot(c.x, c.y - height / 2) < Math.hypot(wet.x, wet.y - height / 2)) wet = c;
   const nest: BoughtNest = {
-    material: Material.ytong,
+    material: props.material,
     size: setup.size,
     layout: setup.layout,
     depth: DEPTH,
     thickness: THICKNESS,
-    waterX: 14,
-    waterY: height / 2,
-    waterRadius: setup.size === 'S' ? 7 : 9,
+    waterX: props.sponge ? wet.x : 14,
+    waterY: props.sponge ? wet.y : height / 2,
+    waterRadius: props.sponge ? SPONGE_RADIUS : setup.size === 'S' ? 7 : 9,
     chambers,
+    grain: rng.int(2 ** 31),
+    litFrom: 0,
+    litTo: 0,
   };
   const material = new Uint8Array(width * height);
   const moisture = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = y * width + x;
-      material[i] = air[i] ? Material.air : Material.ytong;
+      material[i] = air[i] ? Material.air : props.material;
       // Under an air cell this is the chamber's floor.
       moisture[i] = Math.round(255 * nestWater(nest, x + 0.5, y + 0.5));
     }
@@ -159,29 +225,82 @@ export function createNest(rng: Rng, setup: NestSetup, params: AntParams): Farm 
   return farm;
 }
 
-/** Water in the ytong at (x, y), fraction of saturation (it does not change: the hole refills itself, N6). */
+/**
+ * Water in the block at (x, y), fraction of saturation (it does not change:
+ * the hole refills itself, N6). In acrylic only the sponge is wet.
+ */
 export function nestWater(nest: BoughtNest, x: number, y: number): number {
-  const d = Math.max(0, Math.hypot(x - nest.waterX, y - nest.waterY) - nest.waterRadius);
-  return WATER_AT_HOLE * Math.exp(-d / WATER_REACH);
+  const props = materialOf(nest);
+  const r = Math.hypot(x - nest.waterX, y - nest.waterY);
+  if (props.sponge) return r <= nest.waterRadius ? 1 : 0;
+  const d = Math.max(0, r - nest.waterRadius);
+  const water = props.waterAtHole * Math.exp(-d / props.waterReach);
+  return props.uneven > 0 ? water * Math.max(0, 1 + props.uneven * grainNoise(nest.grain, x, y)) : water;
+}
+
+/**
+ * Smooth noise in -1..1 stretched along x, like the bands of wood grain:
+ * values on a lattice 30 mm across and 6 mm deep, blended between.
+ */
+function grainNoise(seed: number, x: number, y: number): number {
+  const gx = x / 30;
+  const gy = y / 6;
+  const i = Math.floor(gx);
+  const j = Math.floor(gy);
+  const fx = gx - i;
+  const fy = gy - j;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const top = lattice(seed, i, j) + (lattice(seed, i + 1, j) - lattice(seed, i, j)) * sx;
+  const bottom = lattice(seed, i, j + 1) + (lattice(seed, i + 1, j + 1) - lattice(seed, i, j + 1)) * sx;
+  return top + (bottom - top) * sy;
+}
+
+/** A value in -1..1 for lattice point (i, j), hashed from the seed. */
+function lattice(seed: number, i: number, j: number): number {
+  let h = (seed ^ Math.imul(i, 374761393) ^ Math.imul(j, 668265263)) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return ((h >>> 0) / 4294967296) * 2 - 1;
+}
+
+/**
+ * Light at x mm across the nest, as a share of the room's light, 0-1 (N7).
+ * Under the cover it is nearly dark; where the keeper has lifted it, the
+ * room's light, fading over a few mm under the cover's edge. The sand farm's
+ * nest is dark: it is dug into the soil.
+ */
+export function lightAt(farm: Farm, x: number): number {
+  const nest = farm.nest;
+  if (!nest) return 0;
+  if (nest.litTo <= nest.litFrom) return COVER_LEAK;
+  // Past the lifted part's ends by `out` mm (negative inside it); the block's own ends are no edge.
+  const left = nest.litFrom <= 0 ? -Infinity : nest.litFrom - x;
+  const right = nest.litTo >= farm.width ? -Infinity : x - nest.litTo;
+  const out = Math.max(left, right);
+  const lit = Math.min(1, Math.max(0, 0.5 - out / COVER_EDGE));
+  return COVER_LEAK + (1 - COVER_LEAK) * lit;
 }
 
 /**
  * The air's humidity in a bought nest, per field cell. Each chamber's air is
- * in touch with the ytong under and round it (its pore humidity: saturated
- * unless the ytong is nearly dry, water.ts), and vapour mixes along the
- * chambers over `VAPOUR_REACH`; then the room's air coming in through the
+ * in touch with the block under and round it (its pore humidity: saturated
+ * unless the block is nearly dry, water.ts, and no drier than the room), and
+ * vapour mixes along the chambers over the material's `vapourReach`; then the room's air coming in through the
  * tube mixes in as far as fresh air reaches (`farm.fresh`). Solved once, by
  * relaxation, since nothing in a bought nest changes it.
  */
 export function nestHumidity(farm: Farm, params: AntParams): void {
   const nest = farm.nest!;
+  const props = materialOf(nest);
   const { fieldWidth: w, fieldHeight: h, humidity } = farm;
   const open = new Uint8Array(w * h);
   const floor = new Float64Array(w * h);
   for (let fy = 0; fy < h; fy++) {
     for (let fx = 0; fx < w; fx++) {
       const f = fy * w + fx;
-      floor[f] = poreHumidity(params, nestWater(nest, (fx + 0.5) * FIELD_CELL, (fy + 0.5) * FIELD_CELL));
+      // A dry block is as dry as the room it stands in, no drier.
+      floor[f] = Math.max(params.roomHumidity, poreHumidity(params, nestWater(nest, (fx + 0.5) * FIELD_CELL, (fy + 0.5) * FIELD_CELL)));
       for (let dy = 0; dy < FIELD_CELL; dy++) {
         for (let dx = 0; dx < FIELD_CELL; dx++) {
           const x = fx * FIELD_CELL + dx;
@@ -193,11 +312,13 @@ export function nestHumidity(farm: Farm, params: AntParams): void {
     }
   }
   // Each air cell settles to its floor's humidity held against its open neighbours': a = (cell / reach)².
-  const a = (FIELD_CELL / VAPOUR_REACH) ** 2;
+  // A wet sponge holds the air on it saturated: it gives vapour as fast as the air takes it.
+  const a = (FIELD_CELL / props.vapourReach) ** 2;
   const relax = (f: number, fx: number, fy: number) => {
     if (!open[f]) return;
-    let sum = a * floor[f]!;
-    let weight = a;
+    const hold = props.sponge && floor[f]! >= 1 ? 1e3 : a;
+    let sum = hold * floor[f]!;
+    let weight = hold;
     const add = (j: number, ok: boolean) => {
       if (!ok || !open[j]) return;
       sum += humidity[j]!;

@@ -10,6 +10,7 @@
  * lies on the mat, so the mat warms a strip of its floor instead (DESIGN.md
  * 3.5). The arena and the tube are at room temperature.
  */
+import { materialOf } from './nest';
 import { type Farm, FIELD_CELL, smoothAt } from './farm';
 import type { AntParams } from './params';
 
@@ -54,7 +55,7 @@ export function updateTemperature(farm: Farm, mat: HeatMat | null, params: AntPa
     const to = Math.min(w, Math.ceil((mat.x + mat.width) / FIELD_CELL));
     if (farm.nest) {
       // A bought nest lies flat on the mat: the whole strip of floor over it is warmed from below.
-      const warm = room + params.nestMatShare * (params.matTemperature - room);
+      const warm = room + params.nestMatShare * materialOf(farm.nest).heat * (params.matTemperature - room);
       for (let cy = 0; cy < h; cy++) for (let cx = from; cx < to; cx++) t[cy * w + cx] = warm;
     } else for (let cx = from; cx < to; cx++) t[(h - 1) * w + cx] = params.matTemperature;
   }

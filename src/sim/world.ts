@@ -339,6 +339,17 @@ export function setHeatMat(world: World, x: number | null): void {
   world.heatMat = x === null ? null : { x: Math.max(0, Math.min(world.farm.width - MAT_WIDTH, x)), width: MAT_WIDTH };
 }
 
+/**
+ * The keeper lifts a bought nest's cover from `from` to `to` mm across it,
+ * or puts it back everywhere (`to` <= `from`); nothing in the sand farm (N7).
+ */
+export function setCover(world: World, from: number, to: number): void {
+  const nest = world.farm.nest;
+  if (!nest) return;
+  nest.litFrom = Math.max(0, Math.min(world.farm.width, from));
+  nest.litTo = Math.max(nest.litFrom, Math.min(world.farm.width, to));
+}
+
 /** The keeper waters the farm from above at `x` mm (M5b). Returns the water the soil took up, µL. */
 export function water(world: World, x: number): number {
   return pourWater(world.farm, world.params, x);

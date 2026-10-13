@@ -9,6 +9,7 @@
  * behind it.
  */
 import { Container, Graphics, Matrix, Sprite, Texture } from 'pixi.js';
+import type { NestMaterial } from '../sim/nest';
 import type { NestShape } from '../worker/protocol';
 import { paintNest } from './nestPaint';
 
@@ -26,6 +27,8 @@ export class NestView {
   private readonly walls = new Sprite();
   private readonly front = new Graphics();
   private readonly lid = new Graphics();
+  /** The cover over the lid, tinted, where the keeper has not lifted it (N7). */
+  private readonly cover = new Graphics();
   /** Where things lie on the floor: under the ants and brood, over the floor picture. */
   readonly below = new Container();
   /** The brood, the ants and what lies about, added by the tank view. */
@@ -37,9 +40,10 @@ export class NestView {
   private material: Uint8Array | undefined;
   private moisture: Uint8Array | undefined;
   private mat: { x: number; width: number } | null = null;
+  private lit: { from: number; to: number } | null = null;
 
   constructor() {
-    this.floor.addChild(this.desk, this.floorSprite, this.below, this.above, this.walls, this.front, this.lid);
+    this.floor.addChild(this.desk, this.floorSprite, this.below, this.above, this.walls, this.front, this.lid, this.cover);
     this.root.addChild(this.floor);
   }
 
@@ -69,6 +73,13 @@ export class NestView {
     if (same) return;
     this.mat = mat;
     this.drawDesk();
+  }
+
+  /** Where the cover is lifted (mm across), or null. */
+  setCover(lit: { from: number; to: number } | null): void {
+    if (lit === this.lit || (lit && this.lit && lit.from === this.lit.from && lit.to === this.lit.to)) return;
+    this.lit = lit;
+    this.drawCover();
   }
 
   /** Scene point of the nest point (u, v) lifted h mm. */
@@ -131,7 +142,7 @@ export class NestView {
     const m = this.floorMatrix();
     this.floor.setFromMatrix(m);
     const lift = Math.round(this.lift(s.depth) * PX);
-    const p = paintNest(this.material, this.moisture, this.width, this.height, PX, lift);
+    const p = paintNest(this.material, this.moisture, this.width, this.height, PX, lift, s.material);
     this.floorSprite.texture = canvasTexture(p.width, p.floorHeight, p.floor);
     this.floorSprite.scale.set(1 / PX);
     this.walls.texture = canvasTexture(p.width, p.wallHeight, p.walls);
@@ -139,6 +150,7 @@ export class NestView {
     this.walls.position.set(0, -lift / PX);
     this.drawDesk();
     this.drawBlock();
+    this.drawCover();
   }
 
   /** The heat mat and the block's shadow, on the desk under the floor. */
@@ -160,21 +172,31 @@ export class NestView {
     ] as const) g.rect(d / 2, -down + d, this.width + d / 2, this.height).fill({ color: 0x1a0f08, alpha });
   }
 
-  /** The front face of the block, the water hole and the glass lid. */
+  /** The front face of the block, the water hole (or the sponge) and the glass lid. */
   private drawBlock(): void {
     const s = this.shape!;
     const top = this.lift(s.depth); // the block's top, above the floor
     const desk = this.lift(-this.floorHeight);
     const f = this.front.clear();
-    // The sawn front face, a little darker toward the desk.
-    f.rect(0, this.height - top, this.width, top - desk).fill(0xc9c5bb);
-    f.rect(0, this.height - desk - 3, this.width, 3).fill({ color: 0x8f8a80, alpha: 0.6 });
+    const face = FRONT[s.material];
+    // The front face, a little darker toward the desk; clear acrylic shows its layers as lines.
+    f.rect(0, this.height - top, this.width, top - desk).fill({ color: face.colour, alpha: face.alpha });
+    f.rect(0, this.height - desk - 3, this.width, 3).fill({ color: face.edge, alpha: 0.6 });
     f.rect(0, this.height - top, this.width, 0.8).fill({ color: 0xffffff, alpha: 0.35 });
-    // The water hole in the top, its water a few mm down.
-    const water = this.lift(s.depth - 6);
-    f.circle(s.waterX, s.waterY - top, s.waterRadius).fill(0x5d5a54);
-    f.circle(s.waterX, s.waterY - water, s.waterRadius - 1.5).fill(0x3d6f99);
-    f.circle(s.waterX - 2.5, s.waterY - water - 2.5, 2.2).fill({ color: 0xffffff, alpha: 0.35 });
+    if (s.material === 'acrylic') {
+      for (const z of [s.depth, 0, -(this.floorHeight / 2)]) f.rect(0, this.height - this.lift(z), this.width, 0.5).fill({ color: 0xffffff, alpha: 0.45 });
+      // A yellow sponge on the chamber floor, wet and darker at its middle.
+      const r = s.waterRadius;
+      f.roundRect(s.waterX - r, s.waterY - r - this.lift(1.5), 2 * r, 2 * r, 1.5).fill(0xd9b43a);
+      f.roundRect(s.waterX - r + 1.2, s.waterY - r + 1.2 - this.lift(1.5), 2 * r - 2.4, 2 * r - 2.4, 1).fill({ color: 0xa8842a, alpha: 0.6 });
+      for (let k = 0; k < 9; k++) f.circle(s.waterX - r + 1.5 + ((k * 3.7) % (2 * r - 3)), s.waterY - r + 1.5 + ((k * 5.3) % (2 * r - 3)) - this.lift(1.5), 0.5).fill({ color: 0x6e5418, alpha: 0.7 });
+    } else {
+      // The water hole in the top, its water a few mm down.
+      const water = this.lift(s.depth - 6);
+      f.circle(s.waterX, s.waterY - top, s.waterRadius).fill(face.hole);
+      f.circle(s.waterX, s.waterY - water, s.waterRadius - 1.5).fill(0x3d6f99);
+      f.circle(s.waterX - 2.5, s.waterY - water - 2.5, 2.2).fill({ color: 0xffffff, alpha: 0.35 });
+    }
     // The glass lid on the top: a faint sheen and two reflections.
     const lid = this.lid.clear();
     const z = this.lift(s.depth + 0.5);
@@ -185,7 +207,34 @@ export class NestView {
     });
     lid.rect(0, -z, this.width, this.height).stroke({ color: 0xe9f1f7, alpha: 0.4, width: 0.8 });
   }
+
+  /** The cover on the lid, where it is not lifted: tinted, so the keeper still sees in (N7). */
+  private drawCover(): void {
+    const g = this.cover.clear();
+    const s = this.shape;
+    if (!s || !this.lit) return;
+    const z = this.lift(s.depth + 1.5);
+    const from = Math.max(0, this.lit.from);
+    const to = Math.min(this.width, this.lit.to);
+    const parts = to <= from ? [[0, this.width]] : [[0, from], [to, this.width]];
+    for (const [a, b] of parts) {
+      if (b! - a! <= 0) continue;
+      g.rect(a!, -z, b! - a!, this.height).fill({ color: COVER[s.material], alpha: 0.32 });
+      g.rect(a!, -z, b! - a!, this.height).stroke({ color: COVER[s.material], alpha: 0.6, width: 0.8 });
+    }
+  }
 }
+
+/** The block's front face by material: its colour (and how clear it is), the edge on the desk, and the water hole's wall. */
+const FRONT: Record<NestMaterial, { colour: number; alpha: number; edge: number; hole: number }> = {
+  ytong: { colour: 0xc9c5bb, alpha: 1, edge: 0x8f8a80, hole: 0x5d5a54 },
+  plaster: { colour: 0xe2dfd8, alpha: 1, edge: 0xa29f98, hole: 0x77746e },
+  acrylic: { colour: 0xcfe0e8, alpha: 0.45, edge: 0x7f98a6, hole: 0x5d6a72 },
+  wood: { colour: 0x96633a, alpha: 1, edge: 0x5e3b20, hole: 0x4a3220 },
+};
+
+/** The cover's tint: smoked board over most nests, red film over acrylic (ants barely see red). */
+const COVER: Record<NestMaterial, number> = { ytong: 0x2a2622, plaster: 0x2a2622, acrylic: 0xb3261e, wood: 0x2a2622 };
 
 /** A texture of `pixels` (RGBA) `width` × `height`, smoothed when scaled. */
 function canvasTexture(width: number, height: number, pixels: Uint8ClampedArray): Texture {

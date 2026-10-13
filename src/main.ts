@@ -21,7 +21,7 @@ import { Cause } from './sim/ants';
 import { BroodStage } from './sim/brood';
 import { BROOD_STRIDE, type FromWorker, type HistorySnapshot, type ToWorker } from './worker/protocol';
 import { RoomLayer } from './render/room/roomLayer';
-import { DEFAULT_NEST, NEST_SIZES, type NestLayout, type NestSetup, type NestSize } from './sim/nest';
+import { DEFAULT_NEST, NEST_MATERIALS, NEST_SIZES, type NestLayout, type NestMaterial, type NestSetup, type NestSize } from './sim/nest';
 import { MAT_WIDTH } from './sim/heat';
 import { legnanoClock } from './room/sky';
 import { CLEAR, REFRESH_MS, type Weather, fetchLegnanoWeather } from './room/weather';
@@ -124,7 +124,7 @@ async function start(): Promise<void> {
     } else if (msg.type === 'farm') {
       const before = view.boughtNest;
       view.setSoil(msg);
-      showNestControls();
+      showNestControls(msg.nest?.material ?? null);
       // The first picture of the tank, or a tank of the other kind: frame it.
       if (!framed || before !== view.boughtNest) fit();
       framed = true;
@@ -144,6 +144,7 @@ async function start(): Promise<void> {
           : `brood: ${n[BroodStage.egg]} eggs, ${n[BroodStage.larva]} larvae, ${n[BroodStage.pupa]} pupae`);
     } else if (msg.type === 'heat') {
       view.setHeat(msg);
+      showCover(msg.lit);
     } else if (msg.type === 'arena') {
       view.arena.setArena(msg);
       if (fitCheck && view.arena.decorations !== fitCheck.before) fitCheck = null;
@@ -418,18 +419,22 @@ async function start(): Promise<void> {
   // A new tank, in a bought nest of the size and layout chosen (DESIGN.md 3.5).
   const sizeButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-size]')];
   const layoutButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-layout]')];
+  const materialButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-material]')];
   const choose = (buttons: HTMLButtonElement[], pick: (b: HTMLButtonElement) => boolean) => {
     for (const b of buttons) b.setAttribute('aria-pressed', String(pick(b)));
   };
   choose(sizeButtons, (b) => b.dataset.size === nest.size);
   choose(layoutButtons, (b) => b.dataset.layout === nest.layout);
+  choose(materialButtons, (b) => b.dataset.material === (nest.material ?? 'ytong'));
+  for (const b of materialButtons) b.addEventListener('click', () => choose(materialButtons, (x) => x === b));
   for (const b of sizeButtons) b.addEventListener('click', () => choose(sizeButtons, (x) => x === b));
   for (const b of layoutButtons) b.addEventListener('click', () => choose(layoutButtons, (x) => x === b));
   document.getElementById('new-tank')!.addEventListener('click', () => {
     const size = sizeButtons.find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.size ?? DEFAULT_NEST.size;
     const layout = layoutButtons.find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.layout ?? DEFAULT_NEST.layout;
+    const material = materialButtons.find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.material ?? 'ytong';
     if (confirm(`Start a new tank in a new nest? The colony in tank ${seed} will be lost.`)) {
-      location.search = `?seed=${seed + 1}&new&size=${size}&layout=${layout}`;
+      location.search = `?seed=${seed + 1}&new&size=${size}&layout=${layout}&material=${material}`;
     }
   });
   const trailsButton = document.getElementById('trails')!;
@@ -446,11 +451,27 @@ async function start(): Promise<void> {
     fit();
   });
 
-  /** Says how the nest's water works, which differs between a bought nest and the sand farm. */
-  function showNestControls(): void {
-    document.getElementById('damp-note')!.textContent = view.boughtNest
-      ? 'The ytong is wet near its water hole and drier far from it; the hole refills itself.'
-      : 'Soil darkens when damp; the farm waters itself and never dries.';
+  /** Says how the nest's water works, which differs between materials and the sand farm; only a bought nest has a cover. */
+  function showNestControls(material: NestMaterial | null): void {
+    document.getElementById('damp-note')!.textContent = material ? DAMP_NOTES[material] : 'Soil darkens when damp; the farm waters itself and never dries.';
+    document.getElementById('cover-row')!.hidden = material === null;
+  }
+
+  // The cover on the nest (N7): on, lifted from its left or right half, or off. Under it the ants are in the dark.
+  const coverButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-cover]')];
+  for (const button of coverButtons) {
+    button.addEventListener('click', () => {
+      const w = view.nestWidth;
+      const [from, to] = { on: [0, 0], left: [0, w / 2], right: [w / 2, w], off: [0, w] }[button.dataset.cover as 'on'];
+      command({ type: 'cover', from: from!, to: to! });
+    });
+  }
+  /** Marks the cover button that matches where the cover is lifted. */
+  function showCover(lit: { from: number; to: number } | null): void {
+    if (!lit) return;
+    const w = view.nestWidth;
+    const at = lit.to <= lit.from ? 'on' : lit.from <= 0 && lit.to >= w ? 'off' : lit.from <= 0 ? 'left' : 'right';
+    for (const b of coverButtons) b.setAttribute('aria-pressed', String(b.dataset.cover === at));
   }
 
   // The nest's overlay shows warmth or damp, or neither.
@@ -502,11 +523,21 @@ function button(label: string, onClick: () => void): HTMLButtonElement {
 function nestFrom(query: URLSearchParams): NestSetup {
   const size = query.get('size') ?? '';
   const layout = query.get('layout') ?? '';
+  const material = query.get('material') ?? '';
   return {
     size: size in NEST_SIZES ? (size as NestSize) : DEFAULT_NEST.size,
     layout: ['classic', 'organic', 'honeycomb'].includes(layout) ? (layout as NestLayout) : DEFAULT_NEST.layout,
+    material: material in NEST_MATERIALS ? (material as NestMaterial) : 'ytong',
   };
 }
+
+/** How each material holds water, for the note by "Show damp" (DESIGN.md 3.5). */
+const DAMP_NOTES: Record<NestMaterial, string> = {
+  ytong: 'The ytong is wet near its water hole and drier far from it; the hole refills itself.',
+  plaster: 'The plaster soaks water up from its hole a little farther than ytong; the hole refills itself.',
+  acrylic: 'Acrylic holds no water: only the air near the wet sponge is humid. The sponge stays wet.',
+  wood: 'The wood holds a little water near its hole, unevenly along the grain; the hole refills itself.',
+};
 
 function parseSeed(raw: string | null): number {
   const n = Number(raw);

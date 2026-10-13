@@ -17,6 +17,7 @@
  *   npm run experiment -- prey [--insect fly|cricket|mealworm] [--cut whole|halved|pieces] [--minutes 180]
  *   npm run experiment -- nest-damp [--hours 3] [--no-hygro] [--layout classic|organic|honeycomb]
  *   npm run experiment -- nest-room [--hours 4] [--ants 40]
+ *   npm run experiment -- nest-dark [--hours 2] [--no-light] [--gradient] [--material ytong|plaster|acrylic|wood] [--layout ...]
  *   growth takes --mortal: adults die of hunger, drying out and heat (M5c)
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
  */
@@ -37,12 +38,13 @@ import {
   runMidden,
   runNestDamp,
   runNestRoom,
+  runNestDark,
   runNestVolume,
   runPrey,
   runTrailDecay,
 } from '../src/sim/experiments';
 import type { Cut, Insect } from '../src/sim/prey';
-import type { NestLayout } from '../src/sim/nest';
+import type { NestLayout, NestMaterial } from '../src/sim/nest';
 
 const [name, ...rest] = process.argv.slice(2);
 let runs = 10;
@@ -62,6 +64,8 @@ let insect: Insect | undefined;
 let cut: Cut = 'whole';
 let minutesSet = false;
 let layout: NestLayout = 'classic';
+let material: NestMaterial = 'ytong';
+let gradient = false;
 const params: Partial<AntParams> = {};
 for (let i = 0; i < rest.length; i++) {
   if (rest[i] === '--runs') runs = Number(rest[++i]);
@@ -69,6 +73,9 @@ for (let i = 0; i < rest.length; i++) {
   else if (rest[i] === '--insect') insect = rest[++i] as Insect;
   else if (rest[i] === '--cut') cut = rest[++i] as Cut;
   else if (rest[i] === '--layout') layout = rest[++i] as NestLayout;
+  else if (rest[i] === '--material') material = rest[++i] as NestMaterial;
+  else if (rest[i] === '--gradient') gradient = true;
+  else if (rest[i] === '--no-light') params.photophobia = false;
   else if (rest[i] === '--ants') ants = Number(rest[++i]);
   else if (rest[i] === '--hours') hours = Number(rest[++i]);
   else if (rest[i] === '--no-trail') params.trailLaying = false;
@@ -257,9 +264,15 @@ for (let seed = first; seed < first + runs; seed++) {
       `seed ${seed}, ${ants || 40} workers: floor the resting colony covers by hour ${r.areaByHour.join(' ')} mm²; ` +
         `resting ${r.restingByHour.join(' ')}; chambers holding 90% of them ${r.chambersByHour.join(' ')} of ${r.chambers}`,
     );
+  } else if (name === 'nest-dark') {
+    const r = runNestDark({ seed, hours: hours || 2, layout, material, gradient, ...(ants ? { ants } : {}), params });
+    console.log(
+      `seed ${seed}${params.photophobia === false ? ' (no light)' : ''}: brood under the cover by hour ${r.darkByHour.map(pct).join(' ')}; ` +
+        `resting workers under it ${r.restingDarkByHour.map(pct).join(' ')}`,
+    );
   } else {
     throw new Error(
-      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation, prey, nest-damp or nest-room',
+      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation, prey, nest-damp, nest-room or nest-dark',
     );
   }
 }

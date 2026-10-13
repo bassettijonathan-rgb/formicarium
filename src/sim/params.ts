@@ -452,6 +452,22 @@ export interface AntParams {
   /** False: nurses ignore temperature (the control for brood thermotaxis). */
   thermotaxis: boolean;
 
+  // --- Light (Nests 2, DESIGN.md 3.5) ---
+
+  /**
+   * Light an ant in a bought nest starts to shun, as a share of the room's
+   * (the cover lets in about 0.03); it shuns it fully at twice this (rough).
+   */
+  lightSense: number;
+  /** How far ahead and to each side a brood carrier sees which way is darker, mm (rough: a few body lengths). */
+  lightSight: number;
+  /** In the light, brood is picked up as readily as `lightPick` times an item lying alone. */
+  lightPick: number;
+  /** In the light, workers settle to rest this much less readily (1: not at all). */
+  lightRest: number;
+  /** False: ants ignore light (the control for the darkness check). */
+  photophobia: boolean;
+
   // --- Water (M5b) ---
 
   /**
@@ -750,6 +766,12 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   thermoPick: 4,
   thermoHold: 9,
   thermotaxis: true,
+
+  lightSense: 0.1,
+  lightSight: 6,
+  lightPick: 1,
+  lightRest: 0.9,
+  photophobia: true,
 
   waterFlow: false,
   selfWatering: false,

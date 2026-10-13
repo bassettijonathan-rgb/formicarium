@@ -5,7 +5,7 @@ import type { AntCard } from '../sim/inspect';
 import type { KeeperCommand } from '../sim/keeper';
 import type { Decoration } from '../sim/decor';
 import type { Insect, Part } from '../sim/prey';
-import type { NestLayout, NestSetup, NestSize } from '../sim/nest';
+import type { NestLayout, NestMaterial, NestSetup, NestSize } from '../sim/nest';
 
 export type ToWorker =
   /**
@@ -93,6 +93,7 @@ export interface FarmSnapshot {
 export interface NestShape {
   size: NestSize;
   layout: NestLayout;
+  material: NestMaterial;
   /** Depth of the chambers and thickness of the block, mm. */
   depth: number;
   thickness: number;
@@ -112,6 +113,8 @@ export interface HeatSnapshot {
   temperature: Float32Array;
   /** Where the heat mat is under the farm, mm, or null. */
   mat: { x: number; width: number } | null;
+  /** Where a bought nest's cover is lifted, mm across (none when `from` equals `to`); null for the sand farm. */
+  lit: { from: number; to: number } | null;
   room: number;
   /** Mould in the farm, on the same grid, 0-1; null while there is none (M5b). */
   mould: Float32Array | null;

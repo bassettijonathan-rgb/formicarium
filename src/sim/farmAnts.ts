@@ -30,6 +30,7 @@ import { mayPutDownPiece, sipPiece, tryPickUpRefuse } from './prey';
 import { addToField, cellSolid, isBlockedFarm, isSoil, openAbove, sampleField, type Farm } from './farm';
 import { speedAt, temperatureAt } from './heat';
 import { mouldAt } from './mould';
+import { lightAt } from './nest';
 import { humidityAt } from './water';
 import type { AntParams } from './params';
 import { placeGrain, removeGrain } from './soil';
@@ -178,7 +179,9 @@ function pickUpBrood(ctx: AntContext): void {
       const alone = params.broodPickHalf / (params.broodPickHalf + n);
       // Brood lying too cold, too warm or too dry, where the ant feels which way is better, is picked up sooner.
       const thermal = 1 + params.thermoPick * broodPull(ctx, farm, i);
-      if (rng.chance(params.broodPickRate * alone * alone * thermal * DT)) {
+      // Brood in the light is picked up as readily as an item lying alone, however thick the pile (Nests 2).
+      const urge = Math.max(alone * alone * thermal, params.lightPick * lightPull(ctx, farm, i));
+      if (rng.chance(params.broodPickRate * urge * DT)) {
         ants.broodHeld[i] = k;
         ants.broodMoved[i]! += 1;
         brood.carried[k] = 1;
@@ -337,11 +340,24 @@ function humidPull(ctx: AntContext, farm: Farm, i: number): number {
   return Math.min(1, felt / params.hygroSense);
 }
 
-/** The strongest of the reasons to move brood: temperature (M5a), humidity and mould where the ant stands (M5b). */
+/**
+ * How strongly ant `i` feels it stands in the light, 0 to 1: nothing under a
+ * bought nest's cover, fully where the keeper has lifted it (Nests 2, N7).
+ * Nest workers shun light and carry brood out of it (Lasius niger keepers'
+ * experience; Temnothorax colonies choose dark nests, Franks et al. 2003).
+ */
+function lightPull(ctx: AntContext, farm: Farm, i: number): number {
+  const { params } = ctx;
+  if (!params.photophobia || !farm.nest) return 0;
+  return Math.min(1, Math.max(0, (lightAt(farm, ctx.ants.x[i]!) - params.lightSense) / params.lightSense));
+}
+
+/** The strongest of the reasons to move brood: temperature (M5a), humidity and mould where the ant stands (M5b), and light (Nests 2). */
 function broodPull(ctx: AntContext, farm: Farm, i: number): number {
   if (mouldAt(farm, ctx.ants.x[i]!, ctx.ants.y[i]!) >= ctx.params.mouldSense) return 1;
+  if (lightPull(ctx, farm, i) === 1) return 1;
   const thermal = thermalPull(ctx, farm, i);
-  return thermal === 1 ? 1 : Math.max(thermal, humidPull(ctx, farm, i));
+  return thermal === 1 ? 1 : Math.max(thermal, humidPull(ctx, farm, i), lightPull(ctx, farm, i));
 }
 
 /** Scratch: brood items that need a worker this step. */
@@ -693,6 +709,14 @@ function walkFarm(ctx: AntContext, i: number): void {
     turn += params.thermoTurn * DT * Math.max(-1, Math.min(1, across / params.hygroSense));
   }
 
+  // ...and away from the light, which they see on one side brighter than the other (Nests 2).
+  if (state === AntState.carryingBrood && params.photophobia && farm.nest) {
+    const sight = params.lightSight;
+    const lightLeft = lightAt(farm, x + sight * Math.cos(heading - params.antennaAngle));
+    const lightRight = lightAt(farm, x + sight * Math.cos(heading + params.antennaAngle));
+    turn += params.thermoTurn * DT * Math.max(-1, Math.min(1, (lightLeft - lightRight) / params.lightSense));
+  }
+
   // Ants walk faster where it is warm (Hurlbert et al. 2008).
   const walking = speedAt(params, temperatureAt(farm, x, y));
   const speed = ants.caste[i] === Caste.queen ? walking * params.queenSpeed : walking;
@@ -732,7 +756,9 @@ function walkFarm(ctx: AntContext, i: number): void {
     // among her brood, settles away from it only reluctantly (she must lie somewhere to lay the first eggs).
     const alone = queen ? params.queenSettleAlone : ants.cropProtein[i]! >= params.nurseLoad || ants.pieceHeld[i]! >= 0 ? 0 : 1;
     const onBrood = alone + (params.broodRestGain * n) / (n + params.broodDropHalf);
-    if (rng.chance(params.restRate * enclosed * (1 + params.restOdourGain * nestLike) * onBrood * DT)) {
+    // Nor do workers settle in the light (Nests 2).
+    const dark = 1 - params.lightRest * lightPull(ctx, farm, i);
+    if (rng.chance(params.restRate * enclosed * (1 + params.restOdourGain * nestLike) * onBrood * dark * DT)) {
       ants.state[i] = AntState.resting;
       ants.hasDigSite[i] = 0;
       // A queen rests ten times as long: she spends her life lying in the nest, laying.
