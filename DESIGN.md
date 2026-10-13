@@ -781,6 +781,43 @@ logged with its tick, which keeps saves deterministic and replayable.
   follow it; colony graphs (population by stage, crop fullness, task mix over
   time); timelapse of nest growth.
 
+### 8.1 The room and the window
+
+Asked by Marco on 2026-10-13: no black screen behind the formicarium but a
+window showing the real time and weather of Legnano. Approved the same day
+(choices V1 to V6; mockup at https://claude.ai/artifact/CzJXMFQ8LGotkGeSbMhrCi).
+All of it is drawing: nothing here reaches the simulation.
+
+- **V1 The room.** The tank stands on a wooden desk in front of a big window
+  (`src/render/room/`). The farm's frame is clear glass. The air above the
+  soil is see-through, so the window shows through the headspace. Tunnel
+  mouths and shafts narrower than 6 mm stay dark.
+- **V2 The view.** West-north-west over Legnano: roofs and chimney pots, San
+  Magno's bell tower and dome, an old mill chimney, and Monte Rosa on the
+  horizon. Monte Rosa is 4634 m high and 90 km away, at azimuth ~295° and
+  2.4° high; it is drawn 1.8 times taller so it clears the roofs. The view is
+  stylised, not a photograph. The window spans azimuth 245° to 326°, so
+  sunsets happen in it.
+- **V3 Real time, real sky.** Legnano's clock is Europe/Rome, with summer time.
+  Sun and moon positions and the moon's phase come from low-precision formulas
+  (`src/room/sky.ts`; Meeus 1998, ch. 25 and 47), with the moon lowered by its
+  parallax. Tests check them against almanac sunrise and sunset times, noon
+  heights at the solstices and equinox, and the 2026 eclipses. The tank's own
+  clock (D6) is untouched.
+- **V4 Live weather.** Every 15 minutes the page asks Open-Meteo (free, no
+  account) for Legnano's current conditions: WMO weather code, cloud cover,
+  wind, visibility and temperature. `src/room/weather.ts` turns them into
+  clouds and their drift, a grey deck, drizzle, rain, snow, fog, lightning,
+  and whether the Alps show. A HUD line gives time, temperature and
+  conditions. Offline, it keeps the last reading; before the first, the sky is
+  clear.
+- **V5 Looks only.** The weather and the clock never touch the simulation. The
+  tank is indoors, and replay from seed plus keeper log stays exact (D10).
+- **V6 Light.** Tints multiply the room and the tank by the daylight. Clouds
+  make it greyer and sunset makes it warmer. When the room grows dark, a desk
+  lamp lights the tank warmly, so the ants stay visible. Overlays (warmth,
+  damp, trails' markers) are readings and are not dimmed.
+
 ---
 
 ## 9. Validation: the sim must reproduce real experiments
@@ -1245,6 +1282,7 @@ Each milestone is one or a few small PRs, merged by Marco, with a link to play.
 | M5 | Tending: temperature, humidity, mould, feeding tools, colony death. In parts: M5a warmth (heat mat, temperature field, brood thermotaxis); M5b water (soil water, humidity, watering, brood drying out and hygrotaxis) and mould (prey and corpses); M5c colony death (hunger, drying out, heat) and the keeper's tools (clean the arena, damp overlay, new tank) |
 | M6 | Keeping it: saves, offline catch-up, ant inspector, graphs, timelapse. In parts: M6a saves and catching up while closed, with a report of what happened; M6b the ant inspector; M6c colony graphs and timelapse |
 | M7 | Optional extras: second colony and war, other species, nuptial flights |
+| L | Looks (asked by Marco 2026-10-13, section 8.1): L1 the room and the window onto Legnano with its real sky and weather; L2 a bigger arena seen at an angle, with decorations |
 
 If a validation test in M1 or M2 cannot be made to pass with plausible
 parameters, I stop and report before changing the model.
@@ -1276,6 +1314,7 @@ parameters, I stop and report before changing the model.
 - Khuong et al. 2016. Stigmergic construction and topochemical information shape ant nest architecture. PNAS.
 - Mailleux, Deneubourg & Detrain 2000. How do ants assess food volume? Anim. Behav.
 - Mailleux, Detrain & Deneubourg 2006. Starvation drives a threshold triggering communication. J. Exp. Biol.
+- Meeus 1998. Astronomical Algorithms, 2nd ed. Willmann-Bell (ch. 25 the sun, ch. 47 the moon; low-precision forms).
 - Mersch, Crespi & Keller 2013. Tracking individuals shows spatial fidelity is a key regulator of ant social organization. Science 340, 1090-1093.
 - Müller & Wehner 1988. Path integration in desert ants. PNAS.
 - Planckaert et al. 2019. A spatiotemporal analysis of the food dissemination process and the trophallactic network in the ant *Lasius niger*. Sci. Rep.

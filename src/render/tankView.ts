@@ -1,9 +1,11 @@
 /**
  * Draws the classic setup (DESIGN.md D1, D11): the sand farm in side view on
  * the left, the arena in top view on the right, joined by a tube. Units in
- * the scene are millimetres; the camera scales them to pixels.
+ * the scene are millimetres; the camera scales them to pixels. The tank
+ * stands in the keeper's room (DESIGN.md section 8.1), which is drawn behind
+ * it; the farm's headspace is clear glass, so the window shows through it.
  */
-import { Container, Graphics, type Renderer, Sprite, Text, Texture } from 'pixi.js';
+import { Container, Graphics, type Renderer, Sprite, Texture } from 'pixi.js';
 import { ARENA_GAP, ARENA_SIZE, FARM_HEIGHT, FARM_WIDTH, TUBE } from '../sim/tank';
 import { Place } from '../sim/ants';
 import type { FarmSnapshot } from '../worker/protocol';
@@ -11,7 +13,7 @@ import { AntLayer } from './antLayer';
 import { BroodLayer } from './broodLayer';
 import { HeatLayer } from './heatLayer';
 import { ArenaLayer } from './arenaLayer';
-import { paintSoil } from './soilColors';
+import { clearHeadspace, paintSoil } from './soilColors';
 
 /** Thickness of the farm's frame and the arena's walls, in mm. */
 const FRAME = 8;
@@ -19,6 +21,8 @@ export const ARENA_X = FARM_WIDTH + ARENA_GAP;
 
 export class TankView {
   readonly root = new Container();
+  /** Everything the room's light falls on: tinted as the light changes. */
+  readonly lit = new Container();
   readonly arena: ArenaLayer;
   /** Ants in the farm: on the glass, in the tunnels and in the headspace. */
   readonly farmAnts: AntLayer;
@@ -32,32 +36,34 @@ export class TankView {
   private soilCanvas: HTMLCanvasElement | undefined;
 
   constructor(renderer: Renderer) {
-    this.root.addChild(this.heat.mat);
-    this.root.addChild(this.drawFarmFrame());
-    this.root.addChild(this.soil);
-    this.root.addChild(this.heat.mould, this.heat.overlay);
-    this.root.addChild(this.brood.root);
+    const lit = this.lit;
+    lit.addChild(this.heat.mat);
+    lit.addChild(this.drawFarmFrame());
+    lit.addChild(this.soil);
+    lit.addChild(this.heat.mould);
+    lit.addChild(this.brood.root);
     this.farmAnts = new AntLayer(renderer, Place.farm);
-    this.root.addChild(this.farmAnts.root);
-    this.root.addChild(this.drawGlass());
-    this.root.addChild(this.drawArena());
+    lit.addChild(this.farmAnts.root);
+    lit.addChild(this.drawGlass());
+    lit.addChild(this.drawArena());
     this.arena = new ArenaLayer(renderer);
     this.arena.root.position.set(ARENA_X, 0);
-    this.root.addChild(this.arena.root);
-    this.root.addChild(this.drawBarrier());
-    this.root.addChild(this.drawTube());
-    this.root.addChild(label('Formicarium · side view', 0, -FRAME - 14));
-    this.root.addChild(label('Arena · top view', ARENA_X, -FRAME - 14));
+    lit.addChild(this.arena.root);
+    lit.addChild(this.drawBarrier());
+    lit.addChild(this.drawTube());
+    this.root.addChild(lit);
+    // The overlays are readings, not things in the room: the room's light doesn't dim them.
+    this.root.addChild(this.heat.overlay);
     this.marker.visible = false;
     this.root.addChild(this.marker);
   }
 
-  /** Total extent of the scene in mm, for fitting the camera. */
+  /** The tank and the window behind it, in mm, for fitting the camera. */
   static readonly bounds = {
-    x: -FRAME - 10,
-    y: -FRAME - 24,
-    width: ARENA_X + ARENA_SIZE + 2 * FRAME + 20,
-    height: FARM_HEIGHT + 2 * FRAME + 40,
+    x: -50,
+    y: -315,
+    width: Math.max(ARENA_X + ARENA_SIZE + FRAME + 20, 790) + 50,
+    height: 315 + FARM_HEIGHT + FRAME + 60,
   };
 
   /** Repaints the soil from a snapshot of the farm's layers. */
@@ -69,6 +75,7 @@ export class TankView {
     if (!ctx) return;
     const image = ctx.createImageData(width, height);
     paintSoil(material, moisture, image.data, loose);
+    clearHeadspace(material, width, height, image.data);
     ctx.putImageData(image, 0, 0);
     const texture = Texture.from(canvas, true);
     // Crisp grains when zoomed in, instead of a blur.
@@ -78,12 +85,20 @@ export class TankView {
   }
 
   private drawFarmFrame(): Graphics {
-    // A dark plastic frame, with a lid strip along the top.
+    // A dark plastic frame round clear glass, a lid strip along the top, and two feet on the desk.
     return new Graphics()
       .roundRect(-FRAME, -FRAME, FARM_WIDTH + 2 * FRAME, FARM_HEIGHT + 2 * FRAME, 3)
       .fill(0x2b2f36)
+      .rect(0, 0, FARM_WIDTH, FARM_HEIGHT)
+      .cut()
       .rect(-FRAME, -FRAME, FARM_WIDTH + 2 * FRAME, FRAME)
-      .fill(0x3a404a);
+      .fill(0x3a404a)
+      .roundRect(-FRAME - 9, FARM_HEIGHT + FRAME - 4, 45, 6, 1.5)
+      .fill(0x23262b)
+      .roundRect(FARM_WIDTH + FRAME - 36, FARM_HEIGHT + FRAME - 4, 45, 6, 1.5)
+      .fill(0x23262b)
+      .rect(0, 0, FARM_WIDTH, FARM_HEIGHT)
+      .fill({ color: 0xbfd4e6, alpha: 0.05 });
   }
 
   private drawGlass(): Graphics {
@@ -122,10 +137,4 @@ export class TankView {
     path(g).stroke({ color: 0x15171a, alpha: 0.9, width: TUBE.diameter });
     return g;
   }
-}
-
-function label(text: string, x: number, y: number): Text {
-  const t = new Text({ text, style: { fill: 0x9aa4b1, fontSize: 9, fontFamily: 'system-ui, sans-serif' }, resolution: 8 });
-  t.position.set(x, y);
-  return t;
 }
