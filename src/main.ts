@@ -10,10 +10,12 @@ import { ARENA_SIZE, FARM_HEIGHT, FARM_WIDTH } from './sim/tank';
 import { STEPS_PER_SECOND, formatAntTime } from './sim/time';
 import type { KeeperCommand } from './sim/keeper';
 import type { AntCard } from './sim/inspect';
+import { drawGraphs } from './ui/graphs';
+import { Timelapse } from './ui/timelapse';
 import { DEFAULT_ANT_PARAMS } from './sim/params';
 import { Cause } from './sim/ants';
 import { BroodStage } from './sim/brood';
-import { BROOD_STRIDE, type FromWorker, type ToWorker } from './worker/protocol';
+import { BROOD_STRIDE, type FromWorker, type HistorySnapshot, type ToWorker } from './worker/protocol';
 
 /** A keeper's sugar drop: 10 µL, about the size of a lentil. */
 const DROP_VOLUME = 10;
@@ -56,6 +58,7 @@ async function start(): Promise<void> {
       seed = msg.seed;
       history.replaceState(null, '', `?seed=${seed}`);
       inspect(-1);
+      lapse = undefined;
       if (msg.note) showAway([msg.note]);
     } else if (msg.type === 'ask') {
       const k = msg.kept;
@@ -70,6 +73,8 @@ async function start(): Promise<void> {
       showAway(msg.lines);
     } else if (msg.type === 'ant') {
       if (msg.id === inspected) showCard(msg.card);
+    } else if (msg.type === 'history') {
+      showHistory(msg);
     } else if (msg.type === 'farm') view.setSoil(msg);
     else if (msg.type === 'ants') {
       const now = performance.now();
@@ -156,6 +161,69 @@ async function start(): Promise<void> {
     const inArena = view.arena.ants.positionOf(inspected);
     return inArena ? { x: inArena.x + ARENA_X, y: inArena.y } : null;
   };
+
+  // The colony graphs and the timelapse (M6c), refreshed every few seconds while open.
+  const historyPanel = document.getElementById('history')!;
+  const graphBox = document.getElementById('graph-box')!;
+  const lapseBox = document.getElementById('lapse-box')!;
+  const lapseCanvas = document.getElementById('lapse') as HTMLCanvasElement;
+  const lapsePlay = document.getElementById('lapse-play')!;
+  const lapseAt = document.getElementById('lapse-at') as HTMLInputElement;
+  const lapseLabel = document.getElementById('lapse-label')!;
+  let showing: 'graphs' | 'timelapse' | null = null;
+  let lapse: Timelapse | undefined;
+  let refresh: number | undefined;
+  const openHistory = (what: 'graphs' | 'timelapse') => {
+    if (what !== 'timelapse') lapse?.stop();
+    showing = what;
+    historyPanel.hidden = false;
+    graphBox.hidden = what !== 'graphs';
+    lapseBox.hidden = what !== 'timelapse';
+    document.getElementById('history-title')!.textContent = what === 'graphs' ? 'Colony graphs' : 'Timelapse of the nest';
+    send({ type: 'history' });
+    clearInterval(refresh);
+    refresh = window.setInterval(() => send({ type: 'history' }), 3000);
+  };
+  const closeHistory = () => {
+    showing = null;
+    historyPanel.hidden = true;
+    clearInterval(refresh);
+    lapse?.stop();
+    lapsePlay.textContent = 'Play';
+  };
+  document.getElementById('graphs')!.addEventListener('click', () => openHistory('graphs'));
+  document.getElementById('timelapse')!.addEventListener('click', () => openHistory('timelapse'));
+  document.getElementById('to-graphs')!.addEventListener('click', () => openHistory('graphs'));
+  document.getElementById('to-lapse')!.addEventListener('click', () => openHistory('timelapse'));
+  document.getElementById('history-close')!.addEventListener('click', closeHistory);
+  lapsePlay.addEventListener('click', () => {
+    if (!lapse) return;
+    if (lapse.playing) lapse.stop();
+    else lapse.play();
+    lapsePlay.textContent = lapse.playing ? 'Pause' : 'Play';
+  });
+  lapseAt.addEventListener('input', () => {
+    lapse?.stop();
+    lapsePlay.textContent = 'Play';
+    lapse?.show(Number(lapseAt.value));
+  });
+  function showHistory(msg: HistorySnapshot): void {
+    if (showing === 'graphs') drawGraphs(graphBox, msg.censuses, msg.daySeconds, msg.cropLoad);
+    if (showing !== 'timelapse') return;
+    if (msg.frames.length === 0) {
+      lapseLabel.textContent = 'The first picture of the nest is taken after 5 minutes of ant time.';
+      return;
+    }
+    if (lapse && !lapse.playing) lapse.update(msg.frames, msg.frameSteps);
+    else if (!lapse) {
+      lapse = new Timelapse(lapseCanvas, msg.width, msg.height, msg.soil, msg.frames, msg.frameSteps, (step, n, of) => {
+        lapseAt.max = String(of - 1);
+        lapseAt.value = String(n);
+        lapseLabel.textContent = `${formatAntTime(step)} of ant time (day ${(step / STEPS_PER_SECOND / msg.daySeconds).toFixed(1)}), picture ${n + 1} of ${of}`;
+        if (n === of - 1 && !lapse?.playing) lapsePlay.textContent = 'Play';
+      });
+    }
+  }
 
   let markerScale = 0;
   app.ticker.add(() => {
