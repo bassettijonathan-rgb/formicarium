@@ -1,9 +1,10 @@
 /**
  * The arena: the top-view foraging box (DESIGN.md section 3.3).
  *
- * Two grids at 1 mm per cell: `wall` (1 where an ant cannot walk) and
- * `trail` (trail pheromone on the floor). The nest entrance is where the
- * tube meets the arena's left wall, halfway along it.
+ * Three grids at 1 mm per cell: `wall` (1 where an ant cannot walk), `trail`
+ * (trail pheromone on the ground) and `relief` (how high the ground stands
+ * over the floor: stones, bark and tubes the ants climb, A5). The nest
+ * entrance is where the tube meets the arena's left wall, halfway along it.
  */
 import { ARENA_SIZE } from './tank';
 
@@ -12,8 +13,10 @@ export interface Arena {
   height: number;
   /** 1 where the floor is blocked. The rim of the box is always blocked. */
   wall: Uint8Array;
-  /** Trail pheromone per cell (arbitrary units). */
+  /** Trail pheromone per cell (arbitrary units), on the ground whatever its height. */
   trail: Float64Array;
+  /** Height of the ground over each cell's centre, mm: 0 on the floor, more on what stands on it (A5). */
+  relief: Float32Array;
   /** Where the tube opens into the arena, mm. */
   entranceX: number;
   entranceY: number;
@@ -33,6 +36,7 @@ export function createArena(width: number = ARENA_SIZE, height: number = ARENA_S
     height,
     wall: new Uint8Array(width * height),
     trail: new Float64Array(width * height),
+    relief: new Float32Array(width * height),
     entranceX: 1.5,
     entranceY: height / 2,
   };
@@ -42,6 +46,40 @@ export function createArena(width: number = ARENA_SIZE, height: number = ARENA_S
 export function isBlocked(arena: Arena, x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= arena.width || y >= arena.height) return true;
   return arena.wall[Math.floor(y) * arena.width + Math.floor(x)] === 1;
+}
+
+/** Height of the ground at a point, mm, interpolated between the four nearest cell centres (0 off the floor). */
+export function reliefAt(arena: Arena, x: number, y: number): number {
+  const fx = x - 0.5;
+  const fy = y - 0.5;
+  const x0 = Math.floor(fx);
+  const y0 = Math.floor(fy);
+  const tx = fx - x0;
+  const ty = fy - y0;
+  return (
+    cellRelief(arena, x0, y0) * (1 - tx) * (1 - ty) +
+    cellRelief(arena, x0 + 1, y0) * tx * (1 - ty) +
+    cellRelief(arena, x0, y0 + 1) * (1 - tx) * ty +
+    cellRelief(arena, x0 + 1, y0 + 1) * tx * ty
+  );
+}
+
+function cellRelief(arena: Arena, cx: number, cy: number): number {
+  if (cx < 0 || cy < 0 || cx >= arena.width || cy >= arena.height) return 0;
+  return arena.relief[cy * arena.width + cx]!;
+}
+
+/**
+ * How far across the floor an ant gets for `step` mm walked along `heading`
+ * from (x, y): less where it climbs or descends, since the ground it walks is
+ * longer than the floor it crosses. Path integration counts the floor
+ * distance, as real ants do over hills (Wohlgemuth, Ronacher & Wehner 2001).
+ */
+export function floorStep(arena: Arena, x: number, y: number, heading: number, step: number): number {
+  const h0 = reliefAt(arena, x, y);
+  const h1 = reliefAt(arena, x + step * Math.cos(heading), y + step * Math.sin(heading));
+  if (h0 === 0 && h1 === 0) return step;
+  return (step * step) / Math.hypot(step, h1 - h0);
 }
 
 /**

@@ -137,14 +137,59 @@ decorations inside. Approved the same day (choices A1 to A4, L2):
   5 to 7 stones, 3 to 5 dry leaves, 2 twigs and 2 cushions of moss, on a
   fine-sand floor. The tube's mouth and the first drop of sugar are kept
   clear, and obstacles leave at least 12 mm between each other and the walls.
-  The stones, the bark and the water tube are obstacles: they are written
-  into the arena's wall grid, so ants meet them as they meet any wall, by
-  bumping and sliding along their edges (local rules only, section 0).
-  Leaves, twigs and moss are flat and walked over. Ants do not climb (that
-  needs 3D). Food put down on an obstacle is refused. In tests, foragers
-  never stand inside an obstacle; with sugar 36 cm from the tube, 6 of 6
-  bare arenas and 5 of 6 decorated ones found it within 10 minutes: the
-  obstacles slow the search a little, as they should.
+  The stones, the bark and the water tube stand up from the floor and are
+  climbed (A5; until then they were walls the ants walked round). Leaves,
+  twigs and moss are flat and walked over. Food put down on a stone, the
+  bark or the tube is refused: it would roll off.
+- **A5 Climbing** (Arena 1, B1-B2 below). The arena keeps a relief: the
+  height of the ground over each mm of floor, 0 on the sand. Stones and bark
+  are half ellipsoids over their outlines and the water tube a cylinder
+  lying on the floor, the same shapes the page draws (`reliefOf` in
+  `src/sim/decor.ts`). An ant walks over the relief with its usual stride;
+  going up or down, the same walking crosses less floor (`floorStep`), so a
+  climb costs its height. Its path integrator counts the floor it crossed,
+  not the ground it walked, as desert ants do over hills (Wohlgemuth,
+  Ronacher & Wehner 2001), so it heads straight home from the top of a
+  stone. Trail is laid on the ground wherever the ant is. Ants walk over
+  things, not under them: there are no overhangs. The page draws an ant on
+  a stone at its height, over the stone where the viewer would see it. Tanks
+  saved before this keep their decorations, which become climbable. Checks
+  (`tests/arena.test.ts`): crossing a stone costs its surface length to
+  within 3%; in 6 lab colonies foraging over the decorated arena for 10
+  minutes, 38-40 of 40 workers in each climbed something, 5-11% of the ants
+  out were on top of something at any moment, 66-95% of those that climbed
+  were back in the nest by the end, and all 6 found sugar 36 cm away (5 of 6
+  did when the decorations were walls). With no relief (the lab
+  experiments) nothing changes, checked bit for bit.
+
+### 3.4 Objects, feeders and feeder insects (Marco, 2026-10-13)
+
+Marco asked to "be able to put object inside and have the ants crawl on the
+object", for "the typical feeder or trays that are used to feed ants", and
+for feeder insects "like the one you buy... pieces or whole and in that case
+they took them apart". He approved this plan as drafted
+(`/mnt/project-files/ants/arena-objects.md`), to be built in three steps:
+
+- **Arena 1 (built, A5): climbing.** B1: a relief (height map), not full 3D.
+  B2: stones, bark and the water tube are climbed; the glass walls are not
+  (fluon); no overhangs.
+- **Arena 2: placing objects.** B3: a keeper tool to place, move and remove a
+  feeding dish, a liquid feeder, a flat stone, cork bark and a twig bridge
+  (decorations too), each a logged command. B4: a shallow plastic dish 35 mm
+  across with a 4 mm rim; food tapped in it stays in it, and Clean arena
+  empties it. B5: a test tube of sugar water with a cotton plug lying on
+  the floor; ants drink at the cotton; 2 mL lasts many tank days; Refill.
+- **Arena 3: feeder insects.** B6: fruit fly (about 2.5 mm, 1 mg), small
+  cricket (about 12 mm, 40 mg), mealworm (about 22 mm, 120 mg), dead, given
+  whole, opened or in pieces, each with real parts. B7: ants drink at open
+  cuts and bite parts off at the joints (soft joints fast, the mealworm's
+  skin slowly, faster with more ants); a part about an ant's weight or less
+  is carried home, a fruit fly whole; no group carrying. B8: pieces are fed
+  to the larvae in the nest, the hard leftovers carried to the midden, and
+  a piece left uneaten for 2 tank days goes mouldy. B9: old tanks keep
+  everything. Validation: one forager carries a fruit fly home with little
+  recruitment, while a cricket draws a crowd and a trail (Lasius niger
+  scavenging, Detrain & Deneubourg; to be checked against the paper).
 
 ---
 

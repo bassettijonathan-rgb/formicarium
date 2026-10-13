@@ -14,6 +14,7 @@ import { Cause, Place, createAnts } from './ants';
 import { dropRadius } from './food';
 import { createBrood } from './brood';
 import type { Census } from './history';
+import { stampDecorations } from './decor';
 import { type LoggedCommand, createTank, furnishArena } from './keeper';
 import { TANK_ARENA } from './tank';
 import { STEPS_PER_SECOND } from './time';
@@ -63,6 +64,11 @@ export function loadWorld(save: Save): World | null {
   fill(saved as unknown as Record<string, unknown>, template as unknown as Record<string, unknown>);
   saved.params = template.params;
   if (saved.arena.width !== template.arena.width || saved.arena.height !== template.arena.height) moveIntoBigArena(saved);
+  else {
+    // A tank saved while its stones, bark and tube were walls (before A5): they become ground the ants climb.
+    saved.arena.wall.fill(0);
+    stampDecorations(saved.arena, saved.decor);
+  }
   return saved;
 }
 

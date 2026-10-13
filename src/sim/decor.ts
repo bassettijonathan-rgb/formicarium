@@ -1,12 +1,12 @@
 /**
- * Decorations in the keeper's arena (DESIGN.md section 3.3, A4): stones, a
- * piece of cork bark and a water tube that the ants must walk round, and dry
- * leaves, twigs and moss lying flat that they walk over. Each new tank lays
- * them out from its seed.
+ * Decorations in the keeper's arena (DESIGN.md section 3.3, A4, A5): stones,
+ * a piece of cork bark and a water tube that stand up from the floor, and dry
+ * leaves, twigs and moss lying flat. Each new tank lays them out from its seed.
  *
- * The obstacles are written into the arena's `wall` grid, so the ants meet
- * them exactly as they meet any wall: by bumping into them and sliding along
- * (`moveAnt`). The shapes are kept too, as plain data, so the page can draw them.
+ * The ones that stand up are written into the arena's `relief`, the height of
+ * the surface above each mm of floor, so the ants climb over them (A5). The
+ * shapes are kept too, as plain data, so the page can draw them; `reliefOf`
+ * is the same shape the page draws, so an ant on a stone is drawn on it.
  */
 import type { Arena } from './arena';
 import { Purpose, Rng } from './rng';
@@ -35,7 +35,7 @@ export interface KeepClear {
 /** Ants need room to pass between obstacles and round the arena's walls, mm. */
 const GAP = 12;
 
-/** True if the decoration is in the ants' way. */
+/** True if the decoration stands up from the floor (and ants climb it). */
 export function isObstacle(d: Decoration): boolean {
   return d.kind === 'stone' || d.kind === 'bark' || d.kind === 'tube';
 }
@@ -140,15 +140,77 @@ export function covers(d: Decoration, x: number, y: number): boolean {
   }
 }
 
-/** Writes the obstacles into the arena's `wall` grid (a cell is blocked if its centre is covered). */
-export function stampDecorations(arena: Arena, decorations: Decoration[]): void {
+/**
+ * Height of the decoration's top surface above the floor point (x, y), mm, or
+ * 0 off it. Stones and bark are half ellipsoids over their outline (the page
+ * draws them as stacked slices of the same shape); the water tube is a
+ * cylinder lying on the floor, with rounded ends.
+ */
+export function reliefOf(d: Decoration, x: number, y: number): number {
+  switch (d.kind) {
+    case 'stone': {
+      const dx = x - d.x;
+      const dy = y - d.y;
+      const r = Math.hypot(dx, dy);
+      if (r >= d.radius * 1.1) return 0;
+      const n = d.outline.length;
+      const a = ((Math.atan2(dy, dx) / (2 * Math.PI)) * n + n) % n;
+      const k = Math.floor(a);
+      const t = a - k;
+      const f = r / (d.radius * (d.outline[k]! * (1 - t) + d.outline[(k + 1) % n]! * t));
+      return f < 1 ? d.height * Math.sqrt(1 - f * f) : 0;
+    }
+    case 'bark': {
+      const c = Math.cos(-d.angle);
+      const s = Math.sin(-d.angle);
+      const u = (x - d.x) * c - (y - d.y) * s;
+      const v = (x - d.x) * s + (y - d.y) * c;
+      const q = (u / d.length) ** 2 + (v / (d.width / 2)) ** 2;
+      return q < 1 ? d.height * Math.sqrt(1 - q) : 0;
+    }
+    case 'tube': {
+      const dx = x < d.x0 ? d.x0 - x : x > d.x1 ? x - d.x1 : 0;
+      const off = Math.hypot(dx, y - d.y);
+      return off < d.radius ? d.radius + Math.sqrt(d.radius * d.radius - off * off) : 0;
+    }
+    default:
+      return 0;
+  }
+}
+
+/** The relief of a floor `width` x `height` mm with these decorations: the surface's height over each cell's centre, mm. */
+export function buildRelief(width: number, height: number, decorations: Decoration[]): Float32Array {
+  const relief = new Float32Array(width * height);
   for (const d of decorations) {
     if (!isObstacle(d)) continue;
-    for (let cy = 0; cy < arena.height; cy++) {
-      for (let cx = 0; cx < arena.width; cx++) {
-        if (covers(d, cx + 0.5, cy + 0.5)) arena.wall[cy * arena.width + cx] = 1;
+    const [x0, y0, x1, y1] = footprint(d);
+    for (let cy = Math.max(0, Math.floor(y0)); cy <= Math.min(height - 1, Math.ceil(y1)); cy++) {
+      for (let cx = Math.max(0, Math.floor(x0)); cx <= Math.min(width - 1, Math.ceil(x1)); cx++) {
+        const h = reliefOf(d, cx + 0.5, cy + 0.5);
+        const i = cy * width + cx;
+        if (h > relief[i]!) relief[i] = h;
       }
     }
   }
+  return relief;
+}
+
+/** A box round the decoration's footprint on the floor: x0, y0, x1, y1, mm. */
+function footprint(d: Decoration): [number, number, number, number] {
+  switch (d.kind) {
+    case 'stone':
+      return [d.x - 1.1 * d.radius, d.y - 1.1 * d.radius, d.x + 1.1 * d.radius, d.y + 1.1 * d.radius];
+    case 'bark':
+      return [d.x - d.length, d.y - d.length, d.x + d.length, d.y + d.length];
+    case 'tube':
+      return [d.x0 - d.radius, d.y - d.radius, d.x1 + d.radius, d.y + d.radius];
+    default:
+      return [0, 0, -1, -1];
+  }
+}
+
+/** Writes the decorations that stand up into the arena's `relief`, which ants walk over (A5). */
+export function stampDecorations(arena: Arena, decorations: Decoration[]): void {
+  arena.relief = buildRelief(arena.width, arena.height, decorations);
 }
 
