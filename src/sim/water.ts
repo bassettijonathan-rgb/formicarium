@@ -8,7 +8,9 @@
  * poured in. Where soil meets the air it evaporates, faster where it is warm
  * and where the air is fresh: the surface under the lid dries first, the
  * deep nest last. Damp soil is strong and dry sand caves in (section 3.2),
- * so a farm left unwatered loses its tunnels. The keeper pours water from above.
+ * so a farm left unwatered loses its tunnels. The keeper pours water from above,
+ * or the farm waters itself: with `selfWatering` a reservoir under the sand
+ * keeps every cell at least as damp as the drained soil it was poured as.
  *
  * The air's humidity follows the soil: air in soil pores is saturated until
  * the soil is nearly dry, and the open headspace mixes with the room's air
@@ -26,6 +28,15 @@ import { FARM_HEIGHT, HEADSPACE } from './tank';
 
 /** How much more water the drained soil holds per mm deeper, fraction of saturation. */
 const RISE_PER_MM = DRAINED_RISE / (FARM_HEIGHT - HEADSPACE);
+
+/**
+ * Water in drained soil of `material` at `y` mm from the top of the farm,
+ * fraction of saturation: what the soil is poured with (farm.ts, without its
+ * patchiness) and what seepage settles back to.
+ */
+export function drainedWater(material: Material, y: number): number {
+  return Math.min(1, Math.max(0, 0.3 + RISE_PER_MM * (y - HEADSPACE) + RETENTION[material]!));
+}
 
 /** Water one cell holds when saturated, µL: 1 mm² of a farm 5 mm thick, 40% of it pores. */
 export const CELL_SATURATION = 2;
@@ -102,10 +113,15 @@ export function updateWater(farm: Farm, params: AntParams, seconds: number): voi
   }
   let changed = false;
   for (let i = 0; i < n; i++) {
+    const m = material[i]! as Material;
+    if (m === Material.air) continue;
     const d = delta[i]!;
-    if (d === 0 || material[i] === Material.air) continue;
     const before = moisture[i]!;
-    if (setWater(farm, i, before + moistureRest[i]! + d * 255)) {
+    let units = before + moistureRest[i]! + d * 255;
+    // A self-watering farm's reservoir tops the soil back up to its drained state.
+    if (params.selfWatering) units = Math.max(units, 255 * drainedWater(m, (i / w) | 0));
+    else if (d === 0) continue;
+    if (setWater(farm, i, units)) {
       changed = true;
       // A ceiling that dried may no longer hold.
       if (moisture[i]! < before && !farm.loose[i] && i + w < n && material[i + w] === Material.air) farm.falling.push(i);

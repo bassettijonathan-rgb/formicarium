@@ -52,13 +52,14 @@ export const FIRST_DROP = { x: 100, y: TANK_ARENA.height / 2 - 45 } as const;
  * little cool for Lasius niger, the heat mat under the middle of the farm, a
  * 40 x 30 cm arena with stones, bark, leaves and moss laid out from the seed
  * (DESIGN.md A1, A4), and a first sugar drop, so a new tank has something to
- * find. The soil dries unless the keeper waters it, what is left to rot goes
- * mouldy, and the colony can die.
+ * find. The soil's water moves, but the farm waters itself and stays as damp
+ * as it was poured (DESIGN.md 7.7), what is left to rot goes mouldy, and the
+ * colony can die.
  */
 export function createTank(seed: number): World {
   const world = createWorld(seed, {
     queen: true,
-    params: { roomTemperature: TANK_ROOM, waterFlow: true, mould: true, mortal: true },
+    params: { roomTemperature: TANK_ROOM, waterFlow: true, selfWatering: true, mould: true, mortal: true },
   });
   setHeatMat(world, TANK_MAT_X);
   furnishArena(world, []);

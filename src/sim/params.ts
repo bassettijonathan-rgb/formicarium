@@ -455,6 +455,14 @@ export interface AntParams {
    */
   waterFlow: boolean;
   /**
+   * True: the farm waters itself (with `waterFlow` on). A reservoir under the
+   * sand tops every soil cell back up to the drained state it was poured in
+   * (the profile a water table at the bottom of the farm holds), so the soil
+   * never dries, the nest's air stays saturated and the headspace damp, and
+   * the keeper never has to water. Marco's choice for the page (2026-10-13).
+   */
+  selfWatering: boolean;
+  /**
    * How fast a soil face open to the headspace dries while it is wet: a
    * fraction of saturation per tank day at 25 °C (rough: set so the top of an
    * unwatered farm dries in a few days, the deep nest in a few weeks, as
@@ -707,6 +715,7 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   thermotaxis: true,
 
   waterFlow: false,
+  selfWatering: false,
   evaporation: 1,
   vapourDoubling: 12,
   seepage: 50,
