@@ -43,7 +43,7 @@ Each row has a recommendation. Approving the doc as written accepts all of them.
 
 | # | Question | Recommendation | Alternative |
 |---|---|---|---|
-| D1 | What do you look at? | **Side view of a two-pane glass ant farm** (soil cross-section) with a strip of surface on top and a separate **arena** (outworld) joined by a tube, where food goes. Digging is the main show and only a side view shows it. | Top-down only (good for trails, hides the nest). |
+| D1 | What do you look at? | **Side view of a two-pane glass ant farm** (soil cross-section) with a strip of surface on top and a separate **arena** (outworld) joined by a tube, where food goes. Digging is the main show and only a side view shows it. Since 2026-10-13 new tanks use a bought nest lying on the desk instead (section 3.5). | Top-down only (good for trails, hides the nest). |
 | D2 | Which species? | **Lasius niger** (black garden ant): the best-studied trail-laying ant, single queen, small same-size workers, digs in soil. Species is a data file so others can be added. | Messor (seed harvesters, nice granaries) or Pheidole (soldier caste) later as data. |
 | D3 | How do ants find home? | **Path integration** (each ant keeps a noisy vector back to the nest, as real ants do) plus nest odour near the entrance. Food trails use real **trail pheromone laid only on the way back from food**. | The common "two pheromones" shortcut (a home trail and a food trail). Simpler, but real ants do not do it, and it makes trails look fake. |
 | D4 | How does digging work? | **Grain-level soil** (each cell is ~1 mm of sand, loam or clay with moisture) and **stigmergic digging**: ants pick up grains where others dug recently and drop them where pellets pile up, guided by a short-lived building pheromone in the soil (Khuong et al. 2016). Unsupported soil collapses, dry sand more than damp clay. | Ants dig along a pre-made tunnel template. Easier, but nothing emerges. |
@@ -237,6 +237,70 @@ they took them apart". He approved this plan as drafted
   many workers come and how long each drinks: 10 hungry workers took a
   cricket's juice in 97-115 minutes whole or in pieces, and a mealworm's in
   about 5.5 hours either way.
+
+### 3.5 Bought nests (Marco, 2026-10-13)
+
+Marco asked to "move forward from the diggable sand ... towards the classic
+formicarium that you can buy in ytong, wood, plastic, etc. Of different
+sizes and styles and modular". He approved the plan as drafted
+(`/mnt/project-files/ants/bought-nests.md`, decisions N1-N10), to be built
+in three steps: Nests 1, one ytong nest; Nests 2, plaster, acrylic and wood
+with covers and light; Nests 3, modules, tubes, cotton plugs, the test-tube
+start and moving house. In a bought nest the chambers are carved already:
+the ants cannot dig, so what the colony does is choose where to live in it.
+
+**Nests 1 (built): one ytong nest** (`src/sim/nest.ts`).
+
+- **The block (N1, N3, N4).** New tanks start in a bought nest of
+  aerated concrete (ytong) instead of the sand farm, which stays for tanks
+  kept from before and for the experiments. It lies flat on the desk to
+  the left of the arena, under a glass lid, and the page draws it at the
+  arena's 40° (a parallel projection; "From above" shows it as a plan, as
+  it does the arena). Sizes: small 10 x 10 cm, medium 20 x 15 cm (the
+  default), large 30 x 20 cm; the block is 25 mm thick and its chambers
+  5 mm deep. The same 1 mm `Farm` grid holds it, seen from above, so the
+  fields (smells, warmth, humidity, mould) work as in the farm; `farm.nest`
+  says what nest it is (null for the sand farm). Ytong is a new `Material`
+  (4), a hard wall: `isSoil` is false for it, so nothing digs it.
+- **Layouts (N5),** carved from the tank's seed (`Purpose.nest`): *rooms*
+  (classic), rounded rectangles in a loose grid joined by 3.8 mm corridors;
+  *organic*, uneven rounded chambers with bent 3.5 mm corridors; and
+  *honeycomb*, hexagonal cells 21 mm across (17 mm in the small nest) with
+  2.6 mm doors through the walls between them. The links are a random
+  spanning tree over neighbouring chambers, so every chamber can be
+  reached, plus some extra (30% of the other neighbours, 12% in the
+  honeycomb) so there are loops. A 4 mm corridor joins the nearest
+  chamber to the tube's port in the right end, a third of the way from the
+  back; the left 30 mm are kept for the water hole. Nothing else comes
+  within 3 mm of the block's edge.
+- **Water (N6).** The water hole (radius 9 mm, 7 mm in the small
+  nest) at the left end refills itself, so the ytong's water does not
+  change: 60% of saturation at the hole's edge, falling by e every 45 mm
+  (rough, so a medium nest is wet at the water end and dry at the far end,
+  as keepers describe ytong nests). The air in a chamber takes the pore
+  humidity of the ytong under it (as for soil, section 7.7: saturated until
+  the ytong is nearly dry), mixed along the chambers over about 20 mm
+  (rough), and the room's air (50%) comes in only through the tube, as far
+  as the fresh air reaches (`fresh`: 1 at the tube's mouth, falling by 0.85
+  per 2 mm along the corridors). A medium nest is damp (95% and up) over
+  its first 12 cm, dries over the next 3 cm, and is at 40-60% beyond. The
+  page darkens the ytong where it is wet and shows the hole's water.
+- **Warmth (N10).** The heat mat lies under the block (left end, middle or
+  right end): the floor over it is held at room temperature plus
+  `nestMatShare` (0.7, rough) of the mat's excess, 29.7 °C in the keeper's
+  22 °C room, and heat spreads and is lost as in the farm (section 7.6).
+- **The ants in a flat nest.** Everything in sections 4 and 7 carries over,
+  except what came from soil and gravity: there is no open surface (an ant
+  is never "outside" in the nest), no pull down into the soil or up out of
+  it, and no digging. An ant counts as half sheltered anywhere under the
+  lid and fully against a wall (`enclosure`), so resting ants line the
+  walls and corners. Ants going out follow the fresh air from the tube, as
+  they do along tunnels, and the tube's draught near its mouth. A new
+  colony is tipped into the chamber nearest the nest's middle.
+- **Not yet:** other materials and covers (darkness), modules, the test
+  tube and moving house (Nests 2 and 3). Because a bought nest keeps its
+  shape, it has no timelapse.
+- Validation: section 9, test 15.
 
 ---
 
@@ -1003,6 +1067,11 @@ project. If one fails, we fix the model, not the test.
    1983): prey one worker can carry is taken home by its finder with little
    recruitment; prey none can carry draws trail laying and a crowd that cut
    it up where it lies.
+15. **A bought nest** (Nests 1; checks 1 and 3 of the bought-nests plan):
+   in a ytong nest wet at one end, nurses carry the brood into the damp
+   chambers; and the floor a colony takes up grows in proportion to its
+   workers, in a nest far bigger than it needs (Temnothorax colonies choose
+   a nest whose area matches their size, Mallon & Franks 2000).
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -1422,6 +1491,49 @@ carried a fly into the farm within 2 tank hours, drank it by the brood and
 carried its husk out to the arena, and took the cricket's legs one by one
 over the day.
 
+### 9.13 Results so far (a bought nest, Nests 1)
+
+**Brood in a ytong nest.** `npm run experiment -- nest-damp`;
+`tests/science/nestDamp.test.ts` checks seeds 1-3 over 2 hours. A medium
+classic ytong nest (65% of its floor in air at least 85% humid, the rest
+drier toward the tube), 60 workers and 45 eggs, larvae and pupae strewn
+through all its chambers; the brood neither develops nor dries out, so
+where it lies is all that is measured. Share of the brood in air at least
+85% humid, at the start and after each hour:
+
+| Seed | Nurses as modelled | Nurses ignoring humidity (control) |
+|---|---|---|
+| 1 | 62% → 100% → 100% → 100% | 62% → 62% → 64% → 67% |
+| 2 | 73% → 100% → 100% → 100% | 73% → 80% → 67% → 62% |
+
+Within an hour every brood item is in the damp chambers, mean humidity at
+the brood 98-99%, as keepers see brood kept on the wet side of a ytong
+nest; without hygrotaxis it stays about where it was strewn.
+
+**Room to grow.** `npm run experiment -- nest-room`;
+`tests/science/nestRoom.test.ts` checks seeds 1-2 at 20 and 80 workers.
+Workers and a queen strewn through a large classic nest (20 chambers);
+floor covered = floor within 3 mm of a resting worker, after 3 hours:
+
+| Workers | Seed 1: floor (resting) | Seed 2: floor (resting) | mm² per resting worker | Chambers holding 90% of them |
+|---|---|---|---|---|
+| 20 | 303 mm² (14) | 322 mm² (13) | 22-25 | 8, 9 |
+| 40 | 655 mm² (31) | 651 mm² (27) | 21-24 | 11, 12 |
+| 80 | 1407 mm² (67) | 1321 mm² (60) | 21-22 | 14, 16 |
+| 160 | 2519 mm² (120) | 2429 mm² (112) | 21-22 | 15, 15 |
+
+The floor the colony covers grows in proportion to its workers, about
+22 mm² each, as nests (dug, 9.2, or chosen, Mallon & Franks 2000) match
+the colony. **Gap:** the colony is looser than a real one. A small colony
+spreads through many chambers (20 workers over 8-9 of 20) instead of
+keeping together in a corner of a big nest, even when tipped into one
+chamber with its brood (6-9 chambers after 1-3 hours). Resting is drawn by
+shelter, colony odour and the brood, and in a bought nest every chamber is
+shelter. Lasius niger workers also stop more readily and stay longer
+beside resting nestmates (Depickère et al. 2004), which the model does not
+have; that is the likely fix, needed before Nests 3, where a colony should
+move into a new module only when the first is full.
+
 ---
 
 ## 10. Architecture
@@ -1457,6 +1569,8 @@ Each milestone is one or a few small PRs, merged by Marco, with a link to play.
 | M6 | Keeping it: saves, offline catch-up, ant inspector, graphs, timelapse. In parts: M6a saves and catching up while closed, with a report of what happened; M6b the ant inspector; M6c colony graphs and timelapse |
 | M7 | Optional extras: second colony and war, other species, nuptial flights |
 | L | Looks (asked by Marco 2026-10-13, section 8.1): L1 the room and the window onto Legnano with its real sky and weather; L2 a bigger arena seen at an angle, with decorations |
+| A | The arena (asked by Marco 2026-10-13, section 3.4): Arena 1 climbing; Arena 2 dishes, feeders and placing objects; Arena 3 feeder insects |
+| N | Bought nests (asked by Marco 2026-10-13, section 3.5): Nests 1 one ytong nest, in three sizes and three layouts; Nests 2 plaster, acrylic and wood, covers and light; Nests 3 modules, tubes and cotton plugs, the test-tube start and moving house |
 
 If a validation test in M1 or M2 cannot be made to pass with plausible
 parameters, I stop and report before changing the model.
@@ -1489,6 +1603,7 @@ parameters, I stop and report before changing the model.
 - Mailleux, Deneubourg & Detrain 2000. How do ants assess food volume? Anim. Behav.
 - Mailleux, Detrain & Deneubourg 2006. Starvation drives a threshold triggering communication. J. Exp. Biol.
 - Meeus 1998. Astronomical Algorithms, 2nd ed. Willmann-Bell (ch. 25 the sun, ch. 47 the moon; low-precision forms).
+- Mallon & Franks 2000. Ants estimate area using Buffon's needle. Proc. R. Soc. B 267, 765-770.
 - Mersch, Crespi & Keller 2013. Tracking individuals shows spatial fidelity is a key regulator of ant social organization. Science 340, 1090-1093.
 - Müller & Wehner 1988. Path integration in desert ants. PNAS.
 - Planckaert et al. 2019. A spatiotemporal analysis of the food dissemination process and the trophallactic network in the ant *Lasius niger*. Sci. Rep.

@@ -413,6 +413,13 @@ export interface AntParams {
    * sets how far the mat's warmth reaches, about 3 cm.
    */
   heatLossHalfLife: number;
+  /**
+   * Under a bought nest lying on the mat (DESIGN.md 3.5), the floor of the
+   * chambers over it is held this fraction of the way from room temperature
+   * to the mat's: the warmth comes up through a few mm of ytong, which loses
+   * some on the way (rough).
+   */
+  nestMatShare: number;
   /** False holds the farm's temperatures where they are set (for experiments with a fixed gradient). */
   heatFlow: boolean;
   /**
@@ -733,6 +740,7 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   matTemperature: 33,
   heatDiffusivity: 0.5,
   heatLossHalfLife: 1200,
+  nestMatShare: 0.7,
   heatFlow: true,
   speedDoubling: 15,
   broodPreferred: 28,

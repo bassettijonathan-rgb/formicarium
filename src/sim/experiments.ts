@@ -17,6 +17,7 @@ import { STEPS_PER_SECOND } from './time';
 import { addCorpse, colonyCrop, createWorld, deathsBy, killAnt, setHeatMat, placeInsect, placeProtein, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
 import { createArena } from './arena';
 import type { Cut, Insect } from './prey';
+import type { NestLayout, NestSize } from './nest';
 import { TANK_ARENA } from './tank';
 
 export interface RunOptions {
@@ -955,4 +956,150 @@ export function runPrey(opts: RunOptions & { insect: Insect; cut: Cut; minutes: 
   }
   const left = world.prey.filter((p) => p.place === Place.arena && p.carriedBy < 0).reduce((sum, p) => sum + p.juice, 0);
   return { found, mostAtOnce, workers: came.reduce((a, b) => a + b, 0), trail, cleared, half, carried, taken: 1 - left / juice };
+}
+
+/** A colony moved into a bought nest for an experiment: the workers and the brood strewn through its chambers. */
+function boughtNestColony(
+  opts: RunOptions & { size: NestSize; layout: NestLayout; brood?: number; queen?: boolean; tipped?: boolean },
+): World {
+  const params: Partial<AntParams> = {
+    forageRate: 0,
+    returnToFoodRate: 0,
+    burnRate: 0,
+    developmentZero: 1e9, // no development: brood stays as it is
+    larvaStarveDays: 1e9,
+    ...opts.params,
+  };
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, queen: opts.queen ?? false, params, bought: { size: opts.size, layout: opts.layout } });
+  const { ants, brood, farm } = world;
+  const rng = new Rng(opts.seed, Purpose.test);
+  const open: number[] = [];
+  for (let c = 0; c < farm.material.length; c++) if (farm.material[c] === Material.air) open.push(c);
+  const anywhere = () => {
+    const c = open[rng.int(open.length)]!;
+    return [(c % farm.width) + rng.float(), Math.floor(c / farm.width) + rng.float()] as const;
+  };
+  // Strewn through the chambers, or (`tipped`) left where the keeper tipped them in, the chamber nearest the middle.
+  const q = ants.caste.indexOf(Caste.queen);
+  const nearQueen = () => [ants.x[q]! + rng.range(-1, 1), ants.y[q]! + rng.range(-1, 1)] as const;
+  if (!opts.tipped) {
+    for (let i = 0; i < ants.count; i++) {
+      if (ants.caste[i] === Caste.queen) continue;
+      [ants.x[i], ants.y[i]] = anywhere();
+    }
+  }
+  const stages = [BroodStage.egg, BroodStage.larva, BroodStage.pupa];
+  for (let n = 0; n < (opts.brood ?? 0); n++) addBrood(brood, stages[n % 3]!, ...(opts.tipped && q >= 0 ? nearQueen() : anywhere()));
+  return world;
+}
+
+export interface NestDampResult extends DampResult {
+  /** Share of the nest's floor whose air is at least nearly as humid as nurses keep brood in. */
+  dampFloor: number;
+}
+
+/**
+ * Brood in a bought nest (Nests 1, DESIGN.md 9.13): a medium ytong nest, wet
+ * at its water end and dry at the tube end. Workers and brood are strewn
+ * through all its chambers; nurses carry the brood to the damp chambers.
+ * Brood does not dry out or develop here, so where it lies is all that is measured.
+ */
+export function runNestDamp(opts: RunOptions & { hours: number; layout?: NestLayout }): NestDampResult {
+  const world = boughtNestColony({
+    ...opts,
+    size: 'M',
+    layout: opts.layout ?? 'classic',
+    brood: 45,
+    params: { broodDryDays: 1e9, ...opts.params },
+  });
+  const { brood, farm, params } = world;
+  const wet = (h: number) => h >= params.broodHumidity - 0.05;
+  let floor = 0;
+  let dampFloor = 0;
+  for (let c = 0; c < farm.material.length; c++) {
+    if (farm.material[c] !== Material.air) continue;
+    floor++;
+    if (wet(humidityAt(farm, (c % farm.width) + 0.5, Math.floor(c / farm.width) + 0.5))) dampFloor++;
+  }
+  const measure = () => {
+    let sum = 0;
+    let damp = 0;
+    let n = 0;
+    for (let k = 0; k < brood.count; k++) {
+      if (brood.stage[k] === BroodStage.none) continue;
+      const rh = humidityAt(farm, brood.x[k]!, brood.y[k]!);
+      sum += rh;
+      if (wet(rh)) damp++;
+      n++;
+    }
+    return { mean: sum / n, damp: damp / n };
+  };
+  const first = measure();
+  const meanByHour = [first.mean];
+  const dampByHour = [first.damp];
+  for (let h = 0; h < opts.hours; h++) {
+    for (let s = 0; s < 3600 * STEPS_PER_SECOND; s++) step(world);
+    const m = measure();
+    meanByHour.push(m.mean);
+    dampByHour.push(m.damp);
+  }
+  return { meanByHour, dampByHour, dampFloor: dampFloor / floor };
+}
+
+export interface NestRoomResult {
+  /** Floor the resting colony covers (within 3 mm of a resting worker), mm², at the end of each hour. */
+  areaByHour: number[];
+  /** Resting workers at the end of each hour. */
+  restingByHour: number[];
+  /** The fewest chambers that hold 90% of the resting workers (each counted in the chamber whose middle is nearest), at the end of each hour; and how many chambers the nest has. */
+  chambersByHour: number[];
+  chambers: number;
+}
+
+/**
+ * Room to grow (Nests 1, DESIGN.md 9.13): `ants` workers and a queen moved
+ * into a large ytong nest, far more room than they need. The floor the
+ * resting colony covers should grow in proportion to the number of workers
+ * (Temnothorax colonies choose a nest whose area matches their size, Mallon &
+ * Franks 2000; dug nests grow in proportion to the colony, 9.2).
+ */
+export function runNestRoom(opts: RunOptions & { hours: number; brood?: number; tipped?: boolean }): NestRoomResult {
+  const world = boughtNestColony({ ...opts, size: 'L', layout: 'classic', queen: true });
+  const { ants, farm } = world;
+  const areaByHour: number[] = [];
+  const restingByHour: number[] = [];
+  const chambersByHour: number[] = [];
+  const chambers = farm.nest!.chambers;
+  const covered = new Uint8Array(farm.width * farm.height);
+  for (let h = 0; h < opts.hours; h++) {
+    for (let s = 0; s < 3600 * STEPS_PER_SECOND; s++) step(world);
+    covered.fill(0);
+    let resting = 0;
+    const inChamber = chambers.map(() => 0);
+    for (let i = 0; i < ants.count; i++) {
+      if (ants.place[i] !== Place.farm || ants.state[i] !== AntState.resting || ants.caste[i] !== Caste.worker) continue;
+      resting++;
+      const x = ants.x[i]!;
+      const y = ants.y[i]!;
+      let near = 0;
+      chambers.forEach((c, k) => {
+        if (Math.hypot(c.x - x, c.y - y) < Math.hypot(chambers[near]!.x - x, chambers[near]!.y - y)) near = k;
+      });
+      inChamber[near]!++;
+      for (let cy = Math.max(0, Math.floor(y - 3)); cy <= Math.min(farm.height - 1, Math.floor(y + 3)); cy++) {
+        for (let cx = Math.max(0, Math.floor(x - 3)); cx <= Math.min(farm.width - 1, Math.floor(x + 3)); cx++) {
+          const c = cy * farm.width + cx;
+          if (farm.material[c] === Material.air && (cx + 0.5 - x) ** 2 + (cy + 0.5 - y) ** 2 <= 9) covered[c] = 1;
+        }
+      }
+    }
+    areaByHour.push(covered.reduce((a, b) => a + b, 0));
+    restingByHour.push(resting);
+    inChamber.sort((a, b) => b - a);
+    let held = 0;
+    let used = 0;
+    while (held < 0.9 * resting) held += inChamber[used++]!;
+    chambersByHour.push(used);
+  }
+  return { areaByHour, restingByHour, chambersByHour, chambers: chambers.length };
 }

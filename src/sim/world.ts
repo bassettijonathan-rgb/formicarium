@@ -9,7 +9,8 @@ import { die, drawLifespan, dropCorpse } from './corpses';
 import { type Brood, BroodStage, createBrood, scentBrood, stepBrood } from './brood';
 import { type Arena, createArena, evaporateTrail } from './arena';
 import type { Decoration } from './decor';
-import { type Farm, createFarm, updateField, updateFresh } from './farm';
+import { type Farm, cellSolid, createFarm, updateField, updateFresh } from './farm';
+import { type NestSetup, createNest } from './nest';
 import type { FoodDrop } from './food';
 import { type AntParams, DEFAULT_ANT_PARAMS } from './params';
 import { Purpose, Rng } from './rng';
@@ -68,14 +69,16 @@ export interface WorldOptions {
   nest?: NestMode;
   /** Changes to the default ant parameters, e.g. `{ trailLaying: false }` for a control. */
   params?: Partial<AntParams>;
+  /** A bought nest instead of the sand farm (DESIGN.md 3.5); the colony lives in it. */
+  bought?: NestSetup;
 }
 
 export function createWorld(seed: number, options: WorldOptions = {}): World {
   const nestMode = options.nest ?? 'farm';
   const params = { ...DEFAULT_ANT_PARAMS, ...options.params };
-  const farm = createFarm(new Rng(seed, Purpose.soil));
+  const farm = options.bought ? createNest(new Rng(seed, Purpose.nest), options.bought, params) : createFarm(new Rng(seed, Purpose.soil));
   farm.temperature.fill(params.roomTemperature);
-  if (params.waterFlow) updateHumidity(farm, params);
+  if (params.waterFlow && !farm.nest) updateHumidity(farm, params);
   const ants = createAnts(options.ants ?? 60);
   giveTraits(ants, params, seed);
   if (nestMode === 'farm') {
@@ -128,24 +131,55 @@ function giveTraits(ants: Ants, params: AntParams, seed: number): void {
 function pourAnts(ants: Ants, farm: Farm, params: AntParams, rng: Rng): void {
   for (let i = 0; i < ants.count; i++) {
     ants.crop[i] = params.startCrop * params.cropLoad;
-    const x = rng.range(farm.width / 2 - POUR_SPREAD, farm.width / 2 + POUR_SPREAD);
     ants.place[i] = Place.farm;
     ants.state[i] = AntState.wandering;
-    ants.x[i] = x;
-    ants.y[i] = farm.surface[Math.floor(x)]! - 1.5;
+    putIn(ants, i, farm, rng);
     ants.heading[i] = rng.range(-Math.PI, Math.PI);
   }
+}
+
+/**
+ * Where the keeper puts a new ant: onto the sand farm's surface near the
+ * middle, or into a bought nest's chamber nearest its middle (a keeper moving
+ * a colony in lifts the lid and tips it there).
+ */
+function putIn(ants: Ants, i: number, farm: Farm, rng: Rng): void {
+  if (!farm.nest) {
+    const x = rng.range(farm.width / 2 - POUR_SPREAD, farm.width / 2 + POUR_SPREAD);
+    ants.x[i] = x;
+    ants.y[i] = farm.surface[Math.floor(x)]! - 1.5;
+    return;
+  }
+  const middle = nestMiddle(farm);
+  for (let tries = 0; tries < 200; tries++) {
+    const x = middle.x + rng.range(-POUR_SPREAD, POUR_SPREAD);
+    const y = middle.y + rng.range(-POUR_SPREAD, POUR_SPREAD);
+    if (!cellSolid(farm, Math.floor(x), Math.floor(y))) {
+      ants.x[i] = x;
+      ants.y[i] = y;
+      return;
+    }
+  }
+  ants.x[i] = middle.x;
+  ants.y[i] = middle.y;
+}
+
+/** The middle of the bought nest's chamber nearest the middle of the nest. */
+export function nestMiddle(farm: Farm): { x: number; y: number } {
+  const chambers = farm.nest!.chambers;
+  let best = chambers[0]!;
+  const d = (c: { x: number; y: number }) => Math.hypot(c.x - farm.width / 2, c.y - farm.height / 2);
+  for (const c of chambers) if (d(c) < d(best)) best = c;
+  return best;
 }
 
 /** The queen goes in last, onto the same spot; she has her body's reserve to start laying. */
 function addQueen(ants: Ants, farm: Farm, params: AntParams, rng: Rng): void {
   const q = addAnt(ants);
-  const x = rng.range(farm.width / 2 - POUR_SPREAD, farm.width / 2 + POUR_SPREAD);
   ants.caste[q] = Caste.queen;
   ants.place[q] = Place.farm;
   ants.state[q] = AntState.wandering;
-  ants.x[q] = x;
-  ants.y[q] = farm.surface[Math.floor(x)]! - 1.5;
+  putIn(ants, q, farm, rng);
   ants.heading[q] = rng.range(-Math.PI, Math.PI);
   ants.crop[q] = params.startCrop * params.cropLoad;
   ants.reserve[q] = params.queenReserve;

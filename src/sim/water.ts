@@ -56,7 +56,8 @@ const HOLD = Float64Array.from(RETENTION);
  * D6), then recomputes the air's humidity. Does nothing unless `waterFlow` is on.
  */
 export function updateWater(farm: Farm, params: AntParams, seconds: number): void {
-  if (!params.waterFlow) return;
+  // A bought nest's water stays where the nest puts it (nest.ts).
+  if (!params.waterFlow || farm.nest) return;
   const days = seconds / params.daySeconds;
   const { width: w, height: h, material, moisture, moistureRest, fresh, temperature, fieldWidth } = farm;
   const n = w * h;
@@ -209,6 +210,7 @@ export function humidityAt(farm: Farm, x: number, y: number): number {
  * Water that soaks past the bottom is lost. Returns the water the soil took up, µL.
  */
 export function pourWater(farm: Farm, params: AntParams, x: number): number {
+  if (farm.nest) return 0; // a bought nest is watered through its water hole, which refills itself
   const half = POUR_WIDTH / 2;
   const x0 = Math.max(0, Math.ceil(x - half));
   const x1 = Math.min(farm.width - 1, Math.floor(x + half));

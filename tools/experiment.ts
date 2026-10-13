@@ -15,6 +15,8 @@
  *   npm run experiment -- hygiene [--days 4] [--no-removal]
  *   npm run experiment -- starvation [--days 30] [--fed]
  *   npm run experiment -- prey [--insect fly|cricket|mealworm] [--cut whole|halved|pieces] [--minutes 180]
+ *   npm run experiment -- nest-damp [--hours 3] [--no-hygro] [--layout classic|organic|honeycomb]
+ *   npm run experiment -- nest-room [--hours 4] [--ants 40]
  *   growth takes --mortal: adults die of hunger, drying out and heat (M5c)
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
  */
@@ -33,11 +35,14 @@ import {
   runFoodChoice,
   runFoodSpread,
   runMidden,
+  runNestDamp,
+  runNestRoom,
   runNestVolume,
   runPrey,
   runTrailDecay,
 } from '../src/sim/experiments';
 import type { Cut, Insect } from '../src/sim/prey';
+import type { NestLayout } from '../src/sim/nest';
 
 const [name, ...rest] = process.argv.slice(2);
 let runs = 10;
@@ -56,12 +61,14 @@ let fed = false;
 let insect: Insect | undefined;
 let cut: Cut = 'whole';
 let minutesSet = false;
+let layout: NestLayout = 'classic';
 const params: Partial<AntParams> = {};
 for (let i = 0; i < rest.length; i++) {
   if (rest[i] === '--runs') runs = Number(rest[++i]);
   else if (rest[i] === '--seed') first = Number(rest[++i]);
   else if (rest[i] === '--insect') insect = rest[++i] as Insect;
   else if (rest[i] === '--cut') cut = rest[++i] as Cut;
+  else if (rest[i] === '--layout') layout = rest[++i] as NestLayout;
   else if (rest[i] === '--ants') ants = Number(rest[++i]);
   else if (rest[i] === '--hours') hours = Number(rest[++i]);
   else if (rest[i] === '--no-trail') params.trailLaying = false;
@@ -238,9 +245,21 @@ for (let seed = first; seed < first + runs; seed++) {
           `most trail ${r.trail.toFixed(0)}; ${r.carried} pieces carried home; ${pct(r.taken)} of its juice taken; half gone after ${t(r.half)}, all after ${t(r.cleared)}`,
       );
     }
+  } else if (name === 'nest-damp') {
+    const r = runNestDamp({ seed, hours: hours || 3, layout, ...(ants ? { ants } : {}), params });
+    console.log(
+      `seed ${seed}: ${pct(r.dampFloor)} of the floor damp enough; brood in air damp enough by hour ${r.dampByHour.map(pct).join(' ')}; ` +
+        `mean humidity at the brood ${r.meanByHour.map(pct).join(' ')}`,
+    );
+  } else if (name === 'nest-room') {
+    const r = runNestRoom({ seed, hours: hours || 4, ants: ants || 40, params });
+    console.log(
+      `seed ${seed}, ${ants || 40} workers: floor the resting colony covers by hour ${r.areaByHour.join(' ')} mm²; ` +
+        `resting ${r.restingByHour.join(' ')}; chambers holding 90% of them ${r.chambersByHour.join(' ')} of ${r.chambers}`,
+    );
   } else {
     throw new Error(
-      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation or prey',
+      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation, prey, nest-damp or nest-room',
     );
   }
 }

@@ -14,6 +14,7 @@ import { ANT_STRIDE, type FromWorker, Look, type PieceView, type ToWorker } from
 import { edible } from '../sim/prey';
 import { readSave, setAside, writeSave } from './store';
 import { inspectAnt } from '../sim/inspect';
+import { DEFAULT_NEST, type NestSetup } from '../sim/nest';
 import { Purpose, Rng } from '../sim/rng';
 
 const INTERVAL_MS = 50;
@@ -48,7 +49,11 @@ function sendFarm(w: World): void {
   const material = w.farm.material.slice();
   const moisture = w.farm.moisture.slice();
   const loose = w.farm.loose.slice();
-  post({ type: 'farm', width: w.farm.width, height: w.farm.height, material, moisture, loose }, [
+  const n = w.farm.nest;
+  const nest = n
+    ? { size: n.size, layout: n.layout, depth: n.depth, thickness: n.thickness, waterX: n.waterX, waterY: n.waterY, waterRadius: n.waterRadius, tubeY: w.farm.tubeY }
+    : null;
+  post({ type: 'farm', width: w.farm.width, height: w.farm.height, material, moisture, loose, nest }, [
     material.buffer,
     moisture.buffer,
     loose.buffer,
@@ -180,7 +185,10 @@ function sendInspected(w: World): void {
 let soilAtStart: { seed: number; material: Uint8Array } | undefined;
 
 function sendHistory(w: World): void {
-  if (soilAtStart?.seed !== w.seed) soilAtStart = { seed: w.seed, material: createFarm(new Rng(w.seed, Purpose.soil)).material };
+  // (A bought nest keeps its shape: its cells now are as it was set up.)
+  if (soilAtStart?.seed !== w.seed || w.farm.nest) {
+    soilAtStart = { seed: w.seed, material: w.farm.nest ? w.farm.material.slice() : createFarm(new Rng(w.seed, Purpose.soil)).material };
+  }
   const h = w.history;
   post({
     type: 'history',
@@ -192,6 +200,7 @@ function sendHistory(w: World): void {
     soil: soilAtStart.material,
     daySeconds: w.params.daySeconds,
     cropLoad: w.params.cropLoad,
+    bought: w.farm.nest !== null,
   });
 }
 
@@ -239,7 +248,7 @@ function catchUp(w: World, total: number): void {
   setTimeout(slice, 0);
 }
 
-async function open(seed: number | null, fresh: boolean): Promise<void> {
+async function open(seed: number | null, fresh: boolean, nest: NestSetup = DEFAULT_NEST): Promise<void> {
   const kept = fresh ? undefined : await readSave();
   if (kept && (seed === null || seed === kept.seed)) {
     const w = loadWorld(kept);
@@ -250,7 +259,7 @@ async function open(seed: number | null, fresh: boolean): Promise<void> {
       return;
     }
     await setAside(kept).catch(() => undefined);
-    begin(createTank(seed ?? kept.seed), [], false, 'Your kept tank was saved by an older version that cannot be carried over, so this is a new one. The old save is set aside in the browser.');
+    begin(createTank(seed ?? kept.seed, nest), [], false, 'Your kept tank was saved by an older version that cannot be carried over, so this is a new one. The old save is set aside in the browser.');
     save();
     return;
   }
@@ -259,13 +268,13 @@ async function open(seed: number | null, fresh: boolean): Promise<void> {
     post({ type: 'ask', seed, kept: { seed: kept.seed, step: kept.world.step, workers } });
     return;
   }
-  begin(createTank(seed ?? 1), [], false);
+  begin(createTank(seed ?? 1, nest), [], false);
   save();
 }
 
 onmessage = (e: MessageEvent<ToWorker>) => {
   const msg = e.data;
-  if (msg.type === 'open') void open(msg.seed, msg.fresh);
+  if (msg.type === 'open') void open(msg.seed, msg.fresh, msg.nest);
   else if (msg.type === 'speed') speed = msg.value;
   else if (msg.type === 'command') pending.push(msg.command);
   else if (msg.type === 'skip') {

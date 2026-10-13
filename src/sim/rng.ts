@@ -53,6 +53,8 @@ export const Purpose = {
   decor: 7,
   /** How each feeder insect the keeper puts in lies, and its legs (B6). */
   prey: 8,
+  /** Carving a bought nest's chambers (DESIGN.md 3.5). */
+  nest: 9,
   test: 99,
 } as const;
 

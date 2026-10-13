@@ -58,7 +58,10 @@ export function catchUpSteps(world: World, awaySeconds: number): number {
 export function loadWorld(save: Save): World | null {
   if (save.version !== SAVE_VERSION || !save.world) return null;
   const saved = save.world;
-  const template = createTank(save.seed);
+  // A tank saved before bought nests lives in the sand farm, and goes on doing so.
+  saved.farm.nest ??= null;
+  const bought = saved.farm.nest;
+  const template = createTank(save.seed, bought ? { size: bought.size, layout: bought.layout } : null);
   template.ants = createAnts(saved.ants?.count ?? 0);
   template.brood = createBrood(saved.brood?.stage?.length ?? 0);
   fill(saved as unknown as Record<string, unknown>, template as unknown as Record<string, unknown>);

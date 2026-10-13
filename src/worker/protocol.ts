@@ -5,6 +5,7 @@ import type { AntCard } from '../sim/inspect';
 import type { KeeperCommand } from '../sim/keeper';
 import type { Decoration } from '../sim/decor';
 import type { Insect, Part } from '../sim/prey';
+import type { NestLayout, NestSetup, NestSize } from '../sim/nest';
 
 export type ToWorker =
   /**
@@ -12,7 +13,7 @@ export type ToWorker =
    * kept tank of another seed, the worker asks first (`ask`); with `seed`
    * null it opens whatever tank is kept, or tank 1.
    */
-  | { type: 'open'; seed: number | null; fresh: boolean }
+  | { type: 'open'; seed: number | null; fresh: boolean; nest?: NestSetup }
   /** Simulation speed: 0 pauses, 1 is real ant time. */
   | { type: 'speed'; value: number }
   /** One of the keeper's tools, applied between steps and logged. */
@@ -84,6 +85,22 @@ export interface FarmSnapshot {
   moisture: Uint8Array;
   /** 1 for loose grains (spoil and fallen soil). */
   loose: Uint8Array;
+  /** The bought nest the grid holds (DESIGN.md 3.5), or null for the sand farm. */
+  nest: NestShape | null;
+}
+
+/** What the page needs to draw a bought nest besides its cells. */
+export interface NestShape {
+  size: NestSize;
+  layout: NestLayout;
+  /** Depth of the chambers and thickness of the block, mm. */
+  depth: number;
+  thickness: number;
+  waterX: number;
+  waterY: number;
+  waterRadius: number;
+  /** Where the tube's port is, mm. */
+  tubeY: number;
 }
 
 export interface HeatSnapshot {
@@ -136,6 +153,8 @@ export interface HistorySnapshot {
   soil: Uint8Array;
   daySeconds: number;
   cropLoad: number;
+  /** True for a bought nest, which keeps its shape: no pictures of it are taken. */
+  bought: boolean;
 }
 
 /** What the renderer needs of a piece: where it lies, what it is and how it looks. */

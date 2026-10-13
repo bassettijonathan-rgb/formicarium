@@ -6,8 +6,8 @@ import { createTank } from '../src/sim/keeper';
 import { killAnt, step } from '../src/sim/world';
 
 describe('the ant inspector', () => {
-  // Half an hour of a keeper's tank: the colony digs, forages and shares food.
-  const world = createTank(2);
+  // Half an hour of a keeper's tank with a sand farm: the colony digs, forages and shares food.
+  const world = createTank(2, null);
   for (let i = 0; i < 30 * 60 * 20; i++) step(world);
   const { ants } = world;
   const workers = [...Array(ants.count).keys()].filter((i) => ants.caste[i] === Caste.worker);

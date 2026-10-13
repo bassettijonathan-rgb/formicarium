@@ -584,7 +584,7 @@ function walkFarm(ctx: AntContext, i: number): void {
     if (tl + tr > params.trailThreshold) turn += params.trailTurn * DT * ((tr - tl) / (tl + tr));
   }
 
-  const outside = openAbove(farm, x, y) && enclosure(ctx, x, y) < INSIDE;
+  const outside = inTheOpen(ctx, x, y);
   // A worker with protein to give, coming home or about the nest, follows the scent of hungry larvae to
   // the brood, and while it smells them that call outweighs the colony odour, its hole and the pull
   // downwards: in the open too, so that it finds brood in another part of the nest (M4a). The queen
@@ -633,8 +633,8 @@ function walkFarm(ctx: AntContext, i: number): void {
     // Out in the open with nothing to do: back to the hole it came out of, by its path integrator.
     goal = Math.atan2(ants.holeY[i]! - ants.piY[i]!, ants.holeX[i]! - ants.piX[i]!);
     strength = params.goalTurn;
-  } else if (state === AntState.wandering && ants.caste[i] === Caste.worker && !toBrood) {
-    goal = Math.PI / 2; // nest-building ants are drawn downwards, into the soil
+  } else if (state === AntState.wandering && ants.caste[i] === Caste.worker && !toBrood && !farm.nest) {
+    goal = Math.PI / 2; // nest-building ants are drawn downwards, into the soil (a bought nest lies flat: no down)
     strength = params.geotaxis;
   } else if (state === AntState.carrying) {
     if (!outside) {
@@ -648,7 +648,7 @@ function walkFarm(ctx: AntContext, i: number): void {
       goal = ants.piX[i]! >= ants.digX[i]! ? 0 : Math.PI;
       strength = params.goalTurn;
     }
-  } else if (inbound) {
+  } else if (inbound && !farm.nest) {
     goal = Math.PI / 2; // down, into the soil
     strength = params.geotaxis / 2;
   } else if (outbound) {
@@ -662,7 +662,8 @@ function walkFarm(ctx: AntContext, i: number): void {
     if (ants.knowsTube[i] && Math.hypot(ants.piX[i]!, ants.piY[i]!) > 1) {
       goal = Math.atan2(-ants.piY[i]!, -ants.piX[i]!);
       strength = params.goalTurn;
-    } else {
+    } else if (!farm.nest) {
+      // Up, towards the open; in a bought nest, which lies flat, the fresh air from the tube alone shows the way.
       goal = -Math.PI / 2;
       strength = params.geotaxis;
     }
@@ -700,7 +701,7 @@ function walkFarm(ctx: AntContext, i: number): void {
   const ny = ants.y[i]!;
 
   // Coming out of the soil into the open: remember the hole, until the ant is back inside.
-  const outsideNow = openAbove(farm, nx, ny) && enclosure(ctx, nx, ny) < INSIDE;
+  const outsideNow = inTheOpen(ctx, nx, ny);
   if (!outside && outsideNow) {
     ants.holeX[i] = ants.piX[i]!;
     ants.holeY[i] = ants.piY[i]!;
@@ -742,7 +743,7 @@ function walkFarm(ctx: AntContext, i: number): void {
     const carried = ++ants.timer[i]! / STEPS_PER_SECOND;
     if (carried >= params.maxCarryTime && !aboveTube(farm, nx, ny)) {
       dropGrain(ctx, i);
-    } else if (!(openAbove(farm, nx, ny) && enclosure(ctx, nx, ny) < INSIDE)) {
+    } else if (!inTheOpen(ctx, nx, ny)) {
       ants.carryOut[i] = 0;
     } else if (
       ++ants.carryOut[i]! * params.speed * DT >= params.spoilDistance &&
@@ -1049,7 +1050,9 @@ function arriveHome(ctx: AntContext, i: number): void {
 /**
  * Fraction of 8 directions, 3 mm out, where the ant would touch firm soil:
  * how sheltered the spot is. The frame and lid don't count (ants seek the
- * dark, damp shelter of soil), and nor do loose spoil heaps.
+ * dark, damp shelter of soil), and nor do loose spoil heaps. In a bought
+ * nest the ant is always under the floor's roof, the lid a chamber's depth
+ * above it, so it counts half sheltered anywhere, and more against a wall.
  */
 function enclosure(ctx: AntContext, x: number, y: number): number {
   const { farm } = ctx;
@@ -1058,9 +1061,14 @@ function enclosure(ctx: AntContext, x: number, y: number): number {
     const a = (k * Math.PI) / 4;
     const cx = Math.floor(x + 3 * Math.cos(a));
     const cy = Math.floor(y + 3 * Math.sin(a));
-    if (isSoil(farm, cx, cy) && !farm.loose[cy * farm.width + cx]) soil++;
+    if (farm.nest ? cellSolid(farm, cx, cy) : isSoil(farm, cx, cy) && !farm.loose[cy * farm.width + cx]) soil++;
   }
-  return soil / 8;
+  return farm.nest ? (1 + soil / 8) / 2 : soil / 8;
+}
+
+/** True where the ant is out on the surface under the open headspace rather than inside the soil; never in a bought nest. */
+function inTheOpen(ctx: AntContext, x: number, y: number): boolean {
+  return !ctx.farm.nest && openAbove(ctx.farm, x, y) && enclosure(ctx, x, y) < INSIDE;
 }
 
 /** Loose grains in the 8 cells around (x, y). */
