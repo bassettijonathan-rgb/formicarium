@@ -18,13 +18,19 @@ export const Material = {
   acrylic: 6,
   /** A carved wooden board: holds a little water, unevenly (Nests 2). */
   wood: 7,
+  /** Cotton wool: the plug a keeper pushes into a tube to keep the ants out of what lies beyond (Nests 3, N8). */
+  cotton: 8,
+  /** The table the modules lie on, round and between them: nothing an ant can reach (Nests 3). */
+  table: 9,
+  /** The glass of a test tube, and the water held behind its cotton (Nests 3, N9). */
+  glass: 10,
 } as const;
 
 export type Material = (typeof Material)[keyof typeof Material];
 
-export const MATERIAL_COUNT = 8;
+export const MATERIAL_COUNT = 11;
 
-export const MATERIAL_NAMES: readonly string[] = ['air', 'sand', 'loam', 'clay', 'ytong', 'plaster', 'acrylic', 'wood'];
+export const MATERIAL_NAMES: readonly string[] = ['air', 'sand', 'loam', 'clay', 'ytong', 'plaster', 'acrylic', 'wood', 'cotton', 'table', 'glass'];
 
 /** True for soil an ant can dig: sand, loam and clay, not the hard walls of a bought nest. */
 export function diggable(material: number): boolean {

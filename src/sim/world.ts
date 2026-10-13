@@ -10,7 +10,7 @@ import { type Brood, BroodStage, createBrood, scentBrood, stepBrood } from './br
 import { type Arena, createArena, evaporateTrail } from './arena';
 import type { Decoration } from './decor';
 import { type Farm, cellSolid, createFarm, updateField, updateFresh } from './farm';
-import { type NestSetup, createNest } from './nest';
+import { type NestSetup, createNest, moduleById } from './nest';
 import type { FoodDrop } from './food';
 import { type AntParams, DEFAULT_ANT_PARAMS } from './params';
 import { Purpose, Rng } from './rng';
@@ -78,7 +78,7 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
   const params = { ...DEFAULT_ANT_PARAMS, ...options.params };
   const farm = options.bought ? createNest(new Rng(seed, Purpose.nest), options.bought, params) : createFarm(new Rng(seed, Purpose.soil));
   farm.temperature.fill(params.roomTemperature);
-  if (params.waterFlow && !farm.nest) updateHumidity(farm, params);
+  if (params.waterFlow && !farm.table) updateHumidity(farm, params);
   const ants = createAnts(options.ants ?? 60);
   giveTraits(ants, params, seed);
   if (nestMode === 'farm') {
@@ -144,7 +144,7 @@ function pourAnts(ants: Ants, farm: Farm, params: AntParams, rng: Rng): void {
  * a colony in lifts the lid and tips it there).
  */
 function putIn(ants: Ants, i: number, farm: Farm, rng: Rng): void {
-  if (!farm.nest) {
+  if (!farm.table) {
     const x = rng.range(farm.width / 2 - POUR_SPREAD, farm.width / 2 + POUR_SPREAD);
     ants.x[i] = x;
     ants.y[i] = farm.surface[Math.floor(x)]! - 1.5;
@@ -164,11 +164,12 @@ function putIn(ants: Ants, i: number, farm: Farm, rng: Rng): void {
   ants.y[i] = middle.y;
 }
 
-/** The middle of the bought nest's chamber nearest the middle of the nest. */
+/** The middle of the chamber nearest the middle of the table's first module. */
 export function nestMiddle(farm: Farm): { x: number; y: number } {
-  const chambers = farm.nest!.chambers;
+  const nest = farm.table!.modules[0]!;
+  const chambers = nest.chambers;
   let best = chambers[0]!;
-  const d = (c: { x: number; y: number }) => Math.hypot(c.x - farm.width / 2, c.y - farm.height / 2);
+  const d = (c: { x: number; y: number }) => Math.hypot(c.x - (nest.x + nest.width / 2), c.y - (nest.y + nest.height / 2));
   for (const c of chambers) if (d(c) < d(best)) best = c;
   return best;
 }
@@ -340,14 +341,16 @@ export function setHeatMat(world: World, x: number | null): void {
 }
 
 /**
- * The keeper lifts a bought nest's cover from `from` to `to` mm across it,
- * or puts it back everywhere (`to` <= `from`); nothing in the sand farm (N7).
+ * The keeper lifts the cover of module `module` (by default the table's
+ * first) from `from` to `to` mm across it, or puts it back everywhere
+ * (`to` <= `from`); nothing in the sand farm (N7).
  */
-export function setCover(world: World, from: number, to: number): void {
-  const nest = world.farm.nest;
+export function setCover(world: World, from: number, to: number, module?: number): void {
+  const table = world.farm.table;
+  const nest = table && (module === undefined ? table.modules[0] : moduleById(table, module));
   if (!nest) return;
-  nest.litFrom = Math.max(0, Math.min(world.farm.width, from));
-  nest.litTo = Math.max(nest.litFrom, Math.min(world.farm.width, to));
+  nest.litFrom = Math.max(0, Math.min(nest.width, from));
+  nest.litTo = Math.max(nest.litFrom, Math.min(nest.width, to));
 }
 
 /** The keeper waters the farm from above at `x` mm (M5b). Returns the water the soil took up, µL. */

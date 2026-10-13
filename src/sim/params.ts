@@ -167,14 +167,41 @@ export interface AntParams {
   restLength: number;
   /**
    * Aggregation (Depickère et al. 2004): a wandering worker touching `n`
-   * resting nestmates (counted up to `restCompanyMax`) settles 1 +
+   * resting nestmates (counted up to `restCompanyMax`) settles `restAlone` +
    * `restJoin` n times as readily, and rests 1 + `restStay` n times as long.
+   * In a bought nest a worker on its own seldom stops (`restAlone`), so it
+   * walks on until it meets resting nestmates (in the sand farm and for the
+   * queen, `restAlone` is 1).
    */
+  restAlone: number;
   restJoin: number;
   restStay: number;
   restCompanyMax: number;
   /** Resting nestmates touching beyond which a worker settles (n - restCrowd)² + 1 times less readily: they lie no more than a few deep (rough). */
   restCrowd: number;
+  /**
+   * Seconds a wandering worker in a bought nest can spend among nestmates
+   * packed too tight to settle by before it stops keeping to the colony's
+   * odour and goes looking for room further off, until it rests (Nests 3;
+   * the leaving rate of a crowded shelter rises with crowding, Amé et al.
+   * 2006; rough).
+   */
+  restlessAfter: number;
+  /** How much more slowly a worker calms down where there is room than it grew restless in the crowd. */
+  restlessCalm: number;
+  /**
+   * Moving house (Nests 3). A worker that grew restless in a crowd and then
+   * found room to rest remembers the spot by its path integrator; back in
+   * the crowd, it picks up brood it touches (as readily as an item lying
+   * alone) and carries it there, unless it is already within `siteFar` mm
+   * of it, then goes back for more. Lasius niger colonies move house when
+   * their nest is crowded or spoilt; transport by the workers who know the
+   * new site is as in Temnothorax (Pratt et al. 2002; rough).
+   */
+  moving: boolean;
+  siteFar: number;
+  /** Longest a worker carries brood to its site before putting it down anyway, seconds (rough). */
+  siteCarryMax: number;
   /** False: workers ignore resting nestmates when settling (the control for aggregation). */
   aggregation: boolean;
   /** Time for a forager to walk through the tube, seconds. */
@@ -694,10 +721,16 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   queenSettleAlone: 0.1,
   queenOdourGain: 20,
   restLength: 60,
-  restJoin: 2,
-  restStay: 2,
-  restCompanyMax: 4,
+  restAlone: 0.2,
+  restJoin: 3,
+  restStay: 5,
+  restCompanyMax: 8,
   restCrowd: 8,
+  restlessAfter: 30,
+  restlessCalm: 0.5,
+  moving: true,
+  siteFar: 25,
+  siteCarryMax: 600,
   aggregation: true,
   tubeTime: 7,
 

@@ -17,6 +17,8 @@
  *   npm run experiment -- prey [--insect fly|cricket|mealworm] [--cut whole|halved|pieces] [--minutes 180]
  *   npm run experiment -- nest-damp [--hours 3] [--no-hygro] [--layout classic|organic|honeycomb]
  *   npm run experiment -- nest-room [--hours 4] [--ants 40]
+ *   npm run experiment -- nest-spread [--hours 3] [--ants 40]
+ *   npm run experiment -- moving [--hours 24] [--ants 60]
  *   npm run experiment -- nest-dark [--hours 2] [--no-light] [--gradient] [--material ytong|plaster|acrylic|wood] [--layout ...]
  *   growth takes --mortal: adults die of hunger, drying out and heat (M5c)
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
@@ -38,6 +40,8 @@ import {
   runMidden,
   runNestDamp,
   runNestRoom,
+  runNestSpread,
+  runMovingHouse,
   runNestDark,
   runNestVolume,
   runPrey,
@@ -264,6 +268,18 @@ for (let seed = first; seed < first + runs; seed++) {
       `seed ${seed}, ${ants || 40} workers: floor the resting colony covers by hour ${r.areaByHour.join(' ')} mm²; ` +
         `resting ${r.restingByHour.join(' ')}; under them ${r.bodyByHour.join(' ')} mm²; chambers holding 90% of them ${r.chambersByHour.join(' ')} of ${r.chambers}`,
     );
+  } else if (name === 'nest-spread') {
+    const r = runNestSpread({ seed, hours: hours || 3, ants: ants || 40, params });
+    console.log(
+      `seed ${seed}, ${ants || 40} workers: resting in the first nest by hour ${r.firstByHour.join(' ')}, in the second ${r.secondByHour.join(' ')}; ` +
+        `chambers of the first holding 90% of its workers ${r.chambersByHour.join(' ')} of ${r.chambers}`,
+    );
+  } else if (name === 'moving') {
+    const r = runMovingHouse({ seed, hours: hours || 24, ants: ants || 60, params });
+    console.log(
+      `seed ${seed}, ${ants || 60} workers: brood in the nest by hour ${r.broodInNestByHour.map(pct).join(' ')}; queen in the nest ${r.queenInNestByHour.map((b) => (b ? 'Y' : '-')).join('')}; ` +
+        `resting in the tube ${r.tubeRestingByHour.join(' ')}, in the nest ${r.nestRestingByHour.join(' ')}`,
+    );
   } else if (name === 'nest-dark') {
     const r = runNestDark({ seed, hours: hours || 2, layout, material, gradient, ...(ants ? { ants } : {}), params });
     console.log(
@@ -272,7 +288,7 @@ for (let seed = first; seed < first + runs; seed++) {
     );
   } else {
     throw new Error(
-      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation, prey, nest-damp, nest-room or nest-dark',
+      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation, prey, nest-damp, nest-room, nest-spread, moving or nest-dark',
     );
   }
 }

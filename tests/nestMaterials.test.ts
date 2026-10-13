@@ -37,7 +37,7 @@ describe('nest materials (Nests 2)', () => {
     for (const material of MATERIALS) {
       const { farm } = nest(material);
       const m = NEST_MATERIALS[material].material;
-      expect(farm.nest!.material).toBe(m);
+      expect(farm.table!.modules[0]!.material).toBe(m);
       expect(diggable(m)).toBe(false);
       for (const cell of farm.material) expect(cell === Material.air || cell === m).toBe(true);
     }
@@ -53,10 +53,10 @@ describe('nest materials (Nests 2)', () => {
   });
 
   it('wood holds its water unevenly along the grain', () => {
-    const n = nest('wood').farm.nest!;
+    const n = nest('wood').farm.table!.modules[0]!;
     // Along a line the same distance from the hole, the water varies from band to band.
     const along = Array.from({ length: 20 }, (_, k) => nestWater(n, n.waterX + 20, 10 + k * 6.5));
-    const ytong = nest('ytong').farm.nest!;
+    const ytong = nest('ytong').farm.table!.modules[0]!;
     const even = Array.from({ length: 20 }, (_, k) => nestWater(ytong, ytong.waterX + 20, ytong.waterY + (k % 2 ? 0.01 : 0)));
     const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
     expect(spread(along)).toBeGreaterThan(0.05);
@@ -65,7 +65,7 @@ describe('nest materials (Nests 2)', () => {
 
   it('acrylic holds no water: only the air round its sponge, in a chamber, is humid', () => {
     const { farm, params } = nest('acrylic');
-    const n = farm.nest!;
+    const n = farm.table!.modules[0]!;
     expect(farm.material[Math.floor(n.waterY) * farm.width + Math.floor(n.waterX)]).toBe(Material.air);
     expect(nestWater(n, n.waterX, n.waterY)).toBe(1);
     expect(nestWater(n, n.waterX + 10, n.waterY)).toBe(0);
@@ -92,7 +92,7 @@ describe('nest materials (Nests 2)', () => {
     const mould = (material: NestMaterial) => {
       const w = createWorld(1, { ants: 0, params: { mould: true }, bought: { size: 'M', layout: 'classic', material } });
       w.farm.humidity.fill(0.97);
-      const c = w.farm.nest!.chambers[0]!;
+      const c = w.farm.table!.modules[0]!.chambers[0]!;
       addCorpse(w, Place.farm, c.x, c.y, 3);
       for (let t = 0; t < w.params.daySeconds; t += 10) {
         for (let i = 0; i < w.ants.count; i++) if (w.ants.state[i] === AntState.dead) w.ants.deadFor[i]! += 10 / w.params.daySeconds;
@@ -110,29 +110,29 @@ describe('the cover (Nests 2, N7)', () => {
   it('keeps the nest dark until the keeper lifts it; then the lifted part is lit, fading under the edge', () => {
     const world = createTank(11, { size: 'M', layout: 'classic', material: 'ytong' });
     const { farm } = world;
-    for (const x of [5, 100, 195]) expect(lightAt(farm, x)).toBe(COVER_LEAK);
+    for (const x of [5, 100, 195]) expect(lightAt(farm, x, 40)).toBe(COVER_LEAK);
     applyCommand(world, { type: 'cover', from: 0, to: 100 });
-    expect(lightAt(farm, 5)).toBe(1);
-    expect(lightAt(farm, 95)).toBe(1);
-    expect(lightAt(farm, 100)).toBeGreaterThan(0.4);
-    expect(lightAt(farm, 100)).toBeLessThan(0.6);
-    expect(lightAt(farm, 110)).toBe(COVER_LEAK);
+    expect(lightAt(farm, 5, 40)).toBe(1);
+    expect(lightAt(farm, 95, 40)).toBe(1);
+    expect(lightAt(farm, 100, 40)).toBeGreaterThan(0.4);
+    expect(lightAt(farm, 100, 40)).toBeLessThan(0.6);
+    expect(lightAt(farm, 110, 40)).toBe(COVER_LEAK);
     applyCommand(world, { type: 'cover', from: 0, to: farm.width });
-    expect(lightAt(farm, 199)).toBe(1);
+    expect(lightAt(farm, 199, 40)).toBe(1);
     applyCommand(world, { type: 'cover', from: 0, to: 0 });
-    expect(lightAt(farm, 5)).toBe(COVER_LEAK);
+    expect(lightAt(farm, 5, 40)).toBe(COVER_LEAK);
     // The sand farm is dug into soil: dark, cover or none.
     const sand = createTank(11, null);
     applyCommand(sand, { type: 'cover', from: 0, to: 300 });
-    expect(lightAt(sand.farm, 50)).toBe(0);
+    expect(lightAt(sand.farm, 50, 40)).toBe(0);
   });
 
   it('a kept tank comes back with its material and its cover as they were', () => {
     const log = [{ step: 100, command: { type: 'cover' as const, from: 100, to: 200 } }];
     const world = replayTank(12, log, 300, { size: 'S', layout: 'organic', material: 'acrylic' });
     const loaded = loadWorld(structuredClone({ version: SAVE_VERSION, seed: 12, savedAt: 0, log, world }))!;
-    expect(loaded.farm.nest!.material).toBe(Material.acrylic);
-    expect(loaded.farm.nest!.litFrom).toBe(100);
+    expect(loaded.farm.table!.modules[0]!.material).toBe(Material.acrylic);
+    expect(loaded.farm.table!.modules[0]!.litFrom).toBe(100);
     expect(hashState(loaded)).toBe(hashState(world));
     for (let s = 0; s < 300; s++) {
       step(world);
@@ -144,13 +144,19 @@ describe('the cover (Nests 2, N7)', () => {
   it('a nest kept from before Nests 2 is ytong with its cover on', () => {
     const world = createTank(13, { size: 'M', layout: 'classic' });
     const kept = structuredClone({ version: SAVE_VERSION, seed: 13, savedAt: 0, log: [], world });
-    const n = kept.world.farm.nest as unknown as Record<string, unknown>;
-    delete n.litFrom;
-    delete n.litTo;
-    delete n.grain;
+    // As it was kept then: one nest on the farm, no table, no material, cover or grain.
+    const farm = kept.world.farm as unknown as Record<string, unknown>;
+    const n = kept.world.farm.table!.modules[0] as unknown as Record<string, unknown>;
+    for (const key of ['litFrom', 'litTo', 'grain', 'material', 'id', 'x', 'y', 'width', 'height', 'ports']) delete n[key];
+    farm.nest = n;
+    delete farm.table;
     const loaded = loadWorld(kept)!;
-    expect(loaded.farm.nest!.material).toBe(Material.ytong);
-    expect(loaded.farm.nest!.litTo).toBe(loaded.farm.nest!.litFrom);
-    expect(hashState(loaded)).toBe(hashState(world));
+    const m = loaded.farm.table!.modules[0]!;
+    expect(m.material).toBe(Material.ytong);
+    expect(m.litTo).toBe(m.litFrom);
+    expect(m.grain).toBe(world.farm.table!.modules[0]!.grain);
+    expect(loaded.farm.table!.arena).toEqual({ module: 1, port: 0 });
+    expect(m.ports).toEqual([{ x: world.farm.tubeX, y: world.farm.tubeY, dx: 1, dy: 0 }]);
+    for (let s = 0; s < 200; s++) step(loaded);
   });
 });

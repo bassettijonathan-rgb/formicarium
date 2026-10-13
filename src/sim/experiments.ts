@@ -17,7 +17,8 @@ import { STEPS_PER_SECOND } from './time';
 import { addCorpse, colonyCrop, createWorld, deathsBy, killAnt, setCover, setHeatMat, placeInsect, placeProtein, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
 import { createArena } from './arena';
 import type { Cut, Insect } from './prey';
-import type { NestLayout, NestMaterial, NestSize } from './nest';
+import { type NestLayout, type NestMaterial, type NestSize, TEST_TUBE_SETUP, moduleAt } from './nest';
+import { addModule, connect, connectArena } from './table';
 import { TANK_ARENA } from './tank';
 
 export interface RunOptions {
@@ -1131,7 +1132,7 @@ export function runNestRoom(opts: RunOptions & { hours: number; brood?: number; 
   const areaByHour: number[] = [];
   const restingByHour: number[] = [];
   const chambersByHour: number[] = [];
-  const chambers = farm.nest!.chambers;
+  const chambers = farm.table!.modules[0]!.chambers;
   const covered = new Uint8Array(farm.width * farm.height);
   const body = new Uint8Array(farm.width * farm.height);
   const bodyByHour: number[] = [];
@@ -1168,6 +1169,170 @@ export function runNestRoom(opts: RunOptions & { hours: number; brood?: number; 
     let used = 0;
     while (held < 0.9 * resting) held += inChamber[used++]!;
     chambersByHour.push(used);
+    if ((globalThis as { DUMP?: boolean }).DUMP && h === opts.hours - 1) {
+      const S = 3;
+      const rows: string[] = [];
+      for (let y = 0; y < farm.height; y += S) {
+        let r = '';
+        for (let x = 0; x < farm.width; x += S) {
+          let n = 0;
+          for (let i = 0; i < ants.count; i++) if (ants.place[i] === Place.farm && ants.state[i] === AntState.resting && Math.floor(ants.x[i]! / S) === x / S && Math.floor(ants.y[i]! / S) === y / S) n++;
+          r += n > 0 ? (n > 9 ? '#' : String(n)) : farm.material[y * farm.width + x] === Material.air ? '.' : ' ';
+        }
+        rows.push(r);
+      }
+      console.log(rows.join('\n'));
+    }
   }
   return { areaByHour, restingByHour, bodyByHour, chambersByHour, chambers: chambers.length };
+}
+
+export interface NestSpreadResult {
+  /** Resting workers by hour in the first nest and in the second. */
+  firstByHour: number[];
+  secondByHour: number[];
+  /** Chambers of the first nest holding 90% of the workers resting in it, by hour, and how many it has. */
+  chambersByHour: number[];
+  chambers: number;
+}
+
+/**
+ * Room to spread (DESIGN.md 9.15, Nests 3 check 3): workers and a queen in
+ * a small ytong nest joined by an open tube to a second, empty one. A colony
+ * with room enough keeps to the first nest; one that fills it spreads into
+ * the second (as groups of Lasius niger workers settle in one shelter until
+ * it is full, then in the next: Depickère et al. 2004; the same capacity
+ * rule as cockroaches choosing shelters, Amé et al. 2006).
+ */
+export function runNestSpread(opts: RunOptions & { hours: number }): NestSpreadResult {
+  const world = boughtNestColony({ ...opts, size: 'S', layout: 'classic', queen: true });
+  const second = addModule(world, { size: 'S', layout: 'classic', material: 'ytong' })!;
+  connect(world, { module: 1, port: 1 }, { module: second, port: 0 }, false);
+  const { ants, farm } = world;
+  const table = farm.table!;
+  const first = table.modules[0]!;
+  const firstByHour: number[] = [];
+  const secondByHour: number[] = [];
+  const chambersByHour: number[] = [];
+  for (let h = 0; h < opts.hours; h++) {
+    for (let s = 0; s < 3600 * STEPS_PER_SECOND; s++) step(world);
+    let a = 0;
+    let b = 0;
+    const inChamber = first.chambers.map(() => 0);
+    for (let i = 0; i < ants.count; i++) {
+      if (ants.place[i] !== Place.farm || ants.state[i] !== AntState.resting || ants.caste[i] !== Caste.worker) continue;
+      const m = moduleAt(table, ants.x[i]!, ants.y[i]!);
+      if (m === first) {
+        a++;
+        let near = 0;
+        first.chambers.forEach((c, k) => {
+          if (Math.hypot(c.x - ants.x[i]!, c.y - ants.y[i]!) < Math.hypot(first.chambers[near]!.x - ants.x[i]!, first.chambers[near]!.y - ants.y[i]!)) near = k;
+        });
+        inChamber[near]!++;
+      } else if (m?.id === second) b++;
+    }
+    firstByHour.push(a);
+    secondByHour.push(b);
+    inChamber.sort((x, y) => y - x);
+    let held = 0;
+    let used = 0;
+    while (held < 0.9 * a) held += inChamber[used++]!;
+    chambersByHour.push(used);
+  }
+  return { firstByHour, secondByHour, chambersByHour, chambers: first.chambers.length };
+}
+
+export interface MovingHouseResult {
+  /** Share of the brood in the nest, by hour after it was joined to the test tube. */
+  broodInNestByHour: number[];
+  /** Whether the queen was in the nest, by hour. */
+  queenInNestByHour: boolean[];
+  /** Resting workers in the test tube and in the nest, by hour. */
+  tubeRestingByHour: number[];
+  nestRestingByHour: number[];
+}
+
+/**
+ * Moving house (DESIGN.md 9.16, Nests 3 check 4): a queen, her workers and
+ * brood settled in a test tube; after an hour the keeper joins it to a
+ * small ytong nest, dark under its cover and damp at its water hole, and
+ * moves the arena's tube to the nest's other port. Does the colony move in?
+ */
+export function runMovingHouse(opts: RunOptions & { hours: number; brood?: number }): MovingHouseResult {
+  const params: Partial<AntParams> = {
+    forageRate: 0,
+    returnToFoodRate: 0,
+    burnRate: 0,
+    developmentZero: 1e9, // no development: brood stays as it is
+    larvaStarveDays: 1e9,
+    ...opts.params,
+  };
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, queen: true, params, bought: TEST_TUBE_SETUP });
+  const { ants, brood, farm } = world;
+  const rng = new Rng(opts.seed, Purpose.test);
+  const open: number[] = [];
+  for (let c = 0; c < farm.material.length; c++) if (farm.material[c] === Material.air) open.push(c);
+  for (let i = 0; i < ants.count; i++) {
+    if (ants.caste[i] === Caste.queen) continue;
+    const c = open[rng.int(open.length)]!;
+    [ants.x[i], ants.y[i]] = [(c % farm.width) + rng.float(), Math.floor(c / farm.width) + rng.float()];
+  }
+  const q = ants.caste.indexOf(Caste.queen);
+  const stages = [BroodStage.egg, BroodStage.larva, BroodStage.pupa];
+  for (let n = 0; n < (opts.brood ?? 30); n++) {
+    let [x, y] = [ants.x[q]!, ants.y[q]!];
+    for (let tries = 0; tries < 20; tries++) {
+      const [tx, ty] = [ants.x[q]! + rng.range(-3, 3), ants.y[q]! + rng.range(-3, 3)];
+      if (farm.material[Math.floor(ty) * farm.width + Math.floor(tx)] === Material.air) {
+        [x, y] = [tx, ty];
+        break;
+      }
+    }
+    addBrood(brood, stages[n % 3]!, x, y);
+  }
+  for (let s = 0; s < 3600 * STEPS_PER_SECOND; s++) step(world);
+  const nest = addModule(world, { size: 'S', layout: 'classic', material: 'ytong' })!;
+  connectArena(world, { module: nest, port: 0 });
+  connect(world, { module: 1, port: 0 }, { module: nest, port: 1 }, false);
+  const table = farm.table!;
+  const inNest = (x: number, y: number) => moduleAt(table, x, y)?.id === nest;
+  const inTube = (x: number, y: number) => moduleAt(table, x, y)?.id === 1;
+  const result: MovingHouseResult = { broodInNestByHour: [], queenInNestByHour: [], tubeRestingByHour: [], nestRestingByHour: [] };
+  for (let h = 0; h < opts.hours; h++) {
+    for (let s = 0; s < 3600 * STEPS_PER_SECOND; s++) {
+      step(world);
+      if ((globalThis as { DUMP?: boolean }).DUMP && s % (600 * STEPS_PER_SECOND) === 0) {
+        let bn = 0, bc = 0, s1 = 0, s2 = 0, rl = 0;
+        const tT: number[] = [], tN: number[] = [], hT: number[] = [], hN: number[] = [];
+        for (let k = 0; k < brood.count; k++) {
+          if (brood.stage[k] === BroodStage.none) continue;
+          if (brood.carried[k]) bc++;
+          const x = brood.x[k]!, y = brood.y[k]!;
+          if (inNest(x, y)) { bn++; tN.push(temperatureAt(farm, x, y)); hN.push(humidityAt(farm, x, y)); } else { tT.push(temperatureAt(farm, x, y)); hT.push(humidityAt(farm, x, y)); }
+        }
+        for (let i = 0; i < ants.count; i++) { if (ants.site[i] === 1) s1++; if (ants.site[i] === 2) s2++; if (ants.restless[i]! > 0) rl++; }
+        const m = (a: number[]) => (a.length ? (a.reduce((p, c) => p + c, 0) / a.length).toFixed(2) : '-');
+        console.log(`h${h} +${s / 20 / 60}min brood nest ${bn} carried ${bc}; site1 ${s1} site2 ${s2} restless ${rl}; temp tube ${m(tT)} nest ${m(tN)}; hum tube ${m(hT)} nest ${m(hN)}; queen ${ants.x[q]!.toFixed(0)},${ants.y[q]!.toFixed(0)}`);
+      }
+    }
+    let n = 0;
+    let all = 0;
+    for (let k = 0; k < brood.count; k++) {
+      if (brood.stage[k] === BroodStage.none) continue;
+      all++;
+      if (inNest(brood.x[k]!, brood.y[k]!)) n++;
+    }
+    result.broodInNestByHour.push(all ? n / all : 0);
+    result.queenInNestByHour.push(inNest(ants.x[q]!, ants.y[q]!));
+    let t = 0;
+    let m = 0;
+    for (let i = 0; i < ants.count; i++) {
+      if (ants.place[i] !== Place.farm || ants.state[i] !== AntState.resting || ants.caste[i] !== Caste.worker) continue;
+      if (inTube(ants.x[i]!, ants.y[i]!)) t++;
+      else if (inNest(ants.x[i]!, ants.y[i]!)) m++;
+    }
+    result.tubeRestingByHour.push(t);
+    result.nestRestingByHour.push(m);
+  }
+  return result;
 }

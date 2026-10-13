@@ -138,7 +138,7 @@ export function recordHistory(world: World): void {
     }
   }
   // A bought nest keeps its shape, so only the sand farm's nest is pictured.
-  if (world.nestMode === 'farm' && !world.farm.nest && world.step % h.frameEvery === 0) {
+  if (world.nestMode === 'farm' && !world.farm.table && world.step % h.frameEvery === 0) {
     h.frames.push(nestPicture(world.farm));
     h.frameSteps.push(world.step);
     if (h.frames.length > MAX_FRAMES) {

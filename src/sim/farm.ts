@@ -7,7 +7,7 @@
  * coarser 2 mm grid; trail pheromone is laid at 1 mm like in the arena.
  */
 import { Material, diggable } from './materials';
-import type { BoughtNest } from './nest';
+import type { Table } from './nest';
 import { valueNoise2D } from './noise';
 import type { Rng } from './rng';
 import { FARM_HEIGHT, FARM_WIDTH, HEADSPACE, TUBE } from './tank';
@@ -23,7 +23,7 @@ export const FIELD_CELL = 2;
  */
 export const DRAINED_RISE = 0.35;
 /** Indexed by `Material`; the walls of bought nests hold what the nest gives them (nest.ts). */
-export const RETENTION = [0, -0.12, 0, 0.12, 0, 0, 0, 0];
+export const RETENTION = [0, -0.12, 0, 0.12, 0, 0, 0, 0, 0, 0, 0];
 
 export interface Farm {
   width: number;
@@ -68,15 +68,16 @@ export interface Farm {
   mouldy: number;
   /** Water per cell not yet whole units of `moisture`, carried between updates so none is lost to rounding (M5b). */
   moistureRest: Float32Array;
-  /** Where the tube opens into the farm, mm. */
+  /** Where the arena's tube opens into the farm, mm. */
   tubeX: number;
   tubeY: number;
   /**
-   * The bought nest this grid holds (DESIGN.md 3.5), or null for the sand farm.
-   * A bought nest lies flat: x and y are across and along its floor seen from
-   * above, its walls cannot be dug, and its water stays where the nest puts it.
+   * The bought nests this grid holds (DESIGN.md 3.5), or null for the sand farm:
+   * a table with one module or more on it, joined by tubes (Nests 3). A bought
+   * nest lies flat: x and y are across and along its floor seen from above,
+   * its walls cannot be dug, and its water stays where the nest puts it.
    */
-  nest: BoughtNest | null;
+  table: Table | null;
 }
 
 /**
@@ -138,7 +139,7 @@ export function createFarm(rng: Rng): Farm {
     mouldy: 0,
     tubeX: width - 1.5,
     tubeY: TUBE.farmY,
-    nest: null,
+    table: null,
   };
   updateFresh(farm);
   return farm;
@@ -299,8 +300,8 @@ export function updateFresh(farm: Farm): void {
   const fresh = farm.fresh;
   // Open sky: everything above the first soil in each column (both cell columns of a field column).
   const openTo = new Int32Array(w);
-  const mouth = farm.nest ? Math.floor(farm.tubeY / FIELD_CELL) * w + Math.floor(farm.tubeX / FIELD_CELL) : -1;
-  for (let fx = 0; fx < w && !farm.nest; fx++) {
+  const mouth = farm.table ? Math.floor(farm.tubeY / FIELD_CELL) * w + Math.floor(farm.tubeX / FIELD_CELL) : -1;
+  for (let fx = 0; fx < w && !farm.table; fx++) {
     let top = farm.height;
     for (let dx = 0; dx < FIELD_CELL; dx++) {
       const cx = fx * FIELD_CELL + dx;

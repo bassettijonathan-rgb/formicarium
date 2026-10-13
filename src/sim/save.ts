@@ -16,7 +16,8 @@ import { createBrood } from './brood';
 import type { Census } from './history';
 import { stampDecorations } from './decor';
 import { type LoggedCommand, createTank, furnishArena } from './keeper';
-import { nestMaterialName } from './nest';
+import type { Farm } from './farm';
+import { type BoughtNest, TEST_TUBE_SETUP, nestMaterialName } from './nest';
 import { TANK_ARENA } from './tank';
 import { STEPS_PER_SECOND } from './time';
 import type { World } from './world';
@@ -59,11 +60,17 @@ export function catchUpSteps(world: World, awaySeconds: number): number {
 export function loadWorld(save: Save): World | null {
   if (save.version !== SAVE_VERSION || !save.world) return null;
   const saved = save.world;
+  const old = saved.farm as Farm & { nest?: BoughtNest | null };
   // A tank saved before bought nests lives in the sand farm, and goes on doing so.
-  saved.farm.nest ??= null;
-  const bought = saved.farm.nest;
+  old.table ??= null;
+  const first = old.table?.modules[0] ?? old.nest;
   // A nest saved before Nests 2 is ytong, its cover on.
-  const template = createTank(save.seed, bought ? { size: bought.size, layout: bought.layout, material: nestMaterialName(bought.material) } : null);
+  const template = createTank(
+    save.seed,
+    first ? (first.kind === 'tube' ? TEST_TUBE_SETUP : { size: first.size, layout: first.layout, material: nestMaterialName(first.material) }) : null,
+  );
+  if (old.nest) tableFromNest(old, old.nest, template.farm.table!.modules[0]!);
+  delete old.nest;
   template.ants = createAnts(saved.ants?.count ?? 0);
   template.brood = createBrood(saved.brood?.stage?.length ?? 0);
   fill(saved as unknown as Record<string, unknown>, template as unknown as Record<string, unknown>);
@@ -75,6 +82,23 @@ export function loadWorld(save: Save): World | null {
     stampDecorations(saved.arena, saved.decor);
   }
   return saved;
+}
+
+/**
+ * A bought nest saved before Nests 3 becomes the only module on its table,
+ * where it lay, with the one port it was carved with holding the arena's
+ * tube. What it was saved without is as in a new tank (`fresh`).
+ */
+function tableFromNest(farm: Farm, nest: BoughtNest, fresh: BoughtNest): void {
+  const kept = nest as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(fresh)) if (!(key in kept)) kept[key] = structuredClone(value);
+  nest.id = 1;
+  nest.x = 0;
+  nest.y = 0;
+  nest.width = farm.width;
+  nest.height = farm.height;
+  nest.ports = [{ x: farm.tubeX, y: farm.tubeY, dx: 1, dy: 0 }];
+  farm.table = { modules: [nest], tubes: [], arena: { module: 1, port: 0 }, nextId: 2 };
 }
 
 /**

@@ -49,11 +49,31 @@ function sendFarm(w: World): void {
   const material = w.farm.material.slice();
   const moisture = w.farm.moisture.slice();
   const loose = w.farm.loose.slice();
-  const n = w.farm.nest;
-  const nest = n
-    ? { size: n.size, layout: n.layout, material: nestMaterialName(n.material), depth: n.depth, thickness: n.thickness, waterX: n.waterX, waterY: n.waterY, waterRadius: n.waterRadius, tubeY: w.farm.tubeY }
+  const t = w.farm.table;
+  const table = t
+    ? {
+        modules: t.modules.map((n) => ({
+          id: n.id,
+          kind: n.kind,
+          x: n.x,
+          y: n.y,
+          width: n.width,
+          height: n.height,
+          ports: n.ports.map((p) => ({ ...p })),
+          size: n.size,
+          layout: n.layout,
+          material: nestMaterialName(n.material),
+          depth: n.depth,
+          thickness: n.thickness,
+          waterX: n.waterX,
+          waterY: n.waterY,
+          waterRadius: n.waterRadius,
+        })),
+        tubes: t.tubes.map((tube) => ({ id: tube.id, a: { ...tube.a }, b: { ...tube.b }, path: [...tube.path], plugged: tube.plugged })),
+        arena: { ...t.arena },
+      }
     : null;
-  post({ type: 'farm', width: w.farm.width, height: w.farm.height, material, moisture, loose, nest }, [
+  post({ type: 'farm', width: w.farm.width, height: w.farm.height, material, moisture, loose, table }, [
     material.buffer,
     moisture.buffer,
     loose.buffer,
@@ -159,7 +179,7 @@ function sendHeat(w: World): void {
       cell: FIELD_CELL,
       temperature,
       mat: w.heatMat ? { ...w.heatMat } : null,
-      lit: w.farm.nest ? { from: w.farm.nest.litFrom, to: w.farm.nest.litTo } : null,
+      lit: w.farm.table ? w.farm.table.modules.map((n) => ({ module: n.id, from: n.litFrom, to: n.litTo })) : null,
       room: w.params.roomTemperature,
       mould,
       humidity,
@@ -187,8 +207,8 @@ let soilAtStart: { seed: number; material: Uint8Array } | undefined;
 
 function sendHistory(w: World): void {
   // (A bought nest keeps its shape: its cells now are as it was set up.)
-  if (soilAtStart?.seed !== w.seed || w.farm.nest) {
-    soilAtStart = { seed: w.seed, material: w.farm.nest ? w.farm.material.slice() : createFarm(new Rng(w.seed, Purpose.soil)).material };
+  if (soilAtStart?.seed !== w.seed || w.farm.table) {
+    soilAtStart = { seed: w.seed, material: w.farm.table ? w.farm.material.slice() : createFarm(new Rng(w.seed, Purpose.soil)).material };
   }
   const h = w.history;
   post({
@@ -201,7 +221,7 @@ function sendHistory(w: World): void {
     soil: soilAtStart.material,
     daySeconds: w.params.daySeconds,
     cropLoad: w.params.cropLoad,
-    bought: w.farm.nest !== null,
+    bought: w.farm.table !== null,
   });
 }
 
