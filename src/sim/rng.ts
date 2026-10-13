@@ -51,6 +51,8 @@ export const Purpose = {
   lifespan: 6,
   /** Laying out the decorations in a new tank's arena. */
   decor: 7,
+  /** How each feeder insect the keeper puts in lies, and its legs (B6). */
+  prey: 8,
   test: 99,
 } as const;
 

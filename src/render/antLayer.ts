@@ -8,12 +8,15 @@
  */
 import { Container, Graphics, type Renderer, Sprite, type Texture } from 'pixi.js';
 import { AntState, Caste } from '../sim/ants';
-import { ANT_STRIDE, type AntsSnapshot } from '../worker/protocol';
+import { ANT_STRIDE, type AntsSnapshot, type PieceView } from '../worker/protocol';
+import { drawPiece } from './insects';
 import { ANT_SCALE, CROP, GAIT_FRAMES, STRIDE, makeAntTextures, makeDeadTexture } from './antSprites';
 import { grainColor } from './soilColors';
 
 /** Where a carried grain sits, ahead of the head, in mm. */
 const GRAIN_AHEAD = 2.6;
+/** Where the near end of a carried piece of insect is, ahead of the ant's middle, mm (as `HELD_AHEAD` in prey.ts). */
+const PIECE_AHEAD = 2.5;
 
 let shared: Texture[][] | undefined;
 let sharedPale: Texture[][] | undefined;
@@ -26,7 +29,9 @@ export class AntLayer {
   readonly root = new Container();
   /** Set for the angled arena; null draws the place flat, as it is. */
   project: AntProjection | null = null;
-  private readonly ants: { at: Container; body: Container; sprite: Sprite; grain: Graphics; material: number }[] = [];
+  private readonly ants: { at: Container; body: Container; sprite: Sprite; grain: Graphics; material: number; piece: Graphics; pieceKey: string }[] = [];
+  /** The piece of insect each ant carries, by ant (Arena 3). */
+  private carried = new Map<number, PieceView>();
   private readonly textures: Texture[][];
   private readonly pale: Texture[][];
   private readonly dead: Texture;
@@ -52,16 +57,18 @@ export class AntLayer {
     this.previous = this.current;
     this.current = snapshot;
     this.arrivedAt = now;
+    this.carried = new Map(snapshot.carried.map((c) => [c.ant, c.piece]));
     while (this.ants.length < snapshot.full.length) {
       const sprite = new Sprite(this.textures[0]![0]);
       sprite.anchor.set(0.5);
       sprite.scale.set(ANT_SCALE);
       const grain = new Graphics();
+      const piece = new Graphics();
       const body = new Container();
-      body.addChild(sprite, grain);
+      body.addChild(sprite, grain, piece);
       const at = new Container();
       at.addChild(body);
-      this.ants.push({ at, body, sprite, grain, material: 0 });
+      this.ants.push({ at, body, sprite, grain, material: 0, piece, pieceKey: '' });
       this.root.addChild(at);
     }
   }
@@ -133,6 +140,17 @@ export class AntLayer {
         ant.grain.clear();
         if (held > 0) ant.grain.circle(GRAIN_AHEAD, 0, 0.55).fill(grainColor(held));
         else if (held < 0) ant.grain.circle(GRAIN_AHEAD - 0.4, 0, 0.35).fill({ color: CROP, alpha: 0.9 });
+      }
+      // A piece of insect in its mandibles, held out ahead.
+      const piece = this.carried.get(i);
+      const key = piece ? `${piece.insect}:${piece.part}:${piece.look}` : '';
+      if (key !== ant.pieceKey) {
+        ant.pieceKey = key;
+        ant.piece.clear();
+        if (piece) {
+          drawPiece(ant.piece, piece);
+          ant.piece.position.set(PIECE_AHEAD + piece.length / 2, 0);
+        }
       }
     }
   }

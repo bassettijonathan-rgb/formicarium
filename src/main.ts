@@ -10,6 +10,7 @@ import { ArenaLayer } from './render/arenaLayer';
 import { STEPS_PER_SECOND, formatAntTime } from './sim/time';
 import type { KeeperCommand } from './sim/keeper';
 import type { Item } from './sim/objects';
+import type { Cut } from './sim/prey';
 import { type Decoration, decorationAt } from './sim/decor';
 import type { AntCard } from './sim/inspect';
 import { drawGraphs } from './ui/graphs';
@@ -24,8 +25,6 @@ import { CLEAR, REFRESH_MS, type Weather, fetchLegnanoWeather } from './room/wea
 
 /** A keeper's sugar drop: 10 µL, about the size of a lentil. */
 const DROP_VOLUME = 10;
-/** A crushed fruit fly or a piece of mealworm: about 3 µL of juices the ants can drink (rough). */
-const INSECT_VOLUME = 3;
 /** Seconds of ant time in a tank day (DESIGN.md D6). */
 const DAY_SECONDS = DEFAULT_ANT_PARAMS.daySeconds;
 
@@ -120,7 +119,8 @@ async function start(): Promise<void> {
       const now = performance.now();
       view.arena.ants.setAnts(msg, now);
       view.farmAnts.setAnts(msg, now);
-      view.brood.setBrood(msg.brood);
+      view.brood.setBrood(msg.brood, msg.prey);
+      view.arena.setPieces(msg.prey);
       const n = [0, 0, 0, 0];
       for (let o = 2; o < msg.brood.length; o += BROOD_STRIDE) n[msg.brood[o]!]!++;
       status.textContent =
@@ -297,6 +297,9 @@ async function start(): Promise<void> {
 
   // Feeding: tap the arena floor to put a drop (or an insect) there. The farm waters itself.
   let food = '1';
+  let cut: Cut = 'whole';
+  /** The sugar chosen for drops, feeders and refills: rich sugar while an insect is chosen. */
+  const sugar = () => (food === '0.1' ? 0.1 : 1);
   // The keeper's objects (DESIGN.md B3): with a tool chosen, the next tap puts an object in, or picks one to move or take out.
   let tool: string | null = null;
   /** The decoration picked to move, waiting for the tap that says where it goes. */
@@ -350,7 +353,7 @@ async function start(): Promise<void> {
       if (k >= 0) command({ type: 'remove', index: k });
     } else if (tool) {
       fitCheck = { before: view.arena.decorations, snapshots: 0 };
-      command({ type: 'put', item: tool as Item, x, y, concentration: food === 'protein' ? 1 : Number(food) });
+      command({ type: 'put', item: tool as Item, x, y, concentration: sugar() });
     }
     chooseTool(null);
   };
@@ -371,17 +374,27 @@ async function start(): Promise<void> {
     // The point of the arena under the tap: on the floor, or in a dish (the worker refuses food put on a stone).
     const { u: x, v: y } = view.arena.surfaceAt(p.x, p.y);
     if (x > 2 && y > 2 && x < view.arena.floorWidth - 2 && y < view.arena.floorHeight - 2) {
-      if (food === 'protein') command({ type: 'protein', x, y, volume: INSECT_VOLUME });
+      if (food === 'fly' || food === 'cricket' || food === 'mealworm') command({ type: 'insect', insect: food, cut, x, y });
       else command({ type: 'sugar', x, y, volume: DROP_VOLUME, concentration: Number(food) });
     }
   };
   // The liquid feeders filled with the sugar chosen above (rich if an insect is chosen).
-  document.getElementById('refill')!.addEventListener('click', () => command({ type: 'refill', concentration: food === 'protein' ? 1 : Number(food) }));
+  document.getElementById('refill')!.addEventListener('click', () => command({ type: 'refill', concentration: sugar() }));
   const sugarButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-sugar]')];
+  const cutRow = document.getElementById('cut-row')!;
   for (const button of sugarButtons) {
     button.addEventListener('click', () => {
       food = button.dataset.sugar ?? '1';
       for (const b of sugarButtons) b.setAttribute('aria-pressed', String(b === button));
+      // A fruit fly is given whole; a cricket or a mealworm whole, cut in two, or in pieces (B6).
+      cutRow.hidden = food !== 'cricket' && food !== 'mealworm';
+    });
+  }
+  const cutButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-cut]')];
+  for (const button of cutButtons) {
+    button.addEventListener('click', () => {
+      cut = (button.dataset.cut ?? 'whole') as Cut;
+      for (const b of cutButtons) b.setAttribute('aria-pressed', String(b === button));
     });
   }
   document.getElementById('clear')!.addEventListener('click', () => command({ type: 'clearFood' }));

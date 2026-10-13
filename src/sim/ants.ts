@@ -16,6 +16,7 @@ import { dieOfAge, endure, holdCorpse, mayDropCorpse, tryPickUpCorpse } from './
 import { computeContacts, stepFarmAnt } from './farmAnts';
 import { speedAt } from './heat';
 import { type FoodDrop, foodQuality, foodReach } from './food';
+import { type Piece, deliverToLabNest, holdPiece, nearestPiece, pieceReach, startAtPrey, workAtPrey } from './prey';
 import type { AntParams } from './params';
 import type { Rng } from './rng';
 import { STEPS_PER_SECOND } from './time';
@@ -48,6 +49,8 @@ export const AntState = {
   carryingCorpse: 11,
   /** Dead: a corpse, lying where it fell or where it was put down (M4c). */
   dead: 12,
+  /** At a feeder insect: biting a part off it, biting it open, or drinking from it (Arena 3). */
+  atPrey: 13,
 } as const;
 
 export type AntState = (typeof AntState)[keyof typeof AntState];
@@ -192,6 +195,10 @@ export interface Ants {
   corpseHeld: Int32Array;
   /** The dead: the ant carrying this corpse, or -1. */
   carriedBy: Int32Array;
+  /** The piece of insect the ant is working at (state `atPrey`), or -1 (Arena 3). */
+  preyId: Int32Array;
+  /** The piece of insect the ant is carrying, home or (a husk) out to the midden, or -1. */
+  pieceHeld: Int32Array;
   /** Counts corpses picked up, put down or newly dead, so lookups know when corpses have moved. */
   corpseVersion: number;
   /** Adults (M5c): tank days starving (crop empty, fat spent), dried out, and too hot; 0 while all is well. */
@@ -277,6 +284,8 @@ export function createAnts(count: number): Ants {
     deadFor: new Float64Array(count),
     corpseHeld: new Int32Array(count).fill(-1),
     carriedBy: new Int32Array(count).fill(-1),
+    preyId: new Int32Array(count).fill(-1),
+    pieceHeld: new Int32Array(count).fill(-1),
     corpseVersion: 0,
     hunger: new Float64Array(count),
     thirst: new Float64Array(count),
@@ -300,7 +309,7 @@ export function createAnts(count: number): Ants {
 }
 
 /** Array fields whose empty value is -1 rather than 0. */
-const MINUS_ONE: ReadonlySet<string> = new Set(['broodHeld', 'carriedBy', 'corpseHeld', 'foodId', 'partner']);
+const MINUS_ONE: ReadonlySet<string> = new Set(['broodHeld', 'carriedBy', 'corpseHeld', 'foodId', 'partner', 'pieceHeld', 'preyId']);
 
 /** Adds one ant at the end (a new worker eclosing) and returns its id. Every field starts empty. */
 export function addAnt(ants: Ants): number {
@@ -351,6 +360,8 @@ export interface AntContext {
   arena: Arena;
   farm: Farm;
   food: FoodDrop[];
+  /** The pieces of feeder insects in the tank (Arena 3). */
+  prey: Piece[];
   brood: Brood;
   nest: Nest;
   nestMode: NestMode;
@@ -389,8 +400,10 @@ export function stepAnts(ctx: AntContext): void {
     else if (place === Place.farm) stepFarmAnt(ctx, i);
     else if (state === AntState.inNest) restInNest(ctx, i);
     else if (state === AntState.feeding) feed(ctx, i);
+    else if (state === AntState.atPrey) workAtPrey(ctx, i);
     else walk(ctx, i);
     if (ants.corpseHeld[i]! >= 0) holdCorpse(ctx, i);
+    if (ants.pieceHeld[i]! >= 0) holdPiece(ctx, i);
   }
 }
 
@@ -627,7 +640,7 @@ function walk(ctx: AntContext, i: number): void {
 
   // 4. Food within smelling range pulls a searching ant straight to it.
   if (ants.state[i] === AntState.exploring || ants.state[i] === AntState.toFood) {
-    const near = nearestDrop(ctx, i, x, y, params.foodSenseRange);
+    const near = nearestFood(ctx, i, x, y, params.foodSenseRange);
     if (near) turn = angleDiff(Math.atan2(near.y - y, near.x - x), heading);
   }
 
@@ -659,7 +672,10 @@ function walk(ctx: AntContext, i: number): void {
   } else {
     // A searching ant, or one giving up and going home empty, takes food of its kind that it walks into.
     const drop = nearestDrop(ctx, i, nx, ny, 1);
-    if (drop) {
+    const piece = wantsProtein(ctx, i) ? nearestPiece(ctx, nx, ny, 1) : undefined;
+    if (piece && (!drop || Math.hypot(piece.x - nx, piece.y - ny) - pieceReach(piece) < Math.hypot(drop.x - nx, drop.y - ny) - foodReach(drop))) {
+      startAtPrey(ctx, i, piece);
+    } else if (drop) {
       ants.state[i] = AntState.feeding;
       ants.foodId[i] = drop.id;
       ants.timer[i] = Math.round(params.feedTime * STEPS_PER_SECOND);
@@ -673,6 +689,11 @@ function walk(ctx: AntContext, i: number): void {
 
 function enterNest(ctx: AntContext, i: number): void {
   const { ants, nest, params } = ctx;
+  if (ants.pieceHeld[i]! >= 0) {
+    // A piece of insect brought in excites nestmates as the forager's trail laying says (none for a whole fly).
+    nest.excitement += params.recruitPerReturn * ants.cropQuality[i]!;
+    deliverToLabNest(ctx, i);
+  }
   if (ants.crop[i]! > 0) {
     nest.stores += ants.crop[i]!;
     nest.excitement += params.recruitPerReturn * ants.cropQuality[i]!;
@@ -733,6 +754,23 @@ export function moveAnt(
   ants.piX[i]! += stepLength * Math.cos(believed);
   ants.piY[i]! += stepLength * Math.sin(believed);
   return true;
+}
+
+/**
+ * True if the ant takes protein (prey): it set out for it, or, out for sugar,
+ * it feels the brood's hunger.
+ */
+function wantsProtein(ctx: AntContext, i: number): boolean {
+  return ctx.ants.seekProtein[i] === 1 || ctx.ants.broodNeed[i]! >= ctx.params.preyNeed;
+}
+
+/** The nearest food of the kind the ant is after, a drop or a piece of insect, within `range` mm: where it is. */
+function nearestFood(ctx: AntContext, i: number, x: number, y: number, range: number): { x: number; y: number } | undefined {
+  const drop = nearestDrop(ctx, i, x, y, range);
+  const piece = ctx.prey.length > 0 && wantsProtein(ctx, i) ? nearestPiece(ctx, x, y, range) : undefined;
+  if (!piece) return drop;
+  if (!drop) return piece;
+  return Math.hypot(piece.x - x, piece.y - y) - pieceReach(piece) < Math.hypot(drop.x - x, drop.y - y) - foodReach(drop) ? piece : drop;
 }
 
 /** The nearest drop of the kind the ant is after (`protein` 1 for insects, 0 for sugar water) within `range`. */

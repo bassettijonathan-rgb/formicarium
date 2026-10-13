@@ -10,7 +10,8 @@ import { FIELD_CELL, createFarm } from '../sim/farm';
 import { colonyCrop, deathsBy, step, type World } from '../sim/world';
 import { type KeeperCommand, type LoggedCommand, applyCommand, createTank } from '../sim/keeper';
 import { SAVE_VERSION, type Save, awayReport, catchUpSteps, census, loadWorld } from '../sim/save';
-import { ANT_STRIDE, type FromWorker, type ToWorker } from './protocol';
+import { ANT_STRIDE, type FromWorker, Look, type PieceView, type ToWorker } from './protocol';
+import { edible } from '../sim/prey';
 import { readSave, setAside, writeSave } from './store';
 import { inspectAnt } from '../sim/inspect';
 import { Purpose, Rng } from '../sim/rng';
@@ -82,7 +83,24 @@ function sendAnts(w: World): void {
     items.push(brood.x[k]!, brood.y[k]!, stage, size);
   }
   const broodData = Float32Array.from(items);
-  post({ type: 'ants', step: w.step, ants: data, full, caste, callow, brood: broodData }, [
+  const prey: PieceView[] = [];
+  const carried: { ant: number; piece: PieceView }[] = [];
+  for (const p of w.prey) {
+    const view: PieceView = {
+      x: p.x,
+      y: p.y,
+      angle: p.angle,
+      place: p.place,
+      insect: p.insect,
+      part: p.part,
+      length: p.length,
+      width: p.width,
+      look: p.mouldy ? Look.mouldy : !edible(p) ? Look.husk : p.cuts > 0 ? Look.open : Look.closed,
+    };
+    if (p.carriedBy >= 0) carried.push({ ant: p.carriedBy, piece: view });
+    else prey.push(view);
+  }
+  post({ type: 'ants', step: w.step, ants: data, full, caste, callow, brood: broodData, prey, carried }, [
     data.buffer,
     full.buffer,
     caste.buffer,

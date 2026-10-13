@@ -14,7 +14,10 @@ import { Purpose, Rng } from './rng';
 import { doubleBridge, foodChoice, Tally } from './lab';
 import type { AntParams } from './params';
 import { STEPS_PER_SECOND } from './time';
-import { addCorpse, colonyCrop, createWorld, deathsBy, killAnt, setHeatMat, placeProtein, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
+import { addCorpse, colonyCrop, createWorld, deathsBy, killAnt, setHeatMat, placeInsect, placeProtein, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
+import { createArena } from './arena';
+import type { Cut, Insect } from './prey';
+import { TANK_ARENA } from './tank';
 
 export interface RunOptions {
   seed: number;
@@ -884,4 +887,72 @@ export function runStarvation(opts: RunOptions & { fedDays: number; days: number
     aliveByDay.push(workers.filter((i) => isLiveWorker(ants, i)).length);
   }
   return { trips, fat, diedOn, cause: workers.map((i) => ants.cause[i]!), aliveByDay };
+}
+
+export interface PreyResult {
+  /** Seconds until the first worker reached the insect (-1 if none did). */
+  found: number;
+  /** Most workers at the insect at once, and how many different workers came to it. */
+  mostAtOnce: number;
+  workers: number;
+  /** Most trail pheromone in the arena at any moment (summed over the floor). */
+  trail: number;
+  /** Seconds until nothing of it was left to eat (-1 if something was at the end). */
+  cleared: number;
+  /** Seconds until half its juice was drunk or carried home (-1 if it never was). */
+  half: number;
+  /** Pieces carried home, and the share of its juice drunk or carried home by the end. */
+  carried: number;
+  taken: number;
+}
+
+/**
+ * Prey size and recruitment (Detrain & Deneubourg 1997; Traniello 1983): a
+ * hungry colony in a lab nest behind the entrance of the keeper's 40 x 30 cm
+ * arena (bare), its foragers all out for protein, as Detrain & Deneubourg
+ * starved their colonies; one dead insect 10 cm from the entrance. A fruit
+ * fly should be found and taken home by one forager with little trail; a
+ * cricket, too big to carry, should draw a trail and a crowd and be cut up
+ * and drunk over a long time.
+ */
+export function runPrey(opts: RunOptions & { insect: Insect; cut: Cut; minutes: number }): PreyResult {
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 40, nest: 'lab', params: opts.params ?? {} });
+  world.arena = createArena(TANK_ARENA.width, TANK_ARENA.height);
+  world.ants.seekProtein.fill(1);
+  placeInsect(world, opts.insect, opts.cut, world.arena.entranceX + 100, world.arena.entranceY);
+  const juice = world.prey.reduce((sum, p) => sum + p.juice, 0);
+  const came = new Uint8Array(world.ants.count);
+  const ids = new Set(world.prey.map((p) => p.id));
+  let found = -1;
+  let mostAtOnce = 0;
+  let trail = 0;
+  let cleared = -1;
+  let half = -1;
+  let carried = 0;
+  const steps = opts.minutes * 60 * STEPS_PER_SECOND;
+  for (let s = 1; s <= steps; s++) {
+    step(world);
+    let at = 0;
+    for (let i = 0; i < world.ants.count; i++) {
+      if (world.ants.state[i] !== AntState.atPrey && world.ants.pieceHeld[i]! < 0) continue;
+      came[i] = 1;
+      if (world.ants.state[i] === AntState.atPrey) at++;
+    }
+    if (at > 0 && found < 0) found = s / STEPS_PER_SECOND;
+    mostAtOnce = Math.max(mostAtOnce, at);
+    for (const id of ids) {
+      if (world.prey.some((p) => p.id === id)) continue;
+      ids.delete(id);
+      carried++;
+    }
+    if (s % STEPS_PER_SECOND !== 0) continue;
+    let sum = 0;
+    for (const v of world.arena.trail) sum += v;
+    trail = Math.max(trail, sum);
+    if (cleared < 0 && !world.prey.some((p) => p.place === Place.arena && p.carriedBy < 0 && p.juice > 1e-6)) cleared = s / STEPS_PER_SECOND;
+    const lying = world.prey.filter((p) => p.place === Place.arena && p.carriedBy < 0).reduce((sum, p) => sum + p.juice, 0);
+    if (half < 0 && lying <= juice / 2) half = s / STEPS_PER_SECOND;
+  }
+  const left = world.prey.filter((p) => p.place === Place.arena && p.carriedBy < 0).reduce((sum, p) => sum + p.juice, 0);
+  return { found, mostAtOnce, workers: came.reduce((a, b) => a + b, 0), trail, cleared, half, carried, taken: 1 - left / juice };
 }

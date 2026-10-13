@@ -10,6 +10,7 @@
  */
 import { isBlocked, reliefAt } from './arena';
 import { type Decoration, buildRelief, extent, inDish, isObstacle, middleOf, reliefOf, shifted, stampDecorations } from './decor';
+import { Place } from './ants';
 import { Purpose, Rng } from './rng';
 import type { World } from './world';
 
@@ -67,7 +68,10 @@ function fits(world: World, d: Decoration, others: Float32Array, carried: Set<nu
       if (reliefOf(d, cx + 0.5, cy + 0.5) > 0 && others[cy * arena.width + cx]! > 0) return false;
     }
   }
-  return world.food.every((f) => carried.has(f.id) || reliefOf(d, f.x, f.y) === 0);
+  return (
+    world.food.every((f) => carried.has(f.id) || reliefOf(d, f.x, f.y) === 0) &&
+    world.prey.every((p) => p.place !== Place.arena || p.carriedBy >= 0 || carried.has(p.id) || reliefOf(d, p.x, p.y) === 0)
+  );
 }
 
 /** The relief of every decoration but the one at `skip`. */
@@ -103,13 +107,20 @@ export function moveDecoration(world: World, index: number, x: number, y: number
   const dx = x - from.x;
   const dy = y - from.y;
   const moved = shifted(d, dx, dy);
-  const carried = new Set(foodWith(world, d));
+  const pieces = new Set(piecesIn(world, d));
+  // Food and pieces of insect share one set of ids.
+  const carried = new Set([...foodWith(world, d), ...pieces]);
   if (!fits(world, moved, reliefWithout(world, index), carried)) return false;
   world.decor[index] = moved;
   for (const f of world.food) {
     if (!carried.has(f.id)) continue;
     f.x += dx;
     f.y += dy;
+  }
+  for (const p of world.prey) {
+    if (!pieces.has(p.id)) continue;
+    p.x += dx;
+    p.y += dy;
   }
   stampDecorations(world.arena, world.decor);
   return true;
@@ -121,6 +132,8 @@ export function removeDecoration(world: World, index: number): boolean {
   if (!d) return false;
   const gone = new Set(foodWith(world, d));
   world.food = world.food.filter((f) => !gone.has(f.id));
+  const pieces = new Set(piecesIn(world, d));
+  world.prey = world.prey.filter((p) => !pieces.has(p.id));
   world.decor.splice(index, 1);
   stampDecorations(world.arena, world.decor);
   return true;
@@ -154,7 +167,14 @@ export function canPutFood(world: World, x: number, y: number): boolean {
 
 /** Takes out the food lying in the feeding dishes (cleaning the arena empties them). Returns how many went. */
 export function emptyDishes(world: World): number {
-  const before = world.food.length;
+  const before = world.food.length + world.prey.length;
   world.food = world.food.filter((f) => f.reach || !world.decor.some((d) => inDish(d, f.x, f.y)));
-  return before - world.food.length;
+  world.prey = world.prey.filter((p) => p.place !== Place.arena || p.carriedBy >= 0 || !world.decor.some((d) => inDish(d, p.x, p.y)));
+  return before - world.food.length - world.prey.length;
+}
+
+/** The pieces of insect lying in a dish (Arena 3): they go where the dish goes. */
+function piecesIn(world: World, d: Decoration): number[] {
+  if (d.kind !== 'dish') return [];
+  return world.prey.filter((p) => p.place === Place.arena && p.carriedBy < 0 && inDish(d, p.x, p.y)).map((p) => p.id);
 }

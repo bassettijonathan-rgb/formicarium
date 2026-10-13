@@ -17,6 +17,7 @@ import { stepSoil } from './soil';
 import { type HeatMat, MAT_WIDTH, updateTemperature } from './heat';
 import { pourWater, updateHumidity, updateWater } from './water';
 import { agePrey, updateMould } from './mould';
+import { type Cut, type Insect, type Piece, agePieces, edible, makeInsect } from './prey';
 import { STEPS_PER_SECOND } from './time';
 import { type History, createHistory, recordHistory } from './history';
 
@@ -44,6 +45,8 @@ export interface World {
   nestMode: NestMode;
   /** Food drops in the arena, in the order they were placed. */
   food: FoodDrop[];
+  /** The pieces of feeder insects in the tank, in the order they were put in (Arena 3). */
+  prey: Piece[];
   /** Eggs, larvae and pupae in the farm. */
   brood: Brood;
   nextFoodId: number;
@@ -91,6 +94,7 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
     nest: { stores: 0, excitement: 0 },
     nestMode,
     food: [],
+    prey: [],
     brood: createBrood(),
     nextFoodId: 1,
     params,
@@ -164,6 +168,7 @@ export function step(world: World): void {
     arena: world.arena,
     farm: world.farm,
     food: world.food,
+    prey: world.prey,
     brood: world.brood,
     nest: world.nest,
     nestMode: world.nestMode,
@@ -171,8 +176,12 @@ export function step(world: World): void {
     rng,
   });
   if (world.food.some((d) => d.volume <= 0)) world.food = world.food.filter((d) => d.volume > 0);
+  if (world.prey.some((p) => p.place === Place.gone)) world.prey = world.prey.filter((p) => p.place !== Place.gone);
   world.step += 1;
-  if (world.step % WATER_EVERY === 0) agePrey(world.food, world.params, WATER_EVERY / STEPS_PER_SECOND);
+  if (world.step % WATER_EVERY === 0) {
+    agePrey(world.food, world.params, WATER_EVERY / STEPS_PER_SECOND);
+    agePieces(world, WATER_EVERY / STEPS_PER_SECOND);
+  }
   if (world.step % EVAPORATE_EVERY === 0) {
     evaporateTrail(world.arena, EVAPORATE_EVERY / STEPS_PER_SECOND, world.params.trailHalfLife);
   }
@@ -187,7 +196,7 @@ export function step(world: World): void {
       updateTemperature(farm, world.heatMat, params, seconds);
       if (world.step % WATER_EVERY === 0) {
         updateWater(farm, params, WATER_EVERY / STEPS_PER_SECOND);
-        updateMould(farm, world.ants, params, WATER_EVERY / STEPS_PER_SECOND);
+        updateMould(farm, world.ants, params, WATER_EVERY / STEPS_PER_SECOND, world.prey);
         if (world.diedOut < 0 && !colonyAlive(world)) world.diedOut = world.step;
       }
       stepBrood(world.brood, farm, params, seconds);
@@ -238,7 +247,8 @@ export function removeAnt(world: World, i: number): void {
     brood.y[k] = ants.y[i]!;
     ants.broodHeld[i] = -1;
   }
-  if (ants.corpseHeld[i]! >= 0) dropCorpse(ctx(world), i);
+  if (ants.corpseHeld[i]! >= 0 || ants.pieceHeld[i]! >= 0) dropCorpse(ctx(world), i);
+  ants.preyId[i] = -1;
   const carrier = ants.carriedBy[i]!;
   // A corpse taken out of its carrier's mandibles: the carrier goes on as if it had put it down.
   if (carrier >= 0) dropCorpse(ctx(world), carrier);
@@ -261,6 +271,7 @@ function ctx(world: World): AntContext {
     arena: world.arena,
     farm: world.farm,
     food: world.food,
+    prey: world.prey,
     brood: world.brood,
     nest: world.nest,
     nestMode: world.nestMode,
@@ -329,9 +340,22 @@ export function cleanArena(world: World): number {
     ants.corpseVersion++;
     n++;
   }
-  const before = world.food.length;
+  const before = world.food.length + world.prey.length;
   world.food = world.food.filter((d) => !d.mouldy);
-  return n + before - world.food.length;
+  // Husks and mouldy pieces of insect lying in the arena go too.
+  world.prey = world.prey.filter((p) => p.place !== Place.arena || p.carriedBy >= 0 || edible(p));
+  return n + before - world.food.length - world.prey.length;
+}
+
+/**
+ * Puts a feeder insect in the arena with its middle at (x, y): whole, cut in
+ * two or in pieces (Arena 3, B6). Returns the ids of its pieces.
+ */
+export function placeInsect(world: World, insect: Insect, cut: Cut, x: number, y: number): number[] {
+  const pieces = makeInsect(world.seed, world.step, world.nextFoodId, insect, cut, x, y);
+  world.nextFoodId += pieces.length;
+  world.prey.push(...pieces);
+  return pieces.map((p) => p.id);
 }
 
 /** Takes a drop away (the keeper cleaning up, or an experiment removing food). */

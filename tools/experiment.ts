@@ -14,6 +14,7 @@
  *   npm run experiment -- damp [--hours 3] [--no-hygro]
  *   npm run experiment -- hygiene [--days 4] [--no-removal]
  *   npm run experiment -- starvation [--days 30] [--fed]
+ *   npm run experiment -- prey [--insect fly|cricket|mealworm] [--cut whole|halved|pieces] [--minutes 180]
  *   growth takes --mortal: adults die of hunger, drying out and heat (M5c)
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
  */
@@ -33,8 +34,10 @@ import {
   runFoodSpread,
   runMidden,
   runNestVolume,
+  runPrey,
   runTrailDecay,
 } from '../src/sim/experiments';
+import type { Cut, Insect } from '../src/sim/prey';
 
 const [name, ...rest] = process.argv.slice(2);
 let runs = 10;
@@ -50,16 +53,24 @@ let corpses = 100;
 let matX: number | undefined;
 let waterEvery = 0;
 let fed = false;
+let insect: Insect | undefined;
+let cut: Cut = 'whole';
+let minutesSet = false;
 const params: Partial<AntParams> = {};
 for (let i = 0; i < rest.length; i++) {
   if (rest[i] === '--runs') runs = Number(rest[++i]);
   else if (rest[i] === '--seed') first = Number(rest[++i]);
+  else if (rest[i] === '--insect') insect = rest[++i] as Insect;
+  else if (rest[i] === '--cut') cut = rest[++i] as Cut;
   else if (rest[i] === '--ants') ants = Number(rest[++i]);
   else if (rest[i] === '--hours') hours = Number(rest[++i]);
   else if (rest[i] === '--no-trail') params.trailLaying = false;
   else if (rest[i] === '--no-crowd') params.crowdControl = false;
   else if (rest[i] === '--no-sharing') params.sharing = false;
-  else if (rest[i] === '--minutes') minutes = Number(rest[++i]);
+  else if (rest[i] === '--minutes') {
+    minutes = Number(rest[++i]);
+    minutesSet = true;
+  }
   else if (rest[i] === '--satiated') satiated = true;
   else if (rest[i] === '--days') days = Number(rest[++i]);
   else if (rest[i] === '--no-protein') protein = false;
@@ -216,9 +227,20 @@ for (let seed = first; seed < first + runs; seed++) {
         `  foragers (${foragers.length}): fat ${mean(foragers.map((n) => r.fat[n]!)).toFixed(2)}, median survival ${median(foragers.map((n) => r.diedOn[n]!))}; ` +
         `nest workers (${nest.length}): fat ${mean(nest.map((n) => r.fat[n]!)).toFixed(2)}, median survival ${median(nest.map((n) => r.diedOn[n]!))}`,
     );
+  } else if (name === 'prey') {
+    // Without --insect: a fruit fly for 30 minutes, then a cricket for 3 hours, on the same seed.
+    const trials: [Insect, number][] = insect ? [[insect, minutesSet ? minutes : 180]] : [['fly', 30], ['cricket', 180]];
+    for (const [kind, length] of trials) {
+      const r = runPrey({ seed, insect: kind, cut, minutes: length, ...(ants ? { ants } : {}), params });
+      const t = (s: number) => (s < 0 ? 'never' : `${(s / 60).toFixed(1)} min`);
+      console.log(
+        `seed ${seed} ${kind} (${cut}): found after ${t(r.found)}; most at it at once ${r.mostAtOnce}, workers that came ${r.workers}; ` +
+          `most trail ${r.trail.toFixed(0)}; ${r.carried} pieces carried home; ${pct(r.taken)} of its juice taken; half gone after ${t(r.half)}, all after ${t(r.cleared)}`,
+      );
+    }
   } else {
     throw new Error(
-      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene or starvation',
+      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation or prey',
     );
   }
 }

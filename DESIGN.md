@@ -191,17 +191,52 @@ they took them apart". He approved this plan as drafted
   and Refill tops every feeder up with the sugar chosen on the page.
   Tested: ants climb into a dish to sugar in it (3 of 3 lab colonies in
   15 minutes) and drink at a feeder's cotton.
-- **Arena 3: feeder insects.** B6: fruit fly (about 2.5 mm, 1 mg), small
-  cricket (about 12 mm, 40 mg), mealworm (about 22 mm, 120 mg), dead, given
-  whole, opened or in pieces, each with real parts. B7: ants drink at open
-  cuts and bite parts off at the joints (soft joints fast, the mealworm's
-  skin slowly, faster with more ants); a part about an ant's weight or less
-  is carried home, a fruit fly whole; no group carrying. B8: pieces are fed
-  to the larvae in the nest, the hard leftovers carried to the midden, and
-  a piece left uneaten for 2 tank days goes mouldy. B9: old tanks keep
-  everything. Validation: one forager carries a fruit fly home with little
-  recruitment, while a cricket draws a crowd and a trail (Lasius niger
-  scavenging, Detrain & Deneubourg; to be checked against the paper).
+- **Arena 3 (built): feeder insects** (`src/sim/prey.ts`). B6: the page's
+  food row offers a fruit fly (2.5 mm, 1 mg, one piece), a small cricket
+  (12 mm, 40 mg: head, thorax, abdomen, two hind legs of 1.8 mg, four legs of
+  0.45 mg) and a mealworm (22 mm, 120 mg: a 2 mg head and six sections), all
+  rough masses; a cricket or mealworm is given whole, cut in two or in
+  pieces (the parts laid a little apart). Each piece's juice (haemolymph
+  and soft tissue) is its mass less its skin (15-50%); what is left when it
+  is drunk is a husk. B7, by touch alone, a forager at an insect:
+  1. carries the piece it touches home if it is free and at most
+     `preyCarryMax` (2 mg): a fly goes whole;
+  2. else bites at the joint of a part that would be that light once off
+     (a leg), several ants together faster (30-60 ant-seconds for a
+     cricket's legs, 600 for a mealworm's head); the cut leaves a wound on
+     both sides, and it carries the part home;
+  3. else drinks at a wound if a place is free there (two workers at each),
+     for `preyDrinkTime` (300 s: the juice is chewed out of the tissue; rough),
+     from any piece still joined (an insect's blood is not in vessels);
+  4. else bites a new hole through the skin (15-90 ant-seconds for a
+     cricket, 600 for a mealworm).
+  One that has bitten for `preyGiveUp` (120 s) and got nothing goes home for
+  help, laying trail at `preyTrail` (0.6, on the scale of a full crop of the
+  best sugar). One carrying a piece lays that trail if it touched the rest
+  of the insect, still too big to take, where it picked it up; none if it
+  took the whole thing. So trail follows whether one ant can take the find
+  home (Detrain & Deneubourg 1997), which brings a crowd to a cricket and
+  nobody but the finder to a fly. As before, a forager takes insects only if
+  it set out for protein or feels the brood's hunger (M3b): a colony with
+  no hungry brood leaves them lying. No group carrying: Lasius neoniger
+  carries prey in groups (Traniello 1983), but Lasius niger keepers see
+  prey cut up, so this is left out. B8: a carrier takes its piece through
+  the tube to the brood, by the brood's smell as a nurse with protein does,
+  and puts it down by the brood (or after 300 s anyway); workers that touch
+  it drink from it now and then (`pieceSipRate`, 0.2 per second) and feed
+  the protein on to the larvae; the husk, and a piece gone mouldy, is
+  carried out to the midden as a corpse is. A piece left uneaten goes mouldy
+  after `preyMouldDays` (2 tank days at 25 °C), and in the damp nest feeds
+  mould as a corpse does. Clean arena takes out husks and mouldy pieces;
+  Clear food takes out every insect lying in the arena. B9: old tanks load
+  with no insects; an old insect puddle stays a puddle (the protein drop is
+  kept as a command for old saves and the experiments, off the page).
+  Validation: section 9, test 14. Not reproduced: cutting an insect does
+  not make it go faster here. A hungry colony bites holes through even a
+  mealworm's skin within minutes, so the time to strip it is set by how
+  many workers come and how long each drinks: 10 hungry workers took a
+  cricket's juice in 97-115 minutes whole or in pieces, and a mealworm's in
+  about 5.5 hours either way.
 
 ---
 
@@ -964,6 +999,10 @@ project. If one fails, we fix the model, not the test.
 13. **Starvation** (Dussutour et al. 2016): when a colony's food stops, its
    lean foragers die before its fat nest workers; a fed colony loses none
    to hunger.
+14. **Prey size and recruitment** (Detrain & Deneubourg 1997; Traniello
+   1983): prey one worker can carry is taken home by its finder with little
+   recruitment; prey none can carry draws trail laying and a crowd that cut
+   it up where it lies.
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -1354,6 +1393,34 @@ starved. The two looked at closely were shut in small pockets in loose
 sand, which builds up where dry sand falls. Once shut-in ants dig their way
 up (section 7.9, item 7), unwatered colonies lost none to hunger in 26
 days (seeds 1 and 2).
+
+### 9.12 Results so far (prey size and recruitment, Arena 3)
+
+`npm run experiment -- prey`; `tests/science/prey.test.ts` checks seeds
+1-3. A lab colony of 40 workers behind the entrance of the keeper's bare
+40 x 30 cm arena, all out for protein (Detrain & Deneubourg starved their
+colonies 3 days first), and one dead insect 10 cm from the entrance; a fruit
+fly for 30 minutes, a cricket for 3 hours.
+
+| Seed | Fly: found | Fly: workers that came / trail | Cricket: most at it at once / workers that came | Cricket: most trail | Cricket: drunk dry |
+|---|---|---|---|---|---|
+| 1 | 1.2 min | 1 / none | 36 / 37 | 8805 | 35 min |
+| 2 | 4.4 min | 1 / none | 34 / 37 | 11361 | 40 min |
+| 3 | 5.7 min | 1 / none | 33 / 37 | 10680 | 41 min |
+| 4 | 1.7 min | 1 / none | 35 / 37 | 9108 | 37 min |
+| 5 | 3.3 min | 1 / none | 33 / 37 | 10972 | 39 min |
+
+As in Detrain & Deneubourg (1997), the prey a worker can carry goes home
+with its finder and no recruitment, while the prey nobody can carry draws a
+trail and most of the colony, which cut off its six legs and carry them
+home and drink the rest where it lies, leaving the head, thorax and abdomen
+as husks. They saw the same contrast (5.8 against 12.4 workers arriving per
+3 minutes, a plateau of about 250 at a cockroach in a colony of 2000-3000);
+here nearly the whole of a small, hungry colony comes. In the keeper's tank
+a colony comes to insects only as its brood is hungry: with 12 larvae it
+carried a fly into the farm within 2 tank hours, drank it by the brood and
+carried its husk out to the arena, and took the cricket's legs one by one
+over the day.
 
 ---
 
