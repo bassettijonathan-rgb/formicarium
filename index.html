@@ -66,7 +66,7 @@
         <button id="clear">Clear food</button>
         <button id="clean">Clean arena</button>
         <button id="trails" aria-pressed="true">Show trails</button>
-        <button id="from-above" aria-pressed="false">Arena from above</button>
+        <button id="from-above" aria-pressed="false">From above</button>
       </div>
       <div class="row" id="cut-row" hidden>
         <span style="align-self: center; color: #9aa4b1">Give it:</span>
@@ -89,14 +89,14 @@
       <div class="row">
         <span style="align-self: center; color: #9aa4b1">Heat mat:</span>
         <button data-mat="off">Off</button>
-        <button data-mat="10">Left</button>
-        <button data-mat="110" aria-pressed="true">Middle</button>
-        <button data-mat="210">Right</button>
+        <button data-mat="left">Left</button>
+        <button data-mat="middle" aria-pressed="true">Middle</button>
+        <button data-mat="right">Right</button>
         <button id="warmth">Show warmth</button>
       </div>
       <div class="row">
         <button id="damp">Show damp</button>
-        <span style="align-self: center; color: #9aa4b1">Soil darkens when damp; the farm waters itself and never dries.</span>
+        <span id="damp-note" style="align-self: center; color: #9aa4b1"></span>
       </div>
       <div class="row">
         <button data-speed="0">Pause</button>
@@ -105,7 +105,16 @@
         <button data-speed="16">16×</button>
         <button data-speed="64">64×</button>
         <button id="fit">Fit view</button>
-        <button id="new-tank">New tank</button>
+      </div>
+      <div class="row">
+        <span style="align-self: center; color: #9aa4b1">New tank in a ytong nest:</span>
+        <button data-size="S">Small</button>
+        <button data-size="M">Medium</button>
+        <button data-size="L">Large</button>
+        <button data-layout="classic">Rooms</button>
+        <button data-layout="organic">Organic</button>
+        <button data-layout="honeycomb">Honeycomb</button>
+        <button id="new-tank">Start new tank</button>
       </div>
       <div class="row">
         <button id="graphs">Colony graphs</button>

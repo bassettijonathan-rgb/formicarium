@@ -6,7 +6,8 @@
  * are all floor to them. Chemical fields (nest odour, dig marks) live on a
  * coarser 2 mm grid; trail pheromone is laid at 1 mm like in the arena.
  */
-import { Material } from './materials';
+import { Material, diggable } from './materials';
+import type { BoughtNest } from './nest';
 import { valueNoise2D } from './noise';
 import type { Rng } from './rng';
 import { FARM_HEIGHT, FARM_WIDTH, HEADSPACE, TUBE } from './tank';
@@ -21,8 +22,8 @@ export const FIELD_CELL = 2;
  * soil-water model of M5b takes this drained state as the one water settles back to.
  */
 export const DRAINED_RISE = 0.35;
-/** Indexed by `Material`. */
-export const RETENTION = [0, -0.12, 0, 0.12];
+/** Indexed by `Material`; the walls of bought nests hold what the nest gives them (nest.ts). */
+export const RETENTION = [0, -0.12, 0, 0.12, 0];
 
 export interface Farm {
   width: number;
@@ -70,6 +71,12 @@ export interface Farm {
   /** Where the tube opens into the farm, mm. */
   tubeX: number;
   tubeY: number;
+  /**
+   * The bought nest this grid holds (DESIGN.md 3.5), or null for the sand farm.
+   * A bought nest lies flat: x and y are across and along its floor seen from
+   * above, its walls cannot be dug, and its water stays where the nest puts it.
+   */
+  nest: BoughtNest | null;
 }
 
 /**
@@ -131,6 +138,7 @@ export function createFarm(rng: Rng): Farm {
     mouldy: 0,
     tubeX: width - 1.5,
     tubeY: TUBE.farmY,
+    nest: null,
   };
   updateFresh(farm);
   return farm;
@@ -178,10 +186,10 @@ export function isBlockedFarm(farm: Farm, x: number, y: number): boolean {
   return cellSolid(farm, Math.floor(x), Math.floor(y));
 }
 
-/** True if cell (cx, cy) holds soil an ant could dig (not the frame, not air). */
+/** True if cell (cx, cy) holds soil an ant could dig (not the frame, not air, not a bought nest's wall). */
 export function isSoil(farm: Farm, cx: number, cy: number): boolean {
   if (cx < 0 || cy < 0 || cx >= farm.width || cy >= farm.height) return false;
-  return farm.material[cy * farm.width + cx] !== Material.air;
+  return diggable(farm.material[cy * farm.width + cx]!);
 }
 
 /**
@@ -282,7 +290,8 @@ const FRESH_KEEP = 0.85;
 /**
  * Spreads fresh air from the open headspace into the tunnels: one sweep down
  * and one back, so a change in the soil reaches far along a tunnel within a
- * few calls. Field cells that are all soil hold none.
+ * few calls. Field cells that are all soil hold none. A bought nest has no
+ * open headspace: its fresh air comes in only through the tube's mouth.
  */
 export function updateFresh(farm: Farm): void {
   const w = farm.fieldWidth;
@@ -290,7 +299,8 @@ export function updateFresh(farm: Farm): void {
   const fresh = farm.fresh;
   // Open sky: everything above the first soil in each column (both cell columns of a field column).
   const openTo = new Int32Array(w);
-  for (let fx = 0; fx < w; fx++) {
+  const mouth = farm.nest ? Math.floor(farm.tubeY / FIELD_CELL) * w + Math.floor(farm.tubeX / FIELD_CELL) : -1;
+  for (let fx = 0; fx < w && !farm.nest; fx++) {
     let top = farm.height;
     for (let dx = 0; dx < FIELD_CELL; dx++) {
       const cx = fx * FIELD_CELL + dx;
@@ -304,7 +314,7 @@ export function updateFresh(farm: Farm): void {
     for (let i = from; i !== to; i += by) {
       const fx = i % w;
       const fy = (i - fx) / w;
-      if (fy < openTo[fx]!) {
+      if (fy < openTo[fx]! || i === mouth) {
         fresh[i] = 1;
         continue;
       }

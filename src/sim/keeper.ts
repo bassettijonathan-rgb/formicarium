@@ -9,7 +9,9 @@ import { createArena } from './arena';
 import { layDecorations, stampDecorations } from './decor';
 import { type Item, canPutFood, emptyDishes, moveDecoration, putItem, refillFeeders, removeDecoration } from './objects';
 import { TANK_ARENA } from './tank';
+import { MAT_WIDTH } from './heat';
 import { Place } from './ants';
+import { DEFAULT_NEST, type NestSetup } from './nest';
 import type { Cut, Insect } from './prey';
 import {
   cleanArena,
@@ -63,19 +65,21 @@ export const FIRST_DROP = { x: 100, y: TANK_ARENA.height / 2 - 45 } as const;
 
 /**
  * The keeper's tank as the page sets it up: a queen and 60 workers in a room a
- * little cool for Lasius niger, the heat mat under the middle of the farm, a
- * 40 x 30 cm arena with stones, bark, leaves and moss laid out from the seed
- * (DESIGN.md A1, A4), and a first sugar drop, so a new tank has something to
- * find. The soil's water moves, but the farm waters itself and stays as damp
- * as it was poured (DESIGN.md 7.7), what is left to rot goes mouldy, and the
- * colony can die.
+ * little cool for Lasius niger, in a bought ytong nest of the keeper's choice
+ * (`nest`, DESIGN.md 3.5; null for the sand farm of the first tanks), the heat
+ * mat under the middle of it, a 40 x 30 cm arena with stones, bark, leaves and
+ * moss laid out from the seed (DESIGN.md A1, A4), and a first sugar drop, so a
+ * new tank has something to find. The nest waters itself (a sand farm stays as
+ * damp as it was poured, DESIGN.md 7.7), what is left to rot goes mouldy, and
+ * the colony can die.
  */
-export function createTank(seed: number): World {
+export function createTank(seed: number, nest: NestSetup | null = DEFAULT_NEST): World {
   const world = createWorld(seed, {
     queen: true,
     params: { roomTemperature: TANK_ROOM, waterFlow: true, selfWatering: true, mould: true, mortal: true },
+    ...(nest ? { bought: nest } : {}),
   });
-  setHeatMat(world, TANK_MAT_X);
+  setHeatMat(world, nest ? (world.farm.width - MAT_WIDTH) / 2 : TANK_MAT_X);
   furnishArena(world, []);
   placeSugar(world, FIRST_DROP.x, FIRST_DROP.y, 40, 1);
   return world;
@@ -137,11 +141,11 @@ export function applyCommand(world: World, command: KeeperCommand): void {
 }
 
 /**
- * Rebuilds a keeper's tank from its seed and log, up to `steps`: each
+ * Rebuilds a keeper's tank (in `nest`, as `createTank`) from its seed and log, up to `steps`: each
  * command is applied just before the step it was logged at, as the page did.
  */
-export function replayTank(seed: number, log: readonly LoggedCommand[], steps: number): World {
-  const world = createTank(seed);
+export function replayTank(seed: number, log: readonly LoggedCommand[], steps: number, nest: NestSetup | null = DEFAULT_NEST): World {
+  const world = createTank(seed, nest);
   let next = 0;
   while (world.step < steps) {
     while (next < log.length && log[next]!.step <= world.step) applyCommand(world, log[next++]!.command);

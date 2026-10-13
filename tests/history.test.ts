@@ -6,8 +6,8 @@ import { STEPS_PER_SECOND } from '../src/sim/time';
 import { step } from '../src/sim/world';
 
 describe('the colony history', () => {
-  it('takes a census every tenth of a tank day and a picture of the nest every 5 minutes', () => {
-    const world = createTank(1);
+  it('takes a census every tenth of a tank day and a picture of the sand farm\'s nest every 5 minutes', () => {
+    const world = createTank(1, null);
     for (let i = 0; i < 12 * 60 * STEPS_PER_SECOND; i++) step(world);
     const h = world.history;
     expect(h.censuses.map((c) => c.step)).toEqual([7200, 14400]);
@@ -17,8 +17,15 @@ describe('the colony history', () => {
     expect(last.activity.reduce((a, b) => a + b, 0)).toBe(last.workers);
   }, 60_000);
 
-  it('thins itself as it grows: a few hundred entries, evenly spaced, however old the tank', () => {
+  it('takes no pictures of a bought nest, which keeps its shape', () => {
     const world = createTank(1);
+    for (let i = 0; i < 6 * 60 * STEPS_PER_SECOND; i++) step(world);
+    expect(world.history.censuses).toHaveLength(1);
+    expect(world.history.frames).toHaveLength(0);
+  }, 60_000);
+
+  it('thins itself as it grows: a few hundred entries, evenly spaced, however old the tank', () => {
+    const world = createTank(1, null);
     world.history.every = 1;
     world.history.frameEvery = 1;
     for (let i = 0; i < 2 * MAX_CENSUSES + 50; i++) step(world);

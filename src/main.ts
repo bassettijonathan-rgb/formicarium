@@ -1,7 +1,8 @@
 /**
  * Starts the page: a PixiJS view of the tank, fed by the simulation worker.
  * URL options: ?seed=N picks the tank (default: the kept tank, or tank 1);
- * ?seed=N&new starts tank N afresh.
+ * ?seed=N&new starts tank N afresh, in a bought nest of `size` (S, M or L)
+ * and `layout` (classic, organic or honeycomb), medium classic by default.
  */
 import { Application } from 'pixi.js';
 import { Camera } from './render/camera';
@@ -20,6 +21,8 @@ import { Cause } from './sim/ants';
 import { BroodStage } from './sim/brood';
 import { BROOD_STRIDE, type FromWorker, type HistorySnapshot, type ToWorker } from './worker/protocol';
 import { RoomLayer } from './render/room/roomLayer';
+import { DEFAULT_NEST, NEST_SIZES, type NestLayout, type NestSetup, type NestSize } from './sim/nest';
+import { MAT_WIDTH } from './sim/heat';
 import { legnanoClock } from './room/sky';
 import { CLEAR, REFRESH_MS, type Weather, fetchLegnanoWeather } from './room/weather';
 
@@ -38,6 +41,8 @@ async function start(): Promise<void> {
   const asked = query.has('seed') ? parseSeed(query.get('seed')) : null;
   /** The tank running, once the worker has said which. */
   let seed = asked ?? 1;
+  /** The bought nest a new tank starts in (from the page's address, else the default). */
+  const nest = nestFrom(query);
 
   const app = new Application();
   await app.init({ resizeTo: stage, background: 0x111317, antialias: true, autoDensity: true, resolution: devicePixelRatio });
@@ -84,6 +89,8 @@ async function start(): Promise<void> {
     fit();
   });
 
+  /** Whether the view has been fitted to the tank since it arrived. */
+  let framed = false;
   /** The step at which the colony died out, or -1 while it lives (from the arena snapshots). */
   let diedOut = -1;
   /** After the keeper puts in or moves an object: the decorations as they were, until the snapshots show whether it fitted. */
@@ -105,7 +112,7 @@ async function start(): Promise<void> {
         `You keep tank ${k.seed} (ant time ${formatAntTime(k.step)}, ${k.workers} workers). ` +
           `Replace it with a new tank ${msg.seed}? The colony in tank ${k.seed} will be lost.`,
       );
-      send(replace ? { type: 'open', seed: msg.seed, fresh: true } : { type: 'open', seed: null, fresh: false });
+      send(replace ? { type: 'open', seed: msg.seed, fresh: true, nest } : { type: 'open', seed: null, fresh: false });
     } else if (msg.type === 'catchUp') {
       showCatchUp(msg.done, msg.total);
     } else if (msg.type === 'away') {
@@ -114,7 +121,14 @@ async function start(): Promise<void> {
       if (msg.id === inspected) showCard(msg.card);
     } else if (msg.type === 'history') {
       showHistory(msg);
-    } else if (msg.type === 'farm') view.setSoil(msg);
+    } else if (msg.type === 'farm') {
+      const before = view.boughtNest;
+      view.setSoil(msg);
+      showNestControls();
+      // The first picture of the tank, or a tank of the other kind: frame it.
+      if (!framed || before !== view.boughtNest) fit();
+      framed = true;
+    }
     else if (msg.type === 'ants') {
       const now = performance.now();
       view.arena.ants.setAnts(msg, now);
@@ -129,7 +143,7 @@ async function start(): Promise<void> {
           ? `the colony died out at ${formatAntTime(diedOut)}`
           : `brood: ${n[BroodStage.egg]} eggs, ${n[BroodStage.larva]} larvae, ${n[BroodStage.pupa]} pupae`);
     } else if (msg.type === 'heat') {
-      view.heat.setHeat(msg);
+      view.setHeat(msg);
     } else if (msg.type === 'arena') {
       view.arena.setArena(msg);
       if (fitCheck && view.arena.decorations !== fitCheck.before) fitCheck = null;
@@ -146,12 +160,12 @@ async function start(): Promise<void> {
         [d[Cause.heat], 'of heat'],
       ].filter(([count]) => (count as number) > 0);
       counts.textContent =
-        `${msg.ants - msg.out} workers in the farm, ${msg.out} out foraging, ` +
+        `${msg.ants - msg.out} workers in the ${view.boughtNest ? 'nest' : 'farm'}, ${msg.out} out foraging, ` +
         `${msg.queen ? 'the queen' : 'no queen'} · ${msg.stores.toFixed(1)} µL of sugar water in their crops` +
         (died.length > 0 ? ` · dead: ${died.map(([count, what]) => `${count} ${what}`).join(', ')}` : '');
     }
   };
-  send({ type: 'open', seed: asked, fresh: query.has('new') });
+  send({ type: 'open', seed: asked, fresh: query.has('new'), nest });
   // The worker keeps the tank every few seconds; also when the page is hidden or closed.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') send({ type: 'save' });
@@ -201,7 +215,7 @@ async function start(): Promise<void> {
   }
   /** Where the inspected ant is drawn, in the scene's mm, or null while it is out of sight (in the tube). */
   const inspectedAt = () => {
-    const inFarm = view.farmAnts.positionOf(inspected);
+    const inFarm = view.farmAntPosition(inspected);
     if (inFarm) return inFarm;
     return view.arena.ants.positionOf(inspected);
   };
@@ -255,7 +269,9 @@ async function start(): Promise<void> {
     if (showing === 'graphs') drawGraphs(graphBox, msg.censuses, msg.daySeconds, msg.cropLoad);
     if (showing !== 'timelapse') return;
     if (msg.frames.length === 0) {
-      lapseLabel.textContent = 'The first picture of the nest is taken after 5 minutes of ant time.';
+      lapseLabel.textContent = msg.bought
+        ? 'A bought nest keeps its shape, so there is no timelapse of it: the timelapse shows a sand farm being dug.'
+        : 'The first picture of the nest is taken after 5 minutes of ant time.';
       return;
     }
     if (lapse && !lapse.playing) lapse.update(msg.frames, msg.frameSteps);
@@ -365,7 +381,7 @@ async function start(): Promise<void> {
     }
     // A tap on an ant (within a finger's width) opens the inspector on it.
     const reach = Math.max(1.5, 14 / camera.scale);
-    let ant = view.farmAnts.nearest(p.x, p.y, reach);
+    let ant = view.farmAntAt(p.x, p.y, reach);
     if (ant < 0) ant = view.arena.ants.nearest(p.x, p.y, reach);
     if (ant >= 0) {
       inspect(ant);
@@ -399,8 +415,22 @@ async function start(): Promise<void> {
   }
   document.getElementById('clear')!.addEventListener('click', () => command({ type: 'clearFood' }));
   document.getElementById('clean')!.addEventListener('click', () => command({ type: 'clean' }));
+  // A new tank, in a bought nest of the size and layout chosen (DESIGN.md 3.5).
+  const sizeButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-size]')];
+  const layoutButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-layout]')];
+  const choose = (buttons: HTMLButtonElement[], pick: (b: HTMLButtonElement) => boolean) => {
+    for (const b of buttons) b.setAttribute('aria-pressed', String(pick(b)));
+  };
+  choose(sizeButtons, (b) => b.dataset.size === nest.size);
+  choose(layoutButtons, (b) => b.dataset.layout === nest.layout);
+  for (const b of sizeButtons) b.addEventListener('click', () => choose(sizeButtons, (x) => x === b));
+  for (const b of layoutButtons) b.addEventListener('click', () => choose(layoutButtons, (x) => x === b));
   document.getElementById('new-tank')!.addEventListener('click', () => {
-    if (confirm(`Start a new tank? The colony in tank ${seed} will be lost.`)) location.search = `?seed=${seed + 1}&new`;
+    const size = sizeButtons.find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.size ?? DEFAULT_NEST.size;
+    const layout = layoutButtons.find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.layout ?? DEFAULT_NEST.layout;
+    if (confirm(`Start a new tank in a new nest? The colony in tank ${seed} will be lost.`)) {
+      location.search = `?seed=${seed + 1}&new&size=${size}&layout=${layout}`;
+    }
   });
   const trailsButton = document.getElementById('trails')!;
   trailsButton.addEventListener('click', () => {
@@ -408,15 +438,22 @@ async function start(): Promise<void> {
     trailsButton.setAttribute('aria-pressed', String(on));
     view.arena.showTrails = on;
   });
-  // The arena at an angle (DESIGN.md A3), or straight from above, which shows trails best.
+  // The nest and the arena at an angle (DESIGN.md A3, N3), or straight from above, which shows trails best.
   const aboveButton = document.getElementById('from-above')!;
   aboveButton.addEventListener('click', () => {
-    view.arena.angled = !view.arena.angled;
-    aboveButton.setAttribute('aria-pressed', String(!view.arena.angled));
+    view.angled = !view.angled;
+    aboveButton.setAttribute('aria-pressed', String(!view.angled));
     fit();
   });
 
-  // The farm's overlay shows warmth or damp, or neither.
+  /** Says how the nest's water works, which differs between a bought nest and the sand farm. */
+  function showNestControls(): void {
+    document.getElementById('damp-note')!.textContent = view.boughtNest
+      ? 'The ytong is wet near its water hole and drier far from it; the hole refills itself.'
+      : 'Soil darkens when damp; the farm waters itself and never dries.';
+  }
+
+  // The nest's overlay shows warmth or damp, or neither.
   const overlayButtons = [document.getElementById('warmth')!, document.getElementById('damp')!];
   for (const button of overlayButtons) {
     button.addEventListener('click', () => {
@@ -425,11 +462,16 @@ async function start(): Promise<void> {
       view.heat.show = on ? (button.id === 'warmth' ? 'warmth' : 'damp') : null;
     });
   }
+  // The heat mat under the left end, the middle or the right end of the nest (the sand farm's old places).
   const matButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-mat]')];
   for (const button of matButtons) {
     button.addEventListener('click', () => {
       const at = button.dataset.mat;
-      command({ type: 'heatMat', x: at === 'off' ? null : Number(at) });
+      const room = view.nestWidth - MAT_WIDTH;
+      const x = view.boughtNest
+        ? { left: 0, middle: room / 2, right: room }[at as 'left']
+        : { left: 10, middle: 110, right: 210 }[at as 'left'];
+      command({ type: 'heatMat', x: at === 'off' ? null : x });
       for (const b of matButtons) b.setAttribute('aria-pressed', String(b === button));
     });
   }
@@ -454,6 +496,16 @@ function button(label: string, onClick: () => void): HTMLButtonElement {
   b.textContent = label;
   b.addEventListener('click', onClick);
   return b;
+}
+
+/** The bought nest asked for in the page's address, or the default. */
+function nestFrom(query: URLSearchParams): NestSetup {
+  const size = query.get('size') ?? '';
+  const layout = query.get('layout') ?? '';
+  return {
+    size: size in NEST_SIZES ? (size as NestSize) : DEFAULT_NEST.size,
+    layout: ['classic', 'organic', 'honeycomb'].includes(layout) ? (layout as NestLayout) : DEFAULT_NEST.layout,
+  };
 }
 
 function parseSeed(raw: string | null): number {

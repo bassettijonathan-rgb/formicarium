@@ -6,8 +6,9 @@
  * at `matTemperature`; heat spreads through the farm and leaks out through
  * the glass to the room. Between two panes a few mm apart the glass loses
  * heat fast, so the mat warms only the soil within a few cm of it, the way a
- * keeper's mat makes a warm corner rather than a warm farm. The arena and the
- * tube are at room temperature.
+ * keeper's mat makes a warm corner rather than a warm farm. A bought nest
+ * lies on the mat, so the mat warms a strip of its floor instead (DESIGN.md
+ * 3.5). The arena and the tube are at room temperature.
  */
 import { type Farm, FIELD_CELL, smoothAt } from './farm';
 import type { AntParams } from './params';
@@ -51,7 +52,11 @@ export function updateTemperature(farm: Farm, mat: HeatMat | null, params: AntPa
   if (mat) {
     const from = Math.max(0, Math.floor(mat.x / FIELD_CELL));
     const to = Math.min(w, Math.ceil((mat.x + mat.width) / FIELD_CELL));
-    for (let cx = from; cx < to; cx++) t[(h - 1) * w + cx] = params.matTemperature;
+    if (farm.nest) {
+      // A bought nest lies flat on the mat: the whole strip of floor over it is warmed from below.
+      const warm = room + params.nestMatShare * (params.matTemperature - room);
+      for (let cy = 0; cy < h; cy++) for (let cx = from; cx < to; cx++) t[cy * w + cx] = warm;
+    } else for (let cx = from; cx < to; cx++) t[(h - 1) * w + cx] = params.matTemperature;
   }
 }
 
