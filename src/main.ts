@@ -16,6 +16,9 @@ import { DEFAULT_ANT_PARAMS } from './sim/params';
 import { Cause } from './sim/ants';
 import { BroodStage } from './sim/brood';
 import { BROOD_STRIDE, type FromWorker, type HistorySnapshot, type ToWorker } from './worker/protocol';
+import { RoomLayer } from './render/room/roomLayer';
+import { legnanoClock } from './room/sky';
+import { CLEAR, REFRESH_MS, type Weather, fetchLegnanoWeather } from './room/weather';
 
 /** A keeper's sugar drop: 10 µL, about the size of a lentil. */
 const DROP_VOLUME = 10;
@@ -41,11 +44,44 @@ async function start(): Promise<void> {
 
   const view = new TankView(app.renderer);
   app.stage.addChild(view.root);
+  // The keeper's room behind the tank, lit by Legnano's real sky (DESIGN.md section 8.1).
+  const room = new RoomLayer();
+  view.root.addChildAt(room.root, 0);
+  view.root.addChildAt(room.lampGlow, view.root.getChildIndex(view.lit) + 1);
+  const outsideLine = document.getElementById('outside')!;
+  let weather: Weather = CLEAR;
+  let weatherKnown = false;
+  const refreshWeather = async () => {
+    const w = await fetchLegnanoWeather();
+    if (w) {
+      weather = w;
+      weatherKnown = true;
+    }
+  };
+  void refreshWeather();
+  setInterval(() => void refreshWeather(), REFRESH_MS);
+  let lastLine = 0;
+  const showOutside = (ms: number) => {
+    const { hours, minutes, zone } = legnanoClock(ms);
+    const time = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${zone}`;
+    const temperature = weather.temperature !== null ? `${Math.round(weather.temperature)} °C, ` : '';
+    outsideLine.textContent = weatherKnown
+      ? `Outside the window: Legnano, ${time}, ${temperature}${weather.label}.`
+      : `Outside the window: Legnano, ${time}. No weather report yet, so the sky is drawn clear.`;
+  };
   const camera = new Camera(view.root, stage);
   const hud = document.getElementById('hud')!;
   const fit = () => camera.fit(TankView.bounds, hud.getBoundingClientRect().bottom);
   fit();
   document.getElementById('fit')!.addEventListener('click', fit);
+  // The controls fold away to a line, to leave the window and the tank in view.
+  const hudToggle = document.getElementById('hud-toggle')!;
+  hudToggle.addEventListener('click', () => {
+    const small = hud.classList.toggle('small');
+    hudToggle.textContent = small ? 'Show controls' : 'Hide controls';
+    hudToggle.setAttribute('aria-expanded', String(!small));
+    fit();
+  });
 
   /** The step at which the colony died out, or -1 while it lives (from the arena snapshots). */
   let diedOut = -1;
@@ -228,6 +264,13 @@ async function start(): Promise<void> {
   let markerScale = 0;
   app.ticker.add(() => {
     const now = performance.now();
+    const ms = Date.now();
+    room.update(ms, now, weather);
+    view.lit.tint = room.tankTint;
+    if (now - lastLine > 1000) {
+      lastLine = now;
+      showOutside(ms);
+    }
     view.arena.ants.update(now);
     view.farmAnts.update(now);
     const at = inspected >= 0 ? inspectedAt() : null;

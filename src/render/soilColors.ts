@@ -59,3 +59,30 @@ function grainJitter(i: number): number {
   x ^= x >>> 13;
   return (x >>> 0) / 0x1_0000_0000;
 }
+
+/**
+ * Air above the soil is see-through where the surface is at least this wide, mm:
+ * the headspace shows the room behind, but a narrow shaft into the soil stays dark.
+ */
+const OPEN_AIR = 6;
+
+/**
+ * Makes the air above the soil surface see-through (alpha 0), so the headspace
+ * shows the room behind the farm. The surface of each column is the shallowest
+ * first solid cell within OPEN_AIR / 2 columns either side, so tunnel mouths
+ * and narrow shafts stay dark like the rest of the nest.
+ */
+export function clearHeadspace(material: Uint8Array, width: number, height: number, rgba: Uint8ClampedArray): void {
+  const first = new Int32Array(width);
+  for (let x = 0; x < width; x++) {
+    let y = 0;
+    while (y < height && material[y * width + x] === Material.air) y++;
+    first[x] = y;
+  }
+  const reach = Math.floor(OPEN_AIR / 2);
+  for (let x = 0; x < width; x++) {
+    let surface = height;
+    for (let dx = -reach; dx <= reach; dx++) surface = Math.min(surface, first[Math.min(width - 1, Math.max(0, x + dx))]!);
+    for (let y = 0; y < surface; y++) rgba[4 * (y * width + x) + 3] = 0;
+  }
+}
