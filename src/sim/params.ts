@@ -165,6 +165,18 @@ export interface AntParams {
   queenOdourGain: number;
   /** Mean length of a rest, seconds. */
   restLength: number;
+  /**
+   * Aggregation (Depickère et al. 2004): a wandering worker touching `n`
+   * resting nestmates (counted up to `restCompanyMax`) settles 1 +
+   * `restJoin` n times as readily, and rests 1 + `restStay` n times as long.
+   */
+  restJoin: number;
+  restStay: number;
+  restCompanyMax: number;
+  /** Resting nestmates touching beyond which a worker settles (n - restCrowd)² + 1 times less readily: they lie no more than a few deep (rough). */
+  restCrowd: number;
+  /** False: workers ignore resting nestmates when settling (the control for aggregation). */
+  aggregation: boolean;
   /** Time for a forager to walk through the tube, seconds. */
   tubeTime: number;
 
@@ -682,6 +694,11 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   queenSettleAlone: 0.1,
   queenOdourGain: 20,
   restLength: 60,
+  restJoin: 2,
+  restStay: 2,
+  restCompanyMax: 4,
+  restCrowd: 8,
+  aggregation: true,
   tubeTime: 7,
 
   daySeconds: 3600,

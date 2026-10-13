@@ -1110,6 +1110,8 @@ export interface NestRoomResult {
   areaByHour: number[];
   /** Resting workers at the end of each hour. */
   restingByHour: number[];
+  /** Floor under the resting colony (within 1.5 mm of a resting worker: about its body and legs), mm², at the end of each hour. */
+  bodyByHour: number[];
   /** The fewest chambers that hold 90% of the resting workers (each counted in the chamber whose middle is nearest), at the end of each hour; and how many chambers the nest has. */
   chambersByHour: number[];
   chambers: number;
@@ -1117,8 +1119,9 @@ export interface NestRoomResult {
 
 /**
  * Room to grow (Nests 1, DESIGN.md 9.13): `ants` workers and a queen moved
- * into a large ytong nest, far more room than they need. The floor the
- * resting colony covers should grow in proportion to the number of workers
+ * into a large ytong nest, far more room than they need. The colony should
+ * keep together in a few chambers, and the floor under the resting colony
+ * should grow in proportion to the number of workers
  * (Temnothorax colonies choose a nest whose area matches their size, Mallon &
  * Franks 2000; dug nests grow in proportion to the colony, 9.2).
  */
@@ -1130,9 +1133,12 @@ export function runNestRoom(opts: RunOptions & { hours: number; brood?: number; 
   const chambersByHour: number[] = [];
   const chambers = farm.nest!.chambers;
   const covered = new Uint8Array(farm.width * farm.height);
+  const body = new Uint8Array(farm.width * farm.height);
+  const bodyByHour: number[] = [];
   for (let h = 0; h < opts.hours; h++) {
     for (let s = 0; s < 3600 * STEPS_PER_SECOND; s++) step(world);
     covered.fill(0);
+    body.fill(0);
     let resting = 0;
     const inChamber = chambers.map(() => 0);
     for (let i = 0; i < ants.count; i++) {
@@ -1148,11 +1154,14 @@ export function runNestRoom(opts: RunOptions & { hours: number; brood?: number; 
       for (let cy = Math.max(0, Math.floor(y - 3)); cy <= Math.min(farm.height - 1, Math.floor(y + 3)); cy++) {
         for (let cx = Math.max(0, Math.floor(x - 3)); cx <= Math.min(farm.width - 1, Math.floor(x + 3)); cx++) {
           const c = cy * farm.width + cx;
-          if (farm.material[c] === Material.air && (cx + 0.5 - x) ** 2 + (cy + 0.5 - y) ** 2 <= 9) covered[c] = 1;
+          const d2 = (cx + 0.5 - x) ** 2 + (cy + 0.5 - y) ** 2;
+          if (farm.material[c] === Material.air && d2 <= 9) covered[c] = 1;
+          if (farm.material[c] === Material.air && d2 <= 2.25) body[c] = 1;
         }
       }
     }
     areaByHour.push(covered.reduce((a, b) => a + b, 0));
+    bodyByHour.push(body.reduce((a, b) => a + b, 0));
     restingByHour.push(resting);
     inChamber.sort((a, b) => b - a);
     let held = 0;
@@ -1160,5 +1169,5 @@ export function runNestRoom(opts: RunOptions & { hours: number; brood?: number; 
     while (held < 0.9 * resting) held += inChamber[used++]!;
     chambersByHour.push(used);
   }
-  return { areaByHour, restingByHour, chambersByHour, chambers: chambers.length };
+  return { areaByHour, restingByHour, bodyByHour, chambersByHour, chambers: chambers.length };
 }

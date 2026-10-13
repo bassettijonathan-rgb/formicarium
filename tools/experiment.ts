@@ -262,7 +262,7 @@ for (let seed = first; seed < first + runs; seed++) {
     const r = runNestRoom({ seed, hours: hours || 4, ants: ants || 40, params });
     console.log(
       `seed ${seed}, ${ants || 40} workers: floor the resting colony covers by hour ${r.areaByHour.join(' ')} mm²; ` +
-        `resting ${r.restingByHour.join(' ')}; chambers holding 90% of them ${r.chambersByHour.join(' ')} of ${r.chambers}`,
+        `resting ${r.restingByHour.join(' ')}; under them ${r.bodyByHour.join(' ')} mm²; chambers holding 90% of them ${r.chambersByHour.join(' ')} of ${r.chambers}`,
     );
   } else if (name === 'nest-dark') {
     const r = runNestDark({ seed, hours: hours || 2, layout, material, gradient, ...(ants ? { ants } : {}), params });

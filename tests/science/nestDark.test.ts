@@ -25,9 +25,10 @@ describe('brood under a lifted cover', () => {
   it(
     'ants that ignore light (the control) leave much of it in the light',
     () => {
-      const dark = SEEDS.map((seed) => runNestDark({ seed, hours: 1, params: { photophobia: false } }).darkByHour.at(-1)!);
+      // The colony still gathers in one place, so over five tanks it lies on either side.
+      const dark = [1, 2, 3, 4, 5].map((seed) => runNestDark({ seed, hours: 1, params: { photophobia: false } }).darkByHour.at(-1)!);
       expect(dark.reduce((a, b) => a + b, 0) / dark.length).toBeLessThan(0.75);
     },
-    1_800_000,
+    3_600_000,
   );
 });
