@@ -8,6 +8,7 @@ import { type AntContext, type Ants, AntState, Caste, Cause, type Nest, type Nes
 import { die, drawLifespan, dropCorpse } from './corpses';
 import { type Brood, BroodStage, createBrood, scentBrood, stepBrood } from './brood';
 import { type Arena, createArena, evaporateTrail } from './arena';
+import type { Decoration } from './decor';
 import { type Farm, createFarm, updateField, updateFresh } from './farm';
 import type { FoodDrop } from './food';
 import { type AntParams, DEFAULT_ANT_PARAMS } from './params';
@@ -36,6 +37,8 @@ export interface World {
   rng: Uint32Array;
   farm: Farm;
   arena: Arena;
+  /** What lies on the arena's floor (the keeper's tank only; lab arenas are bare). */
+  decor: Decoration[];
   ants: Ants;
   nest: Nest;
   nestMode: NestMode;
@@ -83,6 +86,7 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
     rng: new Rng(seed, Purpose.sim).state,
     farm,
     arena: createArena(),
+    decor: [],
     ants,
     nest: { stores: 0, excitement: 0 },
     nestMode,

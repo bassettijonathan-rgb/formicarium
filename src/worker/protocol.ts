@@ -3,6 +3,7 @@
 import type { Census } from '../sim/history';
 import type { AntCard } from '../sim/inspect';
 import type { KeeperCommand } from '../sim/keeper';
+import type { Decoration } from '../sim/decor';
 
 export type ToWorker =
   /**
@@ -55,8 +56,8 @@ export interface ArenaSnapshot {
   height: number;
   /** Trail pheromone per cell. */
   trail: Float32Array;
-  /** 1 where the floor is blocked (only lab setups have inner walls). */
-  wall: Uint8Array;
+  /** The stones, bark, water tube, leaves, twigs and moss on the floor (DESIGN.md A4). */
+  decor: Decoration[];
   food: { id: number; x: number; y: number; volume: number; concentration: number; protein: number; mouldy: boolean }[];
   /** All workers; those out foraging (in the arena or the tube); sugar water in the colony's crops (µL). */
   ants: number;

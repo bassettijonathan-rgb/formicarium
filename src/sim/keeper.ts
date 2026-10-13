@@ -5,6 +5,9 @@
  * logged with the step it was applied at. A tank's seed and its log are
  * enough to rebuild it exactly, which is how saves stay deterministic.
  */
+import { createArena, isBlocked } from './arena';
+import { layDecorations, stampDecorations } from './decor';
+import { TANK_ARENA } from './tank';
 import {
   cleanArena,
   createWorld,
@@ -41,12 +44,16 @@ export interface LoggedCommand {
 export const TANK_ROOM = 22;
 export const TANK_MAT_X = 110;
 
+/** Where a new tank's first sugar drop goes: 10 cm in from the tube and 4.5 cm toward the back. */
+export const FIRST_DROP = { x: 100, y: TANK_ARENA.height / 2 - 45 } as const;
+
 /**
  * The keeper's tank as the page sets it up: a queen and 60 workers in a room a
- * little cool for Lasius niger, the heat mat under the middle of the farm and
- * a first sugar drop, so a new tank has something to find. The soil dries
- * unless the keeper waters it, what is left to rot goes mouldy, and the
- * colony can die.
+ * little cool for Lasius niger, the heat mat under the middle of the farm, a
+ * 40 x 30 cm arena with stones, bark, leaves and moss laid out from the seed
+ * (DESIGN.md A1, A4), and a first sugar drop, so a new tank has something to
+ * find. The soil dries unless the keeper waters it, what is left to rot goes
+ * mouldy, and the colony can die.
  */
 export function createTank(seed: number): World {
   const world = createWorld(seed, {
@@ -54,18 +61,32 @@ export function createTank(seed: number): World {
     params: { roomTemperature: TANK_ROOM, waterFlow: true, mould: true, mortal: true },
   });
   setHeatMat(world, TANK_MAT_X);
-  placeSugar(world, 100, 55, 40, 1);
+  furnishArena(world, []);
+  placeSugar(world, FIRST_DROP.x, FIRST_DROP.y, 40, 1);
   return world;
+}
+
+/**
+ * Gives a tank the keeper's big arena and lays out its decorations, clear of
+ * the tube's mouth, the first drop and any `keepClear` spots (things already
+ * in the arena when an old tank moves into the new box).
+ */
+export function furnishArena(world: World, keepClear: { x: number; y: number; radius: number }[]): void {
+  world.arena = createArena(TANK_ARENA.width, TANK_ARENA.height);
+  const clear = [{ x: world.arena.entranceX, y: world.arena.entranceY, radius: 45 }, { ...FIRST_DROP, radius: 30 }, ...keepClear];
+  world.decor = layDecorations(world.seed, world.arena.width, world.arena.height, clear);
+  stampDecorations(world.arena, world.decor);
 }
 
 /** Applies a keeper's action to the world. */
 export function applyCommand(world: World, command: KeeperCommand): void {
   switch (command.type) {
     case 'sugar':
-      placeSugar(world, command.x, command.y, command.volume, command.concentration);
+      // Food put down on a stone, the bark or the water tube would roll off out of reach, so it is refused.
+      if (!isBlocked(world.arena, command.x, command.y)) placeSugar(world, command.x, command.y, command.volume, command.concentration);
       break;
     case 'protein':
-      placeProtein(world, command.x, command.y, command.volume);
+      if (!isBlocked(world.arena, command.x, command.y)) placeProtein(world, command.x, command.y, command.volume);
       break;
     case 'clearFood':
       for (const d of [...world.food]) removeFood(world, d.id);

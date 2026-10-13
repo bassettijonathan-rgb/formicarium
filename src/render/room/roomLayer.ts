@@ -54,7 +54,8 @@ export class RoomLayer {
   /** The light falling on the tank, as a tint (0xffffff in full daylight). */
   tankTint = 0xffffff;
 
-  constructor() {
+  /** `vanish` is where the desk's planks, running away from the viewer, meet in the scene. */
+  constructor(private readonly vanish = { x: 443.75, y: -887.5 }) {
     this.view = new Sprite(Texture.from(this.outside.canvas, true));
     this.view.position.set(WINDOW.x, WINDOW.y);
     this.view.width = WINDOW.width;
@@ -152,8 +153,7 @@ export class RoomLayer {
     const bottom = DESK_BACK + FAR;
     g.rect(-FAR, DESK_BACK, 2 * FAR, FAR).fill(0x8a5f3d);
     g.rect(-FAR, DESK_BACK, 2 * FAR, 2.5).fill(0x4c3423);
-    const vx = 443.75;
-    const vy = -887.5;
+    const { x: vx, y: vy } = this.vanish;
     const front = 300;
     const t = (DESK_BACK - vy) / (front - vy);
     for (let x = -3000; x <= 4000; x += 131) {

@@ -2,7 +2,9 @@
  * The ants in one place (the arena or the farm), drawn from the worker's
  * snapshots. Motion is interpolated between the last two snapshots so ants
  * glide smoothly at any simulation speed. Positions are in that place's mm;
- * the layer is put where the place is in the scene.
+ * the layer is put where the place is in the scene. In the angled arena
+ * (DESIGN.md A3) a projection places each ant and flattens it in depth, after
+ * turning it, so it lies on the floor as seen from above at an angle.
  */
 import { Container, Graphics, type Renderer, Sprite, type Texture } from 'pixi.js';
 import { AntState, Caste } from '../sim/ants';
@@ -17,9 +19,14 @@ let shared: Texture[][] | undefined;
 let sharedPale: Texture[][] | undefined;
 let sharedDead: Texture | undefined;
 
+/** Where an ant at (x, y) on its floor is drawn, and how it is stretched across and in depth. */
+export type AntProjection = (x: number, y: number) => { x: number; y: number; sx: number; sy: number };
+
 export class AntLayer {
   readonly root = new Container();
-  private readonly ants: { body: Container; sprite: Sprite; grain: Graphics; material: number }[] = [];
+  /** Set for the angled arena; null draws the place flat, as it is. */
+  project: AntProjection | null = null;
+  private readonly ants: { at: Container; body: Container; sprite: Sprite; grain: Graphics; material: number }[] = [];
   private readonly textures: Texture[][];
   private readonly pale: Texture[][];
   private readonly dead: Texture;
@@ -52,15 +59,17 @@ export class AntLayer {
       const grain = new Graphics();
       const body = new Container();
       body.addChild(sprite, grain);
-      this.ants.push({ body, sprite, grain, material: 0 });
-      this.root.addChild(body);
+      const at = new Container();
+      at.addChild(body);
+      this.ants.push({ at, body, sprite, grain, material: 0 });
+      this.root.addChild(at);
     }
   }
 
-  /** Where ant `i` is drawn this frame, in this place's mm, or null when it is not here. */
+  /** Where ant `i` is drawn this frame, in the layer's coordinates, or null when it is not here. */
   positionOf(i: number): { x: number; y: number } | null {
     const ant = this.ants[i];
-    return ant && ant.body.visible ? { x: ant.body.position.x, y: ant.body.position.y } : null;
+    return ant && ant.at.visible ? { x: ant.at.position.x, y: ant.at.position.y } : null;
   }
 
   /** The ant drawn nearest (x, y) within `radius` mm, living ants before the dead, or -1. */
@@ -69,9 +78,9 @@ export class AntLayer {
     let bestD = radius * radius;
     let bestDead = true;
     for (let i = 0; i < this.ants.length; i++) {
-      const body = this.ants[i]!.body;
-      if (!body.visible) continue;
-      const d = (body.position.x - x) ** 2 + (body.position.y - y) ** 2;
+      const at = this.ants[i]!.at;
+      if (!at.visible) continue;
+      const d = (at.position.x - x) ** 2 + (at.position.y - y) ** 2;
       if (d > radius * radius) continue;
       const dead = this.current?.ants[i * ANT_STRIDE + 3] === AntState.dead;
       if ((bestDead && !dead) || (dead === bestDead && d < bestD)) {
@@ -92,8 +101,8 @@ export class AntLayer {
     for (let i = 0; i < this.ants.length; i++) {
       const ant = this.ants[i]!;
       const o = i * ANT_STRIDE;
-      ant.body.visible = cur.ants[o + 5] === this.place && cur.ants[o + 3] !== AntState.inNest;
-      if (!ant.body.visible) continue;
+      ant.at.visible = cur.ants[o + 5] === this.place && cur.ants[o + 3] !== AntState.inNest;
+      if (!ant.at.visible) continue;
       // Interpolate only if the ant was here in the previous snapshot too.
       const k = prev.ants[o + 5] === this.place && prev.ants[o + 3] !== AntState.inNest ? t : 1;
       const x = prev.ants[o]! + (cur.ants[o]! - prev.ants[o]!) * k;
@@ -101,7 +110,13 @@ export class AntLayer {
       let dh = cur.ants[o + 2]! - prev.ants[o + 2]!;
       dh -= 2 * Math.PI * Math.round(dh / (2 * Math.PI));
       const walked = prev.ants[o + 4]! + (cur.ants[o + 4]! - prev.ants[o + 4]!) * k;
-      ant.body.position.set(x, y);
+      if (this.project) {
+        const p = this.project(x, y);
+        ant.at.position.set(p.x, p.y);
+        ant.at.scale.set(p.sx, p.sy);
+        // Nearer ants are drawn over farther ones and over what they walk behind.
+        ant.at.zIndex = y;
+      } else ant.at.position.set(x, y);
       ant.body.rotation = prev.ants[o + 2]! + dh * k;
       const frame = Math.floor(((walked % STRIDE) / STRIDE) * GAIT_FRAMES) % GAIT_FRAMES;
       const textures = cur.callow[i] ? this.pale : this.textures;

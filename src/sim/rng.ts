@@ -49,6 +49,8 @@ export const Purpose = {
   ages: 5,
   /** Each worker's lifespan, from (tank seed, Purpose.lifespan, ant id). */
   lifespan: 6,
+  /** Laying out the decorations in a new tank's arena. */
+  decor: 7,
   test: 99,
 } as const;
 
