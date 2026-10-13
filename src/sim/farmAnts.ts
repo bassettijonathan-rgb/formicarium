@@ -45,8 +45,8 @@ const INSIDE = 0.5;
 /** Within this distance of the tube's mouth, mm, ants keep the way clear: they drop no spoil and dig out any that blocks it. */
 const TUBE_CLEAR = 15;
 
-/** Scratch, rebuilt every step: whether each ant is touching a resting nestmate. */
-let touchingRest = new Uint8Array(0);
+/** Scratch, rebuilt every step: how many resting nestmates each ant is touching (up to 255). */
+let restingNear = new Uint8Array(0);
 /** Scratch, rebuilt every step: the queens in the farm. */
 const queens: number[] = [];
 /** Scratch for bucketing ants by position: bucket starts, fill pointers, each ant's bucket, ants by bucket. */
@@ -61,8 +61,8 @@ let members = new Int32Array(0);
  */
 export function computeContacts(ctx: AntContext): void {
   const { ants, farm, params } = ctx;
-  if (touchingRest.length !== ants.count) touchingRest = new Uint8Array(ants.count);
-  touchingRest.fill(0);
+  if (restingNear.length !== ants.count) restingNear = new Uint8Array(ants.count);
+  restingNear.fill(0);
   queens.length = 0;
   for (let i = 0; i < ants.count; i++) if (ants.place[i] === Place.farm && ants.caste[i] === Caste.queen) queens.push(i);
 
@@ -116,7 +116,7 @@ export function computeContacts(ctx: AntContext): void {
           touching++;
           if (ants.recruiting[j]! > 0) recruiters++;
           if (ants.broodNeed[j]! > need) need = ants.broodNeed[j]!;
-          if (ants.state[j] === AntState.resting) touchingRest[i] = 1;
+          if (ants.state[j] === AntState.resting && restingNear[i]! < 255) restingNear[i]!++;
         }
       }
     }
@@ -623,7 +623,9 @@ function walkFarm(ctx: AntContext, i: number): void {
     const or = sampleField(farm, farm.odour, rx, ry);
     // The queen keeps to where the colony is thickest, as a queen stays among her workers.
     const strong = inbound || outside || queen || state === AntState.carryingBrood;
-    const gain = strong ? params.odourTurn : params.odourTurn / 4;
+    // In a bought nest, where every chamber is shelter, wandering workers keep to it as strongly (Nests 3a).
+    const stay = params.aggregation && farm.nest ? 1 : 1 / 4;
+    const gain = strong ? params.odourTurn : params.odourTurn * stay;
     if (ol + or > 1e-3) turn += gain * DT * ((or - ol) / (ol + or));
   }
   // Underground, ants heading out (or carrying soil out) follow the fresh air towards the open.
@@ -758,11 +760,16 @@ function walkFarm(ctx: AntContext, i: number): void {
     const onBrood = alone + (params.broodRestGain * n) / (n + params.broodDropHalf);
     // Nor do workers settle in the light (Nests 2).
     const dark = 1 - params.lightRest * lightPull(ctx, farm, i);
-    if (rng.chance(params.restRate * enclosed * (1 + params.restOdourGain * nestLike) * onBrood * dark * DT)) {
+    // Workers stop more readily, and stay longer, beside nestmates already resting (Depickère et al. 2004).
+    // But no more than a few deep: past `restCrowd` resting nestmates touching, a worker hardly settles (rough).
+    const near = params.aggregation && farm.nest ? restingNear[i]! : 0;
+    const company = Math.min(near, params.restCompanyMax);
+    const packed = Math.max(0, near - params.restCrowd);
+    if (rng.chance(params.restRate * enclosed * (1 + params.restOdourGain * nestLike) * onBrood * dark * ((1 + params.restJoin * company) / (1 + packed * packed)) * DT)) {
       ants.state[i] = AntState.resting;
       ants.hasDigSite[i] = 0;
       // A queen rests ten times as long: she spends her life lying in the nest, laying.
-      const length = params.restLength * (ants.caste[i] === Caste.queen ? 10 : 1);
+      const length = params.restLength * (ants.caste[i] === Caste.queen ? 10 : 1) * (1 + params.restStay * company);
       ants.timer[i] = Math.max(1, Math.round(-Math.log(1 - rng.float()) * length * STEPS_PER_SECOND));
     }
   } else if (state === AntState.carrying) {
@@ -802,7 +809,7 @@ function walkFarm(ctx: AntContext, i: number): void {
     }
     const inSeconds = ++ants.timer[i]! / STEPS_PER_SECOND;
     // Home is where the colony smells strong or nestmates rest; with no nest yet, anywhere well inside the farm.
-    if (sampleField(farm, farm.odour, nx, ny) >= params.homeOdour || touchingRest[i] || inSeconds > 90) arriveHome(ctx, i);
+    if (sampleField(farm, farm.odour, nx, ny) >= params.homeOdour || restingNear[i] || inSeconds > 90) arriveHome(ctx, i);
   }
 }
 

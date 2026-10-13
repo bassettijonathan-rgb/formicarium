@@ -351,6 +351,22 @@ the ants cannot dig, so what the colony does is choose where to live in it.
   the brood goes to the dark, drier end (9.14).
 - Validation: section 9, test 16.
 
+**Keeping together (built, Nests 3a).** In the first bought nests a small
+colony spread through a big nest (20 workers over 8-9 of 20 chambers,
+9.13), because every chamber is shelter and the rest of the model drew
+resting workers only to shelter, colony odour and brood. Lasius niger
+workers also stop more readily, and stay stopped longer, beside nestmates
+already resting (Depickère et al. 2004). So in a bought nest, a wandering
+worker touching `n` resting nestmates (up to 4) settles 1 + 2n times as
+readily and rests 1 + 2n times as long (`restJoin`, `restStay`, rough);
+past 8 touching (`restCrowd`, rough: they lie at most a few deep in a
+5 mm chamber) it settles (n - 8)² + 1 times less readily; and wandering
+workers turn toward colony odour as strongly as ants going home, not a
+quarter as strongly. A colony now gathers in a few chambers and fills more
+as it grows (9.13). The sand farm keeps its old rules: its validations
+(digging, nest size, food flow, 9.1-9.3) were tuned without these, and in a
+dug nest the tunnels themselves keep the colony together.
+
 ---
 
 ## 4. One ant
@@ -1544,7 +1560,7 @@ carried a fly into the farm within 2 tank hours, drank it by the brood and
 carried its husk out to the arena, and took the cricket's legs one by one
 over the day.
 
-### 9.13 Results so far (a bought nest, Nests 1)
+### 9.13 Results so far (a bought nest, Nests 1; re-run with Nests 3a)
 
 **Brood in a ytong nest.** `npm run experiment -- nest-damp`;
 `tests/science/nestDamp.test.ts` checks seeds 1-3 over 2 hours. A medium
@@ -1556,41 +1572,42 @@ where it lies is all that is measured. Share of the brood in air at least
 
 | Seed | Nurses as modelled | Nurses ignoring humidity (control) |
 |---|---|---|
-| 1 | 62% → 100% → 100% → 100% | 62% → 62% → 64% → 67% |
-| 2 | 73% → 100% → 100% → 100% | 73% → 80% → 67% → 62% |
+| 1 | 62% → 100% → 96% → 100% | 62% → 67% → 73% → 47% |
+| 2 | 73% → 93% → 98% → 100% | 73% → 40% → 47% → 82% |
+| 3 | 62% → 98% → 100% → 100% | 62% → 33% → 60% → 78% |
 
-Within an hour every brood item is in the damp chambers, mean humidity at
-the brood 98-99%, as keepers see brood kept on the wet side of a ytong
-nest; without hygrotaxis it stays about where it was strewn.
+Within an hour nearly all the brood is in the damp chambers, mean humidity
+at the brood 97-100%, as keepers see brood kept on the wet side of a ytong
+nest. Without hygrotaxis the colony still gathers its brood in one place,
+but that place is wherever the piles happen to grow, damp or not.
 
 **Room to grow.** `npm run experiment -- nest-room`;
-`tests/science/nestRoom.test.ts` checks seeds 1-2 at 20 and 80 workers.
-Workers and a queen strewn through a large classic nest (20 chambers);
-floor covered = floor within 3 mm of a resting worker, after 3 hours:
+`tests/science/nestRoom.test.ts` checks seeds 1-2 at 20 and 160 workers,
+and the control. Workers and a queen strewn through a large classic nest
+(20 chambers), after 3 hours. Floor under the colony = floor within
+1.5 mm of a resting worker (about its body and legs):
 
-| Workers | Seed 1: floor (resting) | Seed 2: floor (resting) | mm² per resting worker | Chambers holding 90% of them |
-|---|---|---|---|---|
-| 20 | 303 mm² (14) | 322 mm² (13) | 22-25 | 8, 9 |
-| 40 | 655 mm² (31) | 651 mm² (27) | 21-24 | 11, 12 |
-| 80 | 1407 mm² (67) | 1321 mm² (60) | 21-22 | 14, 16 |
-| 160 | 2519 mm² (120) | 2429 mm² (112) | 21-22 | 15, 15 |
+| Workers | Floor under the colony (resting), seeds 1, 2 | mm² per resting worker | Chambers holding 90% of them |
+|---|---|---|---|
+| 20 | 80 (19), 56 (17) | 3.3-4.2 | 2, 2 |
+| 40 | 165 (39), 102 (35) | 2.9-4.2 | 4, 2 |
+| 80 | 320 (75), 277 (66) | 4.2-4.3 | 6, 7 |
+| 160 | 501 (145), 713 (146) | 3.5-4.9 | 7, 11 |
+| 20, not settling beside nestmates (control) | 92 (14), 99 (15) | 6.6 | 8, 9 |
 
-The floor the colony covers grows in proportion to its workers, about
-22 mm² each, as nests (dug, 9.2, or chosen, Mallon & Franks 2000) match
-the colony. **Gap:** the colony is looser than a real one. A small colony
-spreads through many chambers (20 workers over 8-9 of 20) instead of
-keeping together in a corner of a big nest, even when tipped into one
-chamber with its brood (6-9 chambers after 1-3 hours). Resting is drawn by
-shelter, colony odour and the brood, and in a bought nest every chamber is
-shelter. Lasius niger workers also stop more readily and stay longer
-beside resting nestmates (Depickère et al. 2004), which the model does not
-have; that is the likely fix, needed before Nests 3, where a colony should
-move into a new module only when the first is full.
+The colony keeps together and fills more of the nest as it grows: the
+floor under it grows in proportion to its workers (3-5 mm² each, ants
+lying close, a few deep in places), as nests (dug, 9.2, or chosen, Mallon
+& Franks 2000) match the colony; 20 workers keep to 1-2 chambers of 20.
+Before Nests 3a (the control row) a small colony spread through 8-9
+chambers, lying apart. How deep Lasius niger workers pile up in a resting
+cluster has not been measured as far as I know; `restCrowd` is the
+model's guess.
 
 ### 9.14 Results so far (darkness, Nests 2)
 
 `npm run experiment -- nest-dark`; `tests/science/nestDark.test.ts` checks
-seeds 1-3 over 1 hour. A medium classic nest with its cover lifted from the
+seeds 1-3 over 1 hour (the control over 5 tanks). A medium classic nest with its cover lifted from the
 left half (the water end), 60 workers and 45 eggs, larvae and pupae strewn
 through all its chambers (more of the floor is in the right half, so more
 than half starts under the cover). Share of the brood under the cover, at
@@ -1598,13 +1615,16 @@ the start and after each hour:
 
 | Seed | Soaked ytong, as modelled | Soaked, ants ignoring light (control) | Ytong wet at the lit end | Acrylic, sponge at the lit end |
 |---|---|---|---|---|
-| 1 | 64% → 100% → 100% | 64% → 67% → 69% | 64% → 100% → 100% | 64% → 80% → 100% |
-| 2 | 58% → 100% → 100% | 58% → 49% → 62% | 58% → 100% → 100% | 58% → 98% → 98% |
-| 3 | 71% → 100% → 100% | 71% → 80% → 96% | 71% → 100% → 100% | 71% → 100% → 100% |
+| 1 | 64% → 98% → 100% | 64% → 56% → 64% | 64% → 98% → 100% | 64% → 87% → 82% |
+| 2 | 58% → 100% → 100% | 58% → 82% → 69% | 58% → 96% → 100% | 58% → 91% → 91% |
+| 3 | 71% → 100% → 98% | 71% → 71% → 64% | 71% → 98% → 100% | 71% → 98% → 100% |
+| 4 | | 73% → 29% → 33% | | |
+| 5 | | 64% → 62% → 67% | | |
 
-Within an hour all the brood is in the dark, and 89-100% of the resting
-workers with it; without the dislike of light the brood drifts at random
-(49-80% after an hour). When the lit end is also the damp end, light wins:
+(Re-run with Nests 3a.) Within an hour nearly all the brood is in the
+dark, and 98-100% of the resting workers with it; without the dislike of
+light the colony gathers on one side or the other (29-82% under the cover
+after an hour, 5 tanks). When the lit end is also the damp end, light wins:
 the brood goes to the dark, drier half, which in ytong is still damp near
 the cover's edge, and in acrylic is at the room's humidity. Keepers report
 that a colony moves its brood away from a lifted cover within minutes; how
@@ -1647,7 +1667,7 @@ Each milestone is one or a few small PRs, merged by Marco, with a link to play.
 | M7 | Optional extras: second colony and war, other species, nuptial flights |
 | L | Looks (asked by Marco 2026-10-13, section 8.1): L1 the room and the window onto Legnano with its real sky and weather; L2 a bigger arena seen at an angle, with decorations |
 | A | The arena (asked by Marco 2026-10-13, section 3.4): Arena 1 climbing; Arena 2 dishes, feeders and placing objects; Arena 3 feeder insects |
-| N | Bought nests (asked by Marco 2026-10-13, section 3.5): Nests 1 one ytong nest, in three sizes and three layouts; Nests 2 plaster, acrylic and wood, covers and light; Nests 3 modules, tubes and cotton plugs, the test-tube start and moving house |
+| N | Bought nests (asked by Marco 2026-10-13, section 3.5): Nests 1 one ytong nest, in three sizes and three layouts; Nests 2 plaster, acrylic and wood, covers and light; Nests 3a keeping together (settling beside resting nestmates); Nests 3 modules, tubes and cotton plugs, the test-tube start and moving house |
 
 If a validation test in M1 or M2 cannot be made to pass with plausible
 parameters, I stop and report before changing the model.
