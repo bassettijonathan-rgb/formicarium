@@ -438,7 +438,10 @@ dug nest the tunnels themselves keep the colony together.
   table clear of everything else (`moveModule`, rounded to 2 mm). The block
   takes its damp and the smells soaked into it with it; the table it left
   is bare.
-- **Not yet:** connecting an old sand-farm tank to a bought nest.
+- **Dropped:** joining an old sand-farm tank to a bought nest (N1). The
+  upright side-view farm and the flat table would have to share one picture
+  and one set of ant rules; old sand tanks keep working as they are, and a
+  new tank starts a colony in a test tube (Marco, 2026-10-14).
 - Validation: section 9, tests 17 and 18.
 
 ---
