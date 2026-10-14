@@ -91,6 +91,14 @@
       #graph-box canvas { width: 100%; height: 190px; background: #16191e; border-radius: 5px; }
       #lapse { display: block; width: 100%; max-height: 60vh; object-fit: contain; image-rendering: pixelated; margin: 8px 0; }
       #lapse-at { flex: 1; }
+
+      /* Several colonies on one table (DESIGN.md 3.6): a chip for each, and the whole table seen from above. */
+      #colonies button { border-radius: 999px; padding: 3px 11px; }
+      #whole { position: fixed; left: 0; right: 0; background: #16191e; display: grid;
+        grid-template-rows: auto 1fr; gap: 6px; padding: 8px 10px; box-sizing: border-box; }
+      #whole canvas { width: 100%; height: 100%; min-height: 0; display: block; cursor: pointer; }
+      #whole .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      #whole h2 { font: 600 16px/1.2 Georgia, serif; margin: 0; color: var(--title); }
     </style>
   </head>
   <body>
@@ -100,6 +108,7 @@
       <button id="to-tanks">‹ Tanks</button>
       <span id="tank-name"></span>
       <span id="clock"></span>
+      <span class="row" id="colonies"></span>
       <span class="spacer"></span>
       <span class="seg">
         <button data-speed="0">Pause</button>
@@ -164,9 +173,11 @@
         </span>
       </div>
       <div class="pane" data-pane="colony" hidden>
-        <span class="hint">How the colony has grown since the tank was set up.</span>
+        <span class="hint" id="colony-hint">How the colony has grown since it was set up. A table holds up to four colonies, each with its own nests and arena.</span>
         <button id="graphs">Colony graphs</button>
         <button id="timelapse">Timelapse of the nest</button>
+        <button class="primary" id="new-colony">New colony</button>
+        <button id="give-away">Give this colony away</button>
       </div>
       <nav id="tabs" role="tablist">
         <button role="tab" data-tab="watch" aria-selected="true">Watch</button>
@@ -178,6 +189,10 @@
       </nav>
     </div>
 
+    <div id="whole" hidden>
+      <div class="bar"><h2>The whole table</h2><span class="note" id="whole-hint"></span><span style="flex: 1"></span><button id="whole-close">Close</button></div>
+      <canvas id="whole-canvas"></canvas>
+    </div>
     <div id="card" hidden></div>
     <div id="inspector" hidden></div>
     <div id="away" hidden></div>

@@ -2,13 +2,14 @@
  * A kept tank as a file (U2): the save as JSON, its typed arrays in base64,
  * gzipped. Saved from one browser it loads in another.
  */
-import type { Save } from '../sim/save';
+import { isTable } from '../sim/colonies';
+import type { Kept } from '../worker/store';
 
 const TYPED = { Uint8Array, Uint16Array, Uint32Array, Int8Array, Int16Array, Int32Array, Float32Array, Float64Array } as const;
 type TypedName = keyof typeof TYPED;
 
 /** Writes the save to a gzipped file for the keeper to download. */
-export async function tankFile(save: Save): Promise<Blob> {
+export async function tankFile(save: Kept): Promise<Blob> {
   const json = JSON.stringify(save, (_key, value: unknown) => {
     if (ArrayBuffer.isView(value) && !(value instanceof DataView)) {
       const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
@@ -21,8 +22,8 @@ export async function tankFile(save: Save): Promise<Blob> {
   return new Response(gzip).blob();
 }
 
-/** Reads a file written by `tankFile`, or returns null when it is not one. */
-export async function readTankFile(file: Blob): Promise<Save | null> {
+/** Reads a file written by `tankFile` (a table, or one tank from before tables), or returns null when it is not one. */
+export async function readTankFile(file: Blob): Promise<Kept | null> {
   try {
     const text = await new Response(file.stream().pipeThrough(new DecompressionStream('gzip'))).text();
     const save = JSON.parse(text, (_key, value: unknown) => {
@@ -35,8 +36,10 @@ export async function readTankFile(file: Blob): Promise<Save | null> {
       }
       if (value && typeof value === 'object' && '$number' in value) return Number((value as { $number: string }).$number);
       return value;
-    }) as Save;
-    return typeof save?.seed === 'number' && save.world ? save : null;
+    }) as Kept | null;
+    if (!save || typeof save !== 'object') return null;
+    if (isTable(save)) return save.colonies.length > 0 && save.colonies.every((c) => typeof c.seed === 'number' && c.world) ? save : null;
+    return typeof save.seed === 'number' && save.world ? save : null;
   } catch {
     return null;
   }

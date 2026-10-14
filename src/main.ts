@@ -28,6 +28,7 @@ import { MAT_WIDTH } from './sim/heat';
 import { legnanoClock } from './room/sky';
 import { CLEAR, REFRESH_MS, type Weather, fetchLegnanoWeather } from './room/weather';
 import { download, readTankFile, tankFile } from './ui/tankFile';
+import { WholeTable } from './ui/wholeTable';
 
 /** A keeper's sugar drop: 10 µL, about the size of a lentil. */
 const DROP_VOLUME = 10;
@@ -51,6 +52,7 @@ async function start(): Promise<void> {
   const inspector = $('inspector');
   const startScreen = $('start');
   const newScreen = $('new');
+  const whole = $('whole');
 
   const app = new Application();
   await app.init({ resizeTo: stage, background: 0x111317, antialias: true, autoDensity: true, resolution: devicePixelRatio });
@@ -94,6 +96,9 @@ async function start(): Promise<void> {
     card.style.top = `${barTop() + 6}px`;
     inspector.style.bottom = `${barBottom() + 10}px`;
     away.style.bottom = `${barBottom() + 10}px`;
+    whole.style.top = `${barTop()}px`;
+    whole.style.bottom = `${barBottom()}px`;
+    if (!whole.hidden) wholeTable.draw();
   };
   new ResizeObserver(placeOverlays).observe(top);
   new ResizeObserver(placeOverlays).observe(dock);
@@ -117,6 +122,13 @@ async function start(): Promise<void> {
   let broodLine = '';
   let colonyLine = '';
   let tanks: ShelfEntry[] = [];
+  /** The colonies on the running table, by place; the one shown; the places still free (DESIGN.md 3.6). */
+  let colonies: { name: string; slot: number }[] = [];
+  let chosenSlot = -1;
+  let freeSlots: number[] = [];
+  const wholeTable = new WholeTable($('whole-canvas') as HTMLCanvasElement);
+  /** A new colony waiting for the keeper to choose its place on the table. */
+  let newColony: { name: string; nest: NestSetup } | null = null;
 
   worker.onmessage = (e: MessageEvent<FromWorker>) => {
     const msg = e.data;
@@ -132,6 +144,8 @@ async function start(): Promise<void> {
     else if (msg.type === 'ant') {
       if (msg.id === inspected) showAntCard(msg.card);
     } else if (msg.type === 'history') showHistory(msg);
+    else if (msg.type === 'colonies') showColonies(msg.colonies, msg.chosen, msg.free);
+    else if (msg.type === 'overview') wholeTable.set(msg.colonies, chosenSlot, freeSlots);
     else if (msg.type === 'farm') {
       const before = view.boughtNest;
       farm = msg;
@@ -178,6 +192,7 @@ async function start(): Promise<void> {
         [d[Cause.heat], 'of heat'],
       ].filter(([count]) => (count as number) > 0);
       colonyLine =
+        (colonies.length > 1 ? `${colonies.find((c) => c.slot === chosenSlot)?.name ?? ''}: ` : '') +
         `${msg.ants - msg.out} workers in the ${view.boughtNest ? 'nest' : 'farm'}, ${msg.out} out foraging, ` +
         `${msg.queen ? 'the queen' : 'no queen'} · ${msg.stores.toFixed(1)} µL of sugar water in their crops` +
         (died.length > 0 ? ` · dead: ${died.map(([count, what]) => `${count} ${what}`).join(', ')}` : '');
@@ -192,7 +207,8 @@ async function start(): Promise<void> {
 
   // ---- The start screen: the kept tanks, a new one, or one from a file (U1-U3).
   const showStart = () => {
-    for (const el of [top, dock, counts, card, away, newScreen]) el.hidden = true;
+    for (const el of [top, dock, counts, card, away, newScreen, whole]) el.hidden = true;
+    newColony = null;
     inspect(-1);
     closeHistory();
     cancelModes();
@@ -218,7 +234,12 @@ async function start(): Promise<void> {
     const row = document.createElement('div');
     row.className = 'tank';
     const days = Math.floor(t.step / STEPS_PER_SECOND / DAY_SECONDS) + 1;
-    const colony = t.workers > 0 || t.queen ? `${t.workers} workers${t.queen ? '' : ', no queen'}` : 'the colony has died out';
+    const many = (t.colonies ?? 1) > 1;
+    const colony = many
+      ? `${t.colonies} colonies, ${t.workers} workers`
+      : t.workers > 0 || t.queen
+        ? `${t.workers} workers${t.queen ? '' : ', no queen'}`
+        : 'the colony has died out';
     const actions = document.createElement('div');
     actions.className = 'row';
     const plain = () =>
@@ -292,6 +313,9 @@ async function start(): Promise<void> {
     newScreen.hidden = true;
     for (const el of [top, dock, counts]) el.hidden = false;
     away.hidden = true;
+    whole.hidden = true;
+    newColony = null;
+    chosenSlot = -1;
     $('tank-name').textContent = name;
     framed = false;
     diedOut = -1;
@@ -313,7 +337,7 @@ async function start(): Promise<void> {
     away.hidden = false;
     away.replaceChildren(
       text('h2', 'Welcome back'),
-      text('p', `While the tank was closed its colony lived on. Catching up: day ${days(done)} of ${days(total)}…`),
+      text('p', `While the tank was closed ${colonies.length > 1 ? 'its colonies' : 'its colony'} lived on. Catching up: day ${days(done)} of ${days(total)}…`),
       button('Skip the rest', () => send({ type: 'skip' })),
     );
   }
@@ -321,6 +345,113 @@ async function start(): Promise<void> {
     away.hidden = false;
     away.replaceChildren(text('h2', 'While you were away'), ...lines.map((l) => text('p', l)), button('Close', () => (away.hidden = true)));
   }
+
+  // ---- Several colonies on one table (DESIGN.md 3.6): a chip for each, the whole table, a new colony, giving one away.
+  function showColonies(list: { name: string; slot: number }[], chosen: number, free: number[]): void {
+    const changed = chosen !== chosenSlot;
+    colonies = list;
+    chosenSlot = chosen;
+    freeSlots = free;
+    const box = $('colonies');
+    box.replaceChildren();
+    if (list.length > 1) {
+      for (const c of list) {
+        const b = button(c.name, () => send({ type: 'choose', slot: c.slot }));
+        b.setAttribute('aria-pressed', String(c.slot === chosen));
+        box.append(b);
+      }
+      box.append(button('Whole table', () => openWhole(false)));
+    }
+    const shown = list.find((c) => c.slot === chosen);
+    $('give-away').textContent = shown ? `Give ${shown.name} away` : 'Give this colony away';
+    $('new-colony').toggleAttribute('disabled', free.length === 0);
+    wholeTable.set(null, chosenSlot, freeSlots);
+    if (changed) {
+      // Another colony: its own nests, arena, inspector and graphs.
+      framed = false;
+      diedOut = -1;
+      lapse = undefined;
+      inspect(-1);
+      cancelModes();
+      closeHistory();
+    }
+  }
+  /** Shows the whole table; `placing` while the keeper chooses where a new colony goes. */
+  function openWhole(placing: boolean): void {
+    whole.hidden = false;
+    counts.hidden = true;
+    wholeTable.placing = placing;
+    $('whole-hint').textContent = placing ? 'Tap a free place for the new colony.' : 'Tap a colony to watch it and look after it.';
+    placeOverlays();
+    send({ type: 'overview', on: true });
+  }
+  function closeWhole(): void {
+    whole.hidden = true;
+    counts.hidden = top.hidden;
+    wholeTable.placing = false;
+    newColony = null;
+    send({ type: 'overview', on: false });
+  }
+  $('whole-close').addEventListener('click', closeWhole);
+  $('whole-canvas').addEventListener('click', (e) => {
+    const r = (e.target as HTMLElement).getBoundingClientRect();
+    const slot = wholeTable.slotAt(e.clientX - r.left, e.clientY - r.top);
+    if (slot < 0) return;
+    if (newColony) {
+      if (!freeSlots.includes(slot)) return;
+      send({ type: 'addColony', name: newColony.name, slot, nest: newColony.nest });
+      closeWhole();
+    } else if (colonies.some((c) => c.slot === slot)) {
+      if (slot !== chosenSlot) send({ type: 'choose', slot });
+      closeWhole();
+    }
+  });
+  $('new-colony').addEventListener('click', () => {
+    cancelModes();
+    if (freeSlots.length === 0) return;
+    let n = colonies.length + 1;
+    while (colonies.some((c) => c.name === `Colony ${n}`)) n++;
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.value = `Colony ${n}`;
+    let startIn: 'tube' | 'nest' = 'tube';
+    const pick: Required<Pick<NestSetup, 'size' | 'layout' | 'material'>> = { ...newPick };
+    const picker = nestPicker(pick);
+    picker.hidden = true;
+    const where = choices<'tube' | 'nest'>([['tube', 'In a test tube'], ['nest', 'In a bought nest']], () => startIn, (k) => {
+      startIn = k;
+      picker.hidden = k !== 'nest';
+    });
+    showCard('New colony', [
+      'A colony as keepers buy one: a queen, her first workers and a little brood, with its own new arena. It never meets the other colonies.',
+      name,
+      where,
+      picker,
+    ], [
+      ['Choose its place', () => {
+        newColony = { name: name.value.trim() || `Colony ${n}`, nest: startIn === 'tube' ? TEST_TUBE_SETUP : { ...pick } };
+        closeCard();
+        openWhole(true);
+      }, true],
+      ['Cancel', closeCard],
+    ]);
+  });
+  $('give-away').addEventListener('click', () => {
+    cancelModes();
+    const shown = colonies.find((c) => c.slot === chosenSlot);
+    if (!shown) return;
+    if (colonies.length <= 1) {
+      showCard(`Give ${shown.name} away`, ['A table keeps at least one colony. To start again, make a new tank from the list of tanks.'], [['Close', closeCard]]);
+      return;
+    }
+    showCard(`Give ${shown.name} away?`, ['It leaves the table for good, with its nests and its arena.'], [
+      ['Give it away', () => {
+        send({ type: 'removeColony', slot: shown.slot });
+        closeCard();
+      }, true],
+      ['Keep it', closeCard],
+    ]);
+  });
 
   // ---- The tabs (U4): one set of tools at a time.
   let tab: Tab = 'watch';

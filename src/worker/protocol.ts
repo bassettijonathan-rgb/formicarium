@@ -6,8 +6,8 @@ import type { KeeperCommand } from '../sim/keeper';
 import type { Decoration } from '../sim/decor';
 import type { Insect, Part } from '../sim/prey';
 import type { NestLayout, NestMaterial, NestSetup, NestSize, TubeEnd } from '../sim/nest';
-import type { Save } from '../sim/save';
-import type { ShelfEntry } from './store';
+import type { TableSave } from '../sim/colonies';
+import type { Kept, ShelfEntry } from './store';
 
 export type ToWorker =
   /** Sends the kept tanks for the start screen (`tanks`) (U1, U2). */
@@ -17,7 +17,7 @@ export type ToWorker =
   /** Sets up a new tank called `name`, its colony in `nest` (a test tube or a bought nest), and opens it (U3). */
   | { type: 'create'; name: string; nest: NestSetup }
   /** Keeps a tank read from a file as a new tank called `name`, and opens it. */
-  | { type: 'import'; save: Save; name: string }
+  | { type: 'import'; save: Kept; name: string }
   /** Keeps the running tank and stops it (back to the start screen). */
   | { type: 'close' }
   | { type: 'rename'; id: string; name: string }
@@ -35,7 +35,15 @@ export type ToWorker =
   /** Watch one ant in the inspector (M6b), or none. */
   | { type: 'inspect'; id: number | null }
   /** Send the colony's history, for the graphs and the timelapse (M6c). */
-  | { type: 'history' };
+  | { type: 'history' }
+  /** Show colony `slot` of the table: the snapshots are of it and the keeper's tools act on it (DESIGN.md 3.6). */
+  | { type: 'choose'; slot: number }
+  /** Set up a new colony called `name` in free place `slot`, its colony in `nest` (T3); it is then shown. */
+  | { type: 'addColony'; name: string; slot: number; nest: NestSetup }
+  /** Give colony `slot` away (T4). */
+  | { type: 'removeColony'; slot: number }
+  /** While on, the page hears where every colony's ants are (`overview`), for the picture of the whole table. */
+  | { type: 'overview'; on: boolean };
 
 /** Numbers per ant in `AntsSnapshot.ants`. */
 export const ANT_STRIDE = 7;
@@ -163,7 +171,11 @@ export type FromWorker =
   /** Whether a keeper's change to the table was done (refused: no room, not empty, no free port, no way for a tube). */
   | { type: 'result'; command: KeeperCommand['type']; ok: boolean }
   /** The running tank as a save, to be written to a file. */
-  | { type: 'exported'; name: string; save: Save }
+  | { type: 'exported'; name: string; save: TableSave }
+  /** The colonies on the table by place, the one shown (`chosen`, a place), and the places still free. */
+  | { type: 'colonies'; chosen: number; colonies: { name: string; slot: number }[]; free: number[] }
+  /** Every colony's setup and ants, for the picture of the whole table. */
+  | { type: 'overview'; colonies: ColonyView[] }
   /** A tank from a file could not be read. */
   | { type: 'importFailed' }
   /** Catching up on the time the tank was closed: steps done of `total`. */
@@ -206,3 +218,19 @@ export interface PieceView {
 }
 
 export const Look = { closed: 0, open: 1, husk: 2, mouldy: 3 } as const;
+
+/** What the picture of the whole table shows of one colony (DESIGN.md 3.6). */
+export interface ColonyView {
+  name: string;
+  slot: number;
+  workers: number;
+  queen: boolean;
+  /** The nests' table (or the sand farm), mm, and its nests and tubes; null for a sand farm. */
+  nestWidth: number;
+  nestHeight: number;
+  table: TableShape | null;
+  arenaWidth: number;
+  arenaHeight: number;
+  /** Per ant in sight: x, y (mm, in the arena or on the nests' table) and `Place`. */
+  ants: Float32Array;
+}

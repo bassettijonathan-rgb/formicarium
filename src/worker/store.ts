@@ -6,6 +6,10 @@
  * its own key rather than overwritten.
  */
 import type { Save } from '../sim/save';
+import type { TableSave } from '../sim/colonies';
+
+/** A kept tank: a table of colonies, or one colony kept before tables had several (DESIGN.md 3.6). */
+export type Kept = Save | TableSave;
 
 const DB_NAME = 'formicarium';
 const STORE = 'tanks';
@@ -24,6 +28,8 @@ export interface ShelfEntry {
   step: number;
   workers: number;
   queen: boolean;
+  /** How many colonies are on the table (absent for entries kept before tables had several: one). */
+  colonies?: number;
   /** When it was last kept, ms since 1970 by the page's clock. */
   savedAt: number;
 }
@@ -57,7 +63,7 @@ function request<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => ID
  * The kept tanks, most recently kept first. A tank kept before the list
  * existed joins it now, named after its seed.
  */
-export async function readShelf(summary: (save: Save) => Omit<ShelfEntry, 'id' | 'name' | 'savedAt'>): Promise<ShelfEntry[]> {
+export async function readShelf(summary: (save: Kept) => Omit<ShelfEntry, 'id' | 'name' | 'savedAt'>): Promise<ShelfEntry[]> {
   try {
     let shelf = (await request<ShelfEntry[] | undefined>('readonly', (s) => s.get(SHELF_KEY))) ?? [];
     const old = await request<Save | undefined>('readonly', (s) => s.get(OLD_TANK_KEY));
@@ -76,7 +82,7 @@ export async function readShelf(summary: (save: Save) => Omit<ShelfEntry, 'id' |
 }
 
 /** A summary that does not fail on a save too old to read. */
-function safeSummary(summary: (save: Save) => Omit<ShelfEntry, 'id' | 'name' | 'savedAt'>, save: Save): Omit<ShelfEntry, 'id' | 'name' | 'savedAt'> {
+function safeSummary(summary: (save: Kept) => Omit<ShelfEntry, 'id' | 'name' | 'savedAt'>, save: Save): Omit<ShelfEntry, 'id' | 'name' | 'savedAt'> {
   try {
     return summary(save);
   } catch {
@@ -101,9 +107,9 @@ export function freeName(name: string, shelf: readonly ShelfEntry[]): string {
 }
 
 /** The kept tank `id`, or undefined. */
-export async function readTank(id: string): Promise<Save | undefined> {
+export async function readTank(id: string): Promise<Kept | undefined> {
   try {
-    return await request<Save | undefined>('readonly', (s) => s.get(tankKey(id)));
+    return await request<Kept | undefined>('readonly', (s) => s.get(tankKey(id)));
   } catch {
     return undefined;
   }
@@ -113,7 +119,7 @@ export async function readTank(id: string): Promise<Save | undefined> {
  * Keeps tank `entry.id` and its line on the shelf. The world is copied when
  * this is called, so the caller can go on stepping it at once.
  */
-export async function writeTank(save: Save, entry: ShelfEntry): Promise<void> {
+export async function writeTank(save: TableSave, entry: ShelfEntry): Promise<void> {
   const copy = structuredClone(save);
   await request('readwrite', (s) => s.put(copy, tankKey(entry.id)));
   const shelf = (await request<ShelfEntry[] | undefined>('readonly', (s) => s.get(SHELF_KEY))) ?? [];
@@ -137,6 +143,6 @@ export async function deleteTank(id: string): Promise<void> {
 }
 
 /** Moves a save this code cannot read out of the way, so it is not overwritten. */
-export function setAside(save: Save): Promise<void> {
+export function setAside(save: Kept): Promise<void> {
   return request('readwrite', (s) => s.put(save, SET_ASIDE_KEY));
 }
