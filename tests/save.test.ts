@@ -86,7 +86,7 @@ describe('catching up on the time the tank was closed', () => {
   });
 
   it(`stops at ${CATCH_UP_DAYS} tank days (D7)`, () => {
-    expect(catchUpSteps(world, 10 * day)).toBe(CATCH_UP_DAYS * day * STEPS_PER_SECOND);
+    expect(catchUpSteps(world, 30 * day)).toBe(CATCH_UP_DAYS * day * STEPS_PER_SECOND);
   });
 });
 

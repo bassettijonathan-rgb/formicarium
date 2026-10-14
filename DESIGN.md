@@ -49,7 +49,7 @@ Each row has a recommendation. Approving the doc as written accepts all of them.
 | D4 | How does digging work? | **Grain-level soil** (each cell is ~1 mm of sand, loam or clay with moisture) and **stigmergic digging**: ants pick up grains where others dug recently and drop them where pellets pile up, guided by a short-lived building pheromone in the soil (Khuong et al. 2016). Unsupported soil collapses, dry sand more than damp clay. | Ants dig along a pre-made tunnel template. Easier, but nothing emerges. |
 | D5 | Who does which job? | **Response thresholds** (Bonabeau et al. 1996): each ant has its own threshold per task stimulus (hungry larvae, dirty chamber, food smell) and that threshold drifts with age and experience. Young ants nurse, old ants forage, with no rule saying so. | Fixed castes by age. |
 | D6 | Two clocks | Ants **move in real time** (1 s of sim = 1 s of ant life at 1x). Development (egg to adult, queen laying rate, ageing) runs **compressed**, default 1 real day of the tank = 1 hour of play, adjustable. Every ratio inside each clock stays real. | One clock: real Lasius takes ~2 months egg to worker and years to grow, too slow to watch. |
-| D7 | Does the tank live while the tab is closed? | **Yes, capped.** On reopening, the sim catches up headless at max speed for the time you were away, up to 3 tank-days, then shows a short log of what happened ("12 workers eclosed, mould in chamber 3"). | Paused while closed (no aquarium feeling). |
+| D7 | Does the tank live while the tab is closed? | **Yes, capped.** On reopening, the sim catches up headless at max speed for the time you were away, up to 10 tank-days (3 until Marco raised it, 2026-10-14), then shows a short log of what happened ("12 workers eclosed, mould in chamber 3"). | Paused while closed (no aquarium feeling). |
 | D8 | Scale | Tank 30 x 20 cm at 1 mm cells (300 x 200 soil grid), arena 20 x 20 cm (40 x 30 cm from L2, section 3.3; the validation experiments keep 20 x 20). Up to **2,000 ants** at 60 fps. Real Lasius colonies reach 10,000+; this is a young colony, which is what ant farms hold anyway. | Bigger tanks later if performance allows. |
 | D9 | What can you do? | Feed (sugar water, protein: insects, seeds), water the soil (since 2026-10-13 the farm waters itself, section 7.7), move the heat mat, add fresh soil, clean the arena, start a new tank. Observation tools: pheromone and temperature overlays, follow an ant, ant inspector with its life history, colony graphs, timelapse. | Interventions like "introduce a second colony" or "add a predator" are M7, after the core is solid. |
 | D10 | Can the colony die? | **Yes.** Starvation, drying out, overheating, mould, or the queen dying of age. A dead tank stays viewable with its history. | Invulnerable queen. |
@@ -1080,9 +1080,11 @@ What M6a builds (`src/sim/keeper.ts`, `src/sim/save.ts`, `src/worker/store.ts`):
    the save format; an old save is then set aside, not overwritten, and the
    page says so.
 4. **Catching up (D7).** On reopening, the tank lives through the time it
-   was closed, at 1× (an hour away is a tank day), up to 3 tank days. It
-   runs as fast as it can, about a minute for 3 days with a young colony;
-   the page shows the progress and can skip the rest. It lives through it
+   was closed, at 1× (an hour away is a tank day), up to 10 tank days
+   (Marco, 2026-10-14; it was 3). It runs as fast as it can, about 20
+   seconds a tank day for a new tank, so about 3 minutes for the full 10
+   days, longer for a big colony; the page shows the progress and can
+   skip the rest. It lives through it
    even if it was paused, since a real tank does not pause. A tank closed
    for less than 10 minutes (a look at another tank, say) catches up
    without a word.

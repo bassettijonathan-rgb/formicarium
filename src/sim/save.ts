@@ -41,7 +41,7 @@ export interface Save {
 }
 
 /** A closed tank lives on for at most this many tank days (D7). */
-export const CATCH_UP_DAYS = 3;
+export const CATCH_UP_DAYS = 10;
 
 /**
  * How many steps a tank closed for `awaySeconds` of real time lives through
