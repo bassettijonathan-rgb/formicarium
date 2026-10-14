@@ -29,6 +29,7 @@ import { legnanoClock } from './room/sky';
 import { CLEAR, REFRESH_MS, type Weather, fetchLegnanoWeather } from './room/weather';
 import { download, readTankFile, tankFile } from './ui/tankFile';
 import { WholeTable } from './ui/wholeTable';
+import { SPECIES_NAMES, Species, type SpeciesId } from './sim/species';
 
 /** A keeper's sugar drop: 10 µL, about the size of a lentil. */
 const DROP_VOLUME = 10;
@@ -123,12 +124,12 @@ async function start(): Promise<void> {
   let colonyLine = '';
   let tanks: ShelfEntry[] = [];
   /** The colonies on the running table, by place; the one shown; the places still free (DESIGN.md 3.6). */
-  let colonies: { name: string; slot: number }[] = [];
+  let colonies: { name: string; slot: number; species: number }[] = [];
   let chosenSlot = -1;
   let freeSlots: number[] = [];
   const wholeTable = new WholeTable($('whole-canvas') as HTMLCanvasElement);
   /** A new colony waiting for the keeper to choose its place on the table. */
-  let newColony: { name: string; nest: NestSetup } | null = null;
+  let newColony: { name: string; nest: NestSetup; species: number } | null = null;
 
   worker.onmessage = (e: MessageEvent<FromWorker>) => {
     const msg = e.data;
@@ -284,6 +285,14 @@ async function start(): Promise<void> {
   });
   // A new tank: a name, and where the colony starts.
   let startIn: 'tube' | 'nest' = 'tube';
+  let newSpecies: number = Species.lasiusNiger;
+  const speciesButtons = [...newScreen.querySelectorAll<HTMLButtonElement>('button[data-species]')];
+  for (const b of speciesButtons) {
+    b.addEventListener('click', () => {
+      newSpecies = Number(b.dataset.species);
+      for (const x of speciesButtons) x.setAttribute('aria-pressed', String(x === b));
+    });
+  }
   const newPick: Required<Pick<NestSetup, 'size' | 'layout' | 'material'>> = { size: 'M', layout: 'classic', material: 'ytong' };
   $('go-new').addEventListener('click', () => {
     startScreen.hidden = true;
@@ -305,7 +314,7 @@ async function start(): Promise<void> {
   $('new-nest').replaceChildren(nestPicker(newPick));
   $('create').addEventListener('click', () => {
     const name = ($('new-name') as HTMLInputElement).value.trim() || untakenName();
-    send({ type: 'create', name, nest: startIn === 'tube' ? TEST_TUBE_SETUP : { ...newPick } });
+    send({ type: 'create', name, nest: startIn === 'tube' ? TEST_TUBE_SETUP : { ...newPick }, species: newSpecies });
   });
 
   function enterTank(name: string, note?: string): void {
@@ -347,7 +356,7 @@ async function start(): Promise<void> {
   }
 
   // ---- Several colonies on one table (DESIGN.md 3.6): a chip for each, the whole table, a new colony, giving one away.
-  function showColonies(list: { name: string; slot: number }[], chosen: number, free: number[]): void {
+  function showColonies(list: { name: string; slot: number; species: number }[], chosen: number, free: number[]): void {
     const changed = chosen !== chosenSlot;
     colonies = list;
     chosenSlot = chosen;
@@ -358,12 +367,14 @@ async function start(): Promise<void> {
       for (const c of list) {
         const b = button(c.name, () => send({ type: 'choose', slot: c.slot }));
         b.setAttribute('aria-pressed', String(c.slot === chosen));
+        b.title = SPECIES_NAMES[c.species as SpeciesId] ?? '';
         box.append(b);
       }
       box.append(button('Whole table', () => openWhole(false)));
     }
     const shown = list.find((c) => c.slot === chosen);
     $('give-away').textContent = shown ? `Give ${shown.name} away` : 'Give this colony away';
+    $('colony-hint').textContent = `${shown ? `${shown.name}: ${SPECIES_NAMES[shown.species as SpeciesId] ?? ''}. ` : ''}How the colony has grown since it was set up. A table holds up to four colonies, each with its own nests and arena.`;
     $('new-colony').toggleAttribute('disabled', free.length === 0);
     wholeTable.set(null, chosenSlot, freeSlots);
     if (changed) {
@@ -399,7 +410,7 @@ async function start(): Promise<void> {
     if (slot < 0) return;
     if (newColony) {
       if (!freeSlots.includes(slot)) return;
-      send({ type: 'addColony', name: newColony.name, slot, nest: newColony.nest });
+      send({ type: 'addColony', name: newColony.name, slot, nest: newColony.nest, species: newColony.species });
       closeWhole();
     } else if (colonies.some((c) => c.slot === slot)) {
       if (slot !== chosenSlot) send({ type: 'choose', slot });
@@ -415,6 +426,8 @@ async function start(): Promise<void> {
     name.type = 'text';
     name.value = `Colony ${n}`;
     let startIn: 'tube' | 'nest' = 'tube';
+    let species: number = Species.lasiusNiger;
+    const kind = choices<number>([[Species.lasiusNiger, 'Lasius niger'], [Species.crematogaster, 'Crematogaster scutellaris']], () => species, (k) => (species = k));
     const pick: Required<Pick<NestSetup, 'size' | 'layout' | 'material'>> = { ...newPick };
     const picker = nestPicker(pick);
     picker.hidden = true;
@@ -425,11 +438,12 @@ async function start(): Promise<void> {
     showCard('New colony', [
       'A colony as keepers buy one: a queen, her first workers and a little brood, with its own new arena. It never meets the other colonies.',
       name,
+      kind,
       where,
       picker,
     ], [
       ['Choose its place', () => {
-        newColony = { name: name.value.trim() || `Colony ${n}`, nest: startIn === 'tube' ? TEST_TUBE_SETUP : { ...pick } };
+        newColony = { name: name.value.trim() || `Colony ${n}`, nest: startIn === 'tube' ? TEST_TUBE_SETUP : { ...pick }, species };
         closeCard();
         openWhole(true);
       }, true],

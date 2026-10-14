@@ -519,6 +519,29 @@ export interface AntParams {
   /** False: ants ignore light (the control for the darkness check). */
   photophobia: boolean;
 
+  // --- Alarm (Crematogaster scutellaris, DESIGN.md 4.4) ---
+
+  /**
+   * True: a disturbed worker is alarmed: it raises its gaster, runs, and its
+   * alarm pheromone alarms the nestmates that smell it (Pasteels et al. 1989).
+   * Lasius niger has none here.
+   */
+  alarm: boolean;
+  /** Half-life of an ant's alarm once nothing renews it, seconds (rough: the colony calms in minutes). */
+  alarmHalfLife: number;
+  /** A nestmate within this distance smells an alarmed ant's alarm pheromone, mm (rough). */
+  alarmRadius: number;
+  /** A nestmate smelling an alarmed ant is alarmed this share as strongly, so the alarm dies out a few ants on (rough). */
+  alarmRelay: number;
+  /** Above this alarm (0-1) an ant shows it: gaster raised, running, not resting (rough). */
+  alarmShow: number;
+  /** An alarmed ant walks 1 + `alarmSpeed` × its alarm times as fast (rough). */
+  alarmSpeed: number;
+  /** An alarmed ant turns towards the nestmates it smells alarmed, radians per second at full strength (rough). */
+  alarmTurn: number;
+  /** The keeper's hand alarms workers within this distance of what it puts down, moves or takes out, mm (rough). */
+  disturbRadius: number;
+
   // --- Water (M5b) ---
 
   /**
@@ -840,6 +863,15 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   lightRest: 0.9,
   lightWake: 20,
   photophobia: true,
+
+  alarm: false,
+  alarmHalfLife: 45,
+  alarmRadius: 4,
+  alarmRelay: 0.7,
+  alarmShow: 0.25,
+  alarmSpeed: 1,
+  alarmTurn: 3,
+  disturbRadius: 30,
 
   waterFlow: false,
   selfWatering: false,

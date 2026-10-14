@@ -1,7 +1,7 @@
 # formicarium: conventions for Claude Code
 
 A living ant farm in the browser: a test tube or bought nests (ytong, plaster, acrylic or wood) on a
-table, joined by tubes to each other and to an arena (old tanks keep a side-view sand farm), with Lasius niger colonies (up to four separate setups on one table) whose behaviour emerges only from each ant's local rules.
+table, joined by tubes to each other and to an arena (old tanks keep a side-view sand farm), with Lasius niger or Crematogaster scutellaris colonies (up to four separate setups on one table) whose behaviour emerges only from each ant's local rules.
 **DESIGN.md is the approved design**; read the relevant section before changing a model, and
 update DESIGN.md in the same pull request when a model changes.
 

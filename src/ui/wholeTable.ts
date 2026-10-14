@@ -7,6 +7,7 @@
 import { MAX_COLONIES } from '../sim/colonies';
 import type { ColonyView } from '../worker/protocol';
 import { Place } from '../sim/ants';
+import { SPECIES_NAMES, type SpeciesId } from '../sim/species';
 
 /** Places on the table: two rows of two. */
 const COLUMNS = 2;
@@ -170,7 +171,8 @@ export class WholeTable {
     g.fillText(v.name, MARGIN, base);
     g.font = `${12 / s}px system-ui, sans-serif`;
     g.fillStyle = '#c9c2b4';
-    const about = v.workers > 0 || v.queen ? `${v.workers} workers${v.queen ? ', the queen' : ', no queen'}` : 'the colony has died out';
+    const alive = v.workers > 0 || v.queen ? `${v.workers} workers${v.queen ? ', the queen' : ', no queen'}` : 'the colony has died out';
+    const about = `${SPECIES_NAMES[v.species as SpeciesId] ?? ''} · ${alive}`;
     g.fillText(about, MARGIN, base + 17 / s);
   }
 

@@ -6,15 +6,16 @@
  * enough to rebuild it exactly, which is how saves stay deterministic.
  */
 import { createArena } from './arena';
-import { layDecorations, stampDecorations } from './decor';
+import { type Decoration, layDecorations, stampDecorations } from './decor';
 import { type Item, canPutFood, emptyDishes, moveDecoration, putItem, refillFeeders, removeDecoration } from './objects';
 import { TANK_ARENA } from './tank';
 import { MAT_WIDTH } from './heat';
-import { Caste, Place } from './ants';
+import { AntState, Caste, Place } from './ants';
 import { BroodStage, addBrood } from './brood';
 import { cellSolid } from './farm';
 import { Purpose, Rng } from './rng';
-import { DEFAULT_NEST, type NestSetup, type TubeEnd } from './nest';
+import { DEFAULT_NEST, type NestSetup, type TubeEnd, lightAt } from './nest';
+import { Species } from './species';
 import { addModule, connect, connectArena, moveModule, removeModule, removeTube, setPlug } from './table';
 import type { Cut, Insect } from './prey';
 import {
@@ -97,9 +98,10 @@ export const FIRST_DROP = { x: 100, y: TANK_ARENA.height / 2 - 45 } as const;
  * damp as it was poured, DESIGN.md 7.7), what is left to rot goes mouldy, and
  * the colony can die.
  */
-export function createTank(seed: number, nest: NestSetup | null = DEFAULT_NEST): World {
+export function createTank(seed: number, nest: NestSetup | null = DEFAULT_NEST, species: number = Species.lasiusNiger): World {
   const world = createWorld(seed, {
     queen: true,
+    species,
     // A young colony in a test tube (N9): the queen, her first workers and some brood.
     ...(nest?.testTube ? { ants: TUBE_COLONY.workers } : {}),
     params: { roomTemperature: TANK_ROOM, waterFlow: true, selfWatering: true, mould: true, mortal: true },
@@ -156,6 +158,7 @@ export function furnishArena(world: World, keepClear: { x: number; y: number; ra
  * every other action returns true.
  */
 export function applyCommand(world: World, command: KeeperCommand): boolean {
+  if (world.params.alarm) disturb(world, command);
   switch (command.type) {
     case 'sugar':
       // Food put down on a stone, the bark or a tube would roll off, so it is refused; in a dish it stays.
@@ -175,9 +178,13 @@ export function applyCommand(world: World, command: KeeperCommand): boolean {
     case 'water':
       water(world, command.x);
       break;
-    case 'cover':
+    case 'cover': {
+      // Workers the cover is lifted off are alarmed, in a species that takes alarm (DESIGN.md 4.4).
+      const dark = world.params.alarm && world.farm.table ? inTheDark(world) : [];
       setCover(world, command.from, command.to, command.module);
+      for (const i of dark) if (lightAt(world.farm, world.ants.x[i]!, world.ants.y[i]!) > world.params.lightSense) world.ants.alarm[i] = 1;
       break;
+    }
     case 'addNest':
       return addModule(world, command.nest, command.x !== undefined && command.y !== undefined ? { x: command.x, y: command.y } : undefined) !== null;
     case 'removeNest':
@@ -216,11 +223,59 @@ export function applyCommand(world: World, command: KeeperCommand): boolean {
 }
 
 /**
+ * The keeper's hand disturbs the ants of a species that takes alarm
+ * (Crematogaster scutellaris, DESIGN.md 4.4): workers within
+ * `disturbRadius` of what is put down, moved or taken out of the arena, and
+ * workers in a nest whose cover is lifted off them (the light falls on
+ * them; see `applyCommand`), are fully alarmed. Called before the command
+ * is carried out.
+ */
+function disturb(world: World, command: KeeperCommand): void {
+  const { ants, params } = world;
+  const spots: { x: number; y: number }[] = [];
+  if (command.type === 'sugar' || command.type === 'protein' || command.type === 'insect' || command.type === 'put') spots.push({ x: command.x, y: command.y });
+  else if (command.type === 'move') {
+    const d = world.decor[command.index];
+    if (d) spots.push(decorCentre(d));
+    spots.push({ x: command.x, y: command.y });
+  } else if (command.type === 'remove') {
+    const d = world.decor[command.index];
+    if (d) spots.push(decorCentre(d));
+  }
+  const r2 = params.disturbRadius * params.disturbRadius;
+  for (const p of spots) {
+    for (let i = 0; i < ants.count; i++) {
+      if (ants.place[i] !== Place.arena || ants.caste[i] !== Caste.worker || ants.state[i] === AntState.dead) continue;
+      const dx = ants.x[i]! - p.x;
+      const dy = ants.y[i]! - p.y;
+      if (dx * dx + dy * dy <= r2) ants.alarm[i] = 1;
+    }
+  }
+}
+
+/** Where a decoration lies: its centre, or the middle of a tube or twig. */
+function decorCentre(d: Decoration): { x: number; y: number } {
+  if ('y0' in d) return { x: (d.x0 + d.x1) / 2, y: (d.y0 + d.y1) / 2 };
+  if ('x0' in d) return { x: (d.x0 + d.x1) / 2, y: d.y };
+  return { x: d.x, y: d.y };
+}
+
+/** The workers in a bought nest's dark, by id. */
+function inTheDark(world: World): number[] {
+  const { ants, farm, params } = world;
+  const dark: number[] = [];
+  for (let i = 0; i < ants.count; i++) {
+    if (ants.place[i] === Place.farm && ants.caste[i] === Caste.worker && ants.state[i] !== AntState.dead && lightAt(farm, ants.x[i]!, ants.y[i]!) <= params.lightSense) dark.push(i);
+  }
+  return dark;
+}
+
+/**
  * Rebuilds a keeper's tank (in `nest`, as `createTank`) from its seed and log, up to `steps`: each
  * command is applied just before the step it was logged at, as the page did.
  */
-export function replayTank(seed: number, log: readonly LoggedCommand[], steps: number, nest: NestSetup | null = DEFAULT_NEST): World {
-  const world = createTank(seed, nest);
+export function replayTank(seed: number, log: readonly LoggedCommand[], steps: number, nest: NestSetup | null = DEFAULT_NEST, species: number = Species.lasiusNiger): World {
+  const world = createTank(seed, nest, species);
   let next = 0;
   while (world.step < steps) {
     while (next < log.length && log[next]!.step <= world.step) applyCommand(world, log[next++]!.command);

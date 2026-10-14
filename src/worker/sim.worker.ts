@@ -9,6 +9,7 @@ import { STEPS_PER_SECOND } from '../sim/time';
 import { FIELD_CELL, createFarm } from '../sim/farm';
 import { colonyCrop, deathsBy, type World } from '../sim/world';
 import { type KeeperCommand, applyCommand, createTank } from '../sim/keeper';
+import { Species } from '../sim/species';
 import { catchUpSteps, census } from '../sim/save';
 import { type Colony, MAX_COLONIES, type TableSave, asTable, freeSlots, loadTable, nextSeed, stepColonies, tableReport, tableSave } from '../sim/colonies';
 import { ANT_STRIDE, type ColonyView, type FromWorker, Look, type PieceView, type TableShape, type ToWorker } from './protocol';
@@ -98,6 +99,7 @@ function sendAnts(w: World): void {
   const data = new Float32Array(ants.count * ANT_STRIDE);
   const full = new Uint8Array(ants.count);
   const callow = new Uint8Array(ants.count);
+  const alarmed = new Uint8Array(ants.count);
   for (let i = 0; i < ants.count; i++) {
     const o = i * ANT_STRIDE;
     data[o] = ants.x[i]!;
@@ -109,6 +111,7 @@ function sendAnts(w: World): void {
     data[o + 6] = ants.state[i] === AntState.carrying ? ants.grain[i]! : 0;
     full[i] = ants.crop[i]! > 0.5 * w.params.cropLoad ? 1 : 0;
     callow[i] = ants.caste[i] === Caste.worker && ants.age[i]! < w.params.callowDays ? 1 : 0;
+    alarmed[i] = ants.alarm[i]! > w.params.alarmShow ? 1 : 0;
   }
   const caste = ants.caste.slice();
   const { brood } = w;
@@ -138,11 +141,12 @@ function sendAnts(w: World): void {
     if (p.carriedBy >= 0) carried.push({ ant: p.carriedBy, piece: view });
     else prey.push(view);
   }
-  post({ type: 'ants', step: w.step, ants: data, full, caste, callow, brood: broodData, prey, carried }, [
+  post({ type: 'ants', step: w.step, ants: data, full, caste, callow, alarmed, species: w.species, brood: broodData, prey, carried }, [
     data.buffer,
     full.buffer,
     caste.buffer,
     callow.buffer,
+    alarmed.buffer,
     broodData.buffer,
   ]);
 }
@@ -283,7 +287,7 @@ function summary(kept: Kept): Omit<ShelfEntry, 'id' | 'name' | 'savedAt'> {
 
 /** The colonies on the table, for the page's chips and the whole table's picture. */
 function sendColonies(): void {
-  post({ type: 'colonies', chosen: chosen?.slot ?? -1, colonies: colonies.map((c) => ({ name: c.name, slot: c.slot })), free: freeSlots(colonies) });
+  post({ type: 'colonies', chosen: chosen?.slot ?? -1, colonies: colonies.map((c) => ({ name: c.name, slot: c.slot, species: c.world.species })), free: freeSlots(colonies) });
 }
 
 /** Where every colony's setup and ants are, for the picture of the whole table. */
@@ -303,6 +307,7 @@ function sendOverview(): void {
     return {
       name: c.name,
       slot: c.slot,
+      species: c.world.species,
       workers,
       queen,
       nestWidth: w.farm.width,
@@ -399,12 +404,12 @@ async function open(id: string): Promise<void> {
 }
 
 /** Sets up a new tank on the shelf, with the next seed after those kept. */
-async function create(name: string, nest: NestSetup): Promise<void> {
+async function create(name: string, nest: NestSetup, species: number): Promise<void> {
   await close();
   const shelf = await readShelf(summary);
   const seed = nextSeed(shelf.map((e) => e.seed));
   current = { id: newId(shelf), name: freeName(name, shelf) };
-  begin([{ name: 'Colony 1', slot: 0, seed, log: [], world: createTank(seed, nest) }], false);
+  begin([{ name: 'Colony 1', slot: 0, seed, log: [], world: createTank(seed, nest, species) }], false);
   await save();
 }
 
@@ -414,14 +419,14 @@ async function create(name: string, nest: NestSetup): Promise<void> {
  * or moved straight into a bought nest. Its seed is one no other colony
  * on the shelf or the table has.
  */
-async function addColony(name: string, slot: number, nest: NestSetup): Promise<void> {
+async function addColony(name: string, slot: number, nest: NestSetup, species: number): Promise<void> {
   if (!current || catching || colonies.length >= MAX_COLONIES || !freeSlots(colonies).includes(slot)) return;
   const shelf = await readShelf(summary);
   const seed = nextSeed([...shelf.map((e) => e.seed), ...colonies.map((c) => c.seed)]);
   const taken = colonies.map((c) => c.name);
   let free = name;
   for (let n = 2; taken.includes(free); n++) free = `${name} (${n})`;
-  const c: Colony = { name: free, slot, seed, log: [], world: createTank(seed, nest) };
+  const c: Colony = { name: free, slot, seed, log: [], world: createTank(seed, nest, species) };
   colonies = [...colonies, c].sort((a, b) => a.slot - b.slot);
   choose(c);
   await save();
@@ -470,7 +475,7 @@ onmessage = (e: MessageEvent<ToWorker>) => {
   const msg = e.data;
   if (msg.type === 'list') void list();
   else if (msg.type === 'open') void open(msg.id);
-  else if (msg.type === 'create') void create(msg.name, msg.nest);
+  else if (msg.type === 'create') void create(msg.name, msg.nest, msg.species ?? Species.lasiusNiger);
   else if (msg.type === 'import') void importTank(msg.save, msg.name);
   else if (msg.type === 'close') void close().then(list);
   else if (msg.type === 'rename') {
@@ -482,7 +487,7 @@ onmessage = (e: MessageEvent<ToWorker>) => {
   } else if (msg.type === 'choose') {
     const c = colonies.find((k) => k.slot === msg.slot);
     if (c) choose(c);
-  } else if (msg.type === 'addColony') void addColony(msg.name, msg.slot, msg.nest);
+  } else if (msg.type === 'addColony') void addColony(msg.name, msg.slot, msg.nest, msg.species ?? Species.lasiusNiger);
   else if (msg.type === 'removeColony') void removeColony(msg.slot);
   else if (msg.type === 'overview') {
     overview = msg.on;

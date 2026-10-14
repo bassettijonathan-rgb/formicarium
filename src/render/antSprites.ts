@@ -5,8 +5,14 @@
  *
  * Drawing units: the body runs from about -30 (gaster tip) to +23 (head),
  * heading along +x. `ANT_SCALE` converts units to mm (a ~4.4 mm worker).
+ *
+ * Crematogaster scutellaris (DESIGN.md 4.4) is drawn on the same frame:
+ * a red head on a black body, two waist nodes and a heart-shaped gaster,
+ * which a disturbed worker raises over its back. It is drawn smaller
+ * (`speciesSize`).
  */
 import { type Renderer, Graphics, Rectangle, type Texture } from 'pixi.js';
+import { Species } from '../sim/species';
 
 export const ANT_SCALE = 4.4 / 53;
 export const GAIT_FRAMES = 8;
@@ -16,7 +22,18 @@ export const STRIDE = 2.4;
 /** A hardened worker's colours, and a callow's: pale brown for its first days out of the cocoon. */
 const DARK = { body: 0x2a1c15, leg: 0x3b2a20, shine: 0x6b5446 };
 const PALE = { body: 0x8c6c52, leg: 0x9c7d62, shine: 0xc9ae94 };
-type Palette = typeof DARK;
+type Palette = typeof DARK & { head?: number };
+/** Crematogaster scutellaris: a red head on a black body; its callows are pale amber. */
+const CREMA = { body: 0x1c1513, leg: 0x3a2620, shine: 0x6e5a52, head: 0x9c3a1e };
+const CREMA_PALE = { body: 0x8a6448, leg: 0x9c7458, shine: 0xc9a88c, head: 0xc87a4e };
+
+/**
+ * How long the species' workers are drawn, relative to a Lasius niger worker (~4.4 mm), and its
+ * queen relative to its worker. Crematogaster scutellaris workers are 3-5 mm, the queen 8-10 mm (keepers' care sheets; rough).
+ */
+export function speciesSize(species: number): { worker: number; queen: number } {
+  return species === Species.crematogaster ? { worker: 0.85, queen: 2.4 } : { worker: 1, queen: 2 };
+}
 export const CROP = 0xd9a441;
 
 /** Leg attachment and resting foot positions (left side, y < 0); the right side mirrors them. */
@@ -26,11 +43,17 @@ const LEGS: { base: [number, number]; knee: [number, number]; foot: [number, num
   { base: [0, -2], knee: [-8, -12], foot: [-17, -18] },
 ];
 
-/** Textures indexed [crop full ? 1 : 0][gait frame]; `pale` draws a callow. */
-export function makeAntTextures(renderer: Renderer, pale = false): Texture[][] {
+/**
+ * Textures indexed [crop full ? 1 : 0][gait frame]; `pale` draws a callow, `raised` a
+ * Crematogaster worker with its gaster raised in alarm.
+ */
+export function makeAntTextures(renderer: Renderer, pale = false, species: number = Species.lasiusNiger, raised = false): Texture[][] {
+  const crema = species === Species.crematogaster;
+  const palette = crema ? (pale ? CREMA_PALE : CREMA) : pale ? PALE : DARK;
   return [0, 1].map((full) =>
     Array.from({ length: GAIT_FRAMES }, (_, f) => {
-      const g = drawAnt((f / GAIT_FRAMES) * 2 * Math.PI, full === 1, pale ? PALE : DARK);
+      const phase = (f / GAIT_FRAMES) * 2 * Math.PI;
+      const g = crema ? drawCrematogaster(phase, full === 1, palette, raised) : drawAnt(phase, full === 1, palette);
       const texture = renderer.generateTexture({ target: g, frame: new Rectangle(-40, -26, 80, 52), resolution: 4 });
       g.destroy();
       return texture;
@@ -42,7 +65,8 @@ export function makeAntTextures(renderer: Renderer, pale = false): Texture[][] {
  * A dead worker: legs and antennae drawn in tight under the body, as a dead
  * ant's curl, and the gloss gone dull.
  */
-export function makeDeadTexture(renderer: Renderer): Texture {
+export function makeDeadTexture(renderer: Renderer, species: number = Species.lasiusNiger): Texture {
+  const crema = species === Species.crematogaster;
   const g = new Graphics();
   for (const side of [-1, 1]) {
     LEGS.forEach((leg) => {
@@ -54,10 +78,11 @@ export function makeDeadTexture(renderer: Renderer): Texture {
     g.moveTo(21, 2.5 * side).lineTo(24, 6 * side).lineTo(20, 7 * side);
   }
   g.stroke({ color: DARK.leg, width: 1.3, cap: 'round', join: 'round' });
-  g.ellipse(-17, 0, 11, 8).fill(DARK.body);
+  if (crema) heart(g, -9, 17, 9).fill(CREMA.body);
+  else g.ellipse(-17, 0, 11, 8).fill(DARK.body);
   g.ellipse(-5, 0, 2.6, 2.6).fill(DARK.body);
   g.ellipse(4, 0, 8, 3.8).fill(DARK.body);
-  g.ellipse(16, 0, 6, 5.5).fill(DARK.body);
+  g.ellipse(16, 0, 6, 5.5).fill(crema ? CREMA.head : DARK.body);
   g.ellipse(-18, -2, 5, 2).fill({ color: DARK.shine, alpha: 0.15 });
   const texture = renderer.generateTexture({ target: g, frame: new Rectangle(-40, -26, 80, 52), resolution: 4 });
   g.destroy();
@@ -104,6 +129,77 @@ function drawAnt(phase: number, full: boolean, { body: BODY, leg: LEG, shine: SH
   g.ellipse(-20, -3, 5, 2.4).fill({ color: SHINE, alpha: 0.45 });
   g.ellipse(4, -1.2, 4, 1.2).fill({ color: SHINE, alpha: 0.4 });
   g.ellipse(18, -1.8, 2.6, 1.6).fill({ color: SHINE, alpha: 0.4 });
+  return g;
+}
+
+/** Legs and antennae, as in `drawAnt`. */
+function limbs(g: Graphics, phase: number, leg: number): void {
+  const swing = 0.35 * Math.sin(phase);
+  for (const side of [-1, 1]) {
+    LEGS.forEach((l, k) => {
+      const tripodA = (side === -1) === (k !== 1);
+      const angle = (tripodA ? swing : -swing) * -side;
+      const pts = [l.base, l.knee, l.foot].map(([x, y]) => rotateAbout([x, y * -side], l.base, angle));
+      g.moveTo(pts[0]![0], pts[0]![1]).lineTo(pts[1]![0], pts[1]![1]).lineTo(pts[2]![0], pts[2]![1]);
+    });
+  }
+  g.stroke({ color: leg, width: 1.2, cap: 'round', join: 'round' });
+  const flick = 1.5 * Math.sin(phase * 2);
+  for (const side of [-1, 1]) {
+    g.moveTo(21, 2.5 * side)
+      .lineTo(26, (9 + flick) * side)
+      .lineTo(33, (5 - flick) * side);
+  }
+  g.stroke({ color: leg, width: 1, cap: 'round', join: 'round' });
+}
+
+/**
+ * A heart-shaped gaster seen from above: its broad, notched front at `front`, its point `length`
+ * behind (or ahead, for a negative length), `half` wide each side.
+ */
+function heart(g: Graphics, front: number, length: number, half: number): Graphics {
+  const tip = front - length;
+  const k = Math.sign(length);
+  g.moveTo(front - 1.5 * k, 0)
+    .bezierCurveTo(front + 1 * k, -half * 0.6, front - 0.2 * length, -half * 1.15, front - 0.45 * length, -half * 0.85)
+    .bezierCurveTo(front - 0.7 * length, -half * 0.6, tip + 0.1 * length, -half * 0.2, tip, 0)
+    .bezierCurveTo(tip + 0.1 * length, half * 0.2, front - 0.7 * length, half * 0.6, front - 0.45 * length, half * 0.85)
+    .bezierCurveTo(front - 0.2 * length, half * 1.15, front + 1 * k, half * 0.6, front - 1.5 * k, 0)
+    .closePath();
+  return g;
+}
+
+/**
+ * A Crematogaster scutellaris worker from above: a red, squarish head, a black mesosoma with two
+ * short spines, two waist nodes (petiole and postpetiole) and a heart-shaped gaster. Disturbed, it holds the
+ * gaster up over its back, pointed forward: from above it lies short over the mesosoma.
+ */
+function drawCrematogaster(phase: number, full: boolean, { body: BODY, leg: LEG, shine: SHINE, head: HEAD }: Palette, raised: boolean): Graphics {
+  const g = new Graphics();
+  limbs(g, phase, LEG);
+  // Waist: petiole and postpetiole.
+  g.ellipse(-3.5, 0, 2.2, 2).fill(BODY);
+  g.ellipse(-7, 0, 2.4, 2.6).fill(BODY);
+  if (!raised) {
+    const half = full ? 10.5 : 9;
+    if (full) {
+      heart(g, -8.5, 19, half).fill(CROP);
+      heart(g, -9.5, 17, half - 1).fill({ color: BODY, alpha: 0.75 });
+    } else heart(g, -8.5, 17, half).fill(BODY);
+    g.ellipse(-15, -3, 4, 2).fill({ color: SHINE, alpha: 0.45 });
+  }
+  g.ellipse(4, 0, 7.5, 3.6).fill(BODY);
+  // Two short spines at the back of the thorax.
+  for (const side of [-1, 1]) g.moveTo(-1, 1.6 * side).lineTo(-4, 3.6 * side);
+  g.stroke({ color: BODY, width: 1, cap: 'round' });
+  g.roundRect(11.5, -5, 11, 10, 4).fill(HEAD ?? BODY);
+  g.ellipse(18, -1.8, 2.4, 1.4).fill({ color: SHINE, alpha: 0.4 });
+  g.ellipse(4, -1.2, 3.6, 1.1).fill({ color: SHINE, alpha: 0.4 });
+  if (raised) {
+    // The gaster tipped up and forward over the mesosoma, foreshortened, its point towards the head.
+    heart(g, -6, -11, full ? 8.5 : 7.5).fill(BODY);
+    g.ellipse(-2, -2.6, 3, 1.6).fill({ color: SHINE, alpha: 0.5 });
+  }
   return g;
 }
 
