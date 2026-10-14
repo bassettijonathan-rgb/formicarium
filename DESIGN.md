@@ -433,8 +433,12 @@ dug nest the tunnels themselves keep the colony together.
   into a connected nest when the old one is crowded, but the details have
   not been measured as far as I know. A worker going out through the
   arena's tube forgets its site: its path integrator starts again.
-- **Not yet:** connecting an old sand-farm tank to a bought nest, and
-  moving a module once it is on the table.
+- **Moving a module.** "Move a nest" picks up an empty module with no
+  tube plugged into it and puts it down where the keeper taps, on bare
+  table clear of everything else (`moveModule`, rounded to 2 mm). The block
+  takes its damp and the smells soaked into it with it; the table it left
+  is bare.
+- **Not yet:** connecting an old sand-farm tank to a bought nest.
 - Validation: section 9, tests 17 and 18.
 
 ---

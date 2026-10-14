@@ -361,11 +361,14 @@ async function start(): Promise<void> {
     join: 'Tap a free port in the right end of a nest, then another.',
     plug: "Tap a tube to pull its cotton plug out, or push one in.",
     arena: "Tap the port the arena's tube should go into.",
+    moveNest: 'Tap an empty nest with nothing plugged in, then the spot where its middle should go.',
     takeAway: 'Tap an empty tube or an empty nest with nothing plugged in to take it away.',
     coverOne: 'Tap a nest or the test tube to take its cover off, or put it back. Ants move out of the light into a dark nest.',
   };
   /** The first port tapped while joining two. */
   let joinFrom: { module: number; port: number } | null = null;
+  /** The nest picked up while moving one. */
+  let moveFrom: number | null = null;
   /** The port, tube or nest of the table under a tap (within a finger's width), if any. */
   const onTable = (p: { x: number; y: number }) => {
     const t = view.nest.shape;
@@ -399,7 +402,16 @@ async function start(): Promise<void> {
       putHint.textContent = 'Now tap the port the tube goes to.';
       return;
     }
-    if (tool === 'join' && port && joinFrom) {
+    if (tool === 'moveNest' && moveFrom === null && module !== undefined) {
+      moveFrom = module;
+      putHint.textContent = 'Now tap where its middle should go.';
+      return;
+    }
+    if (tool === 'moveNest' && moveFrom !== null) {
+      const m = view.nest.shape!.modules.find((x) => x.id === moveFrom)!;
+      const { u, v } = view.nest.toFloor(p.x, p.y);
+      command({ type: 'moveNest', module: moveFrom, x: Math.round(u - m.width / 2), y: Math.round(v - m.height / 2) });
+    } else if (tool === 'join' && port && joinFrom) {
       command({ type: 'connect', a: joinFrom, b: port, plugged: true });
       showPutHint('The tube has a cotton plug in it: choose "Plug" and tap the tube to open it.', 6000);
     } else if (tool === 'plug' && tube !== undefined) {
@@ -415,9 +427,10 @@ async function start(): Promise<void> {
       command({ type: 'cover', from: 0, to: covered ? m.width : 0, module });
     }
     joinFrom = null;
+    moveFrom = null;
     tool = null;
     for (const b of putButtons) b.setAttribute('aria-pressed', 'false');
-    if (putHint.textContent === TABLE_HINTS.join || putHint.textContent?.startsWith('Now tap')) showPutHint('');
+    if (putHint.textContent === TABLE_HINTS.join || putHint.textContent === TABLE_HINTS.moveNest || putHint.textContent?.startsWith('Now tap')) showPutHint('');
   };
   /** A keeper's tap with an object tool chosen. */
   const useTool = (p: { x: number; y: number }) => {

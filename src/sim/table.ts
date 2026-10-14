@@ -140,6 +140,85 @@ export function removeModule(world: World, id: number): boolean {
 }
 
 /**
+ * The keeper moves module `id` so its top left corner is near (`x`, `y`):
+ * only when no tube is plugged into it and nothing is inside (N8), and only
+ * onto bare table. The block takes its damp and smells with it. The move is
+ * rounded to whole field cells. Returns true if it was moved.
+ */
+export function moveModule(world: World, id: number, x: number, y: number): boolean {
+  const { farm, params } = world;
+  const table = farm.table;
+  const nest = table && moduleById(table, id);
+  if (!table || !nest) return false;
+  const dx = Math.round((x - nest.x) / FIELD_CELL) * FIELD_CELL;
+  const dy = Math.round((y - nest.y) / FIELD_CELL) * FIELD_CELL;
+  if ((dx === 0 && dy === 0) || nest.x + dx < 0 || nest.y + dy < 0) return false;
+  const plugged = (e: TubeEnd) => e.module === id;
+  if (plugged(table.arena) || table.tubes.some((t) => plugged(t.a) || plugged(t.b))) return false;
+  const mask = new Uint8Array(farm.width * farm.height);
+  for (let cy = nest.y; cy < nest.y + nest.height; cy++) for (let cx = nest.x; cx < nest.x + nest.width; cx++) mask[cy * farm.width + cx] = 1;
+  if (occupied(world, mask)) return false;
+  growTable(farm, Math.max(farm.width, nest.x + dx + nest.width + TABLE_MARGIN), Math.max(farm.height, nest.y + dy + nest.height), params.roomTemperature, params.roomHumidity);
+
+  // Lift the block (its cells, and the fields over it) off the table.
+  const cells = [farm.material, farm.moisture, farm.loose, farm.trail, farm.moistureRest];
+  const bare = [Material.table, 0, 0, 0, 0];
+  const fields = [farm.odour, farm.digMark, farm.broodScent, farm.mould];
+  const lifted = cells.map(() => [] as number[]);
+  for (let cy = nest.y; cy < nest.y + nest.height; cy++) {
+    for (let cx = nest.x; cx < nest.x + nest.width; cx++) {
+      const c = cy * farm.width + cx;
+      cells.forEach((layer, k) => {
+        lifted[k]!.push(layer[c]!);
+        layer[c] = bare[k]!;
+      });
+    }
+  }
+  const [fx0, fy0] = [Math.floor(nest.x / FIELD_CELL), Math.floor(nest.y / FIELD_CELL)];
+  const [fx1, fy1] = [Math.ceil((nest.x + nest.width) / FIELD_CELL), Math.ceil((nest.y + nest.height) / FIELD_CELL)];
+  const smells = fields.map(() => [] as number[]);
+  for (let fy = fy0; fy < fy1; fy++) {
+    for (let fx = fx0; fx < fx1; fx++) {
+      fields.forEach((field, k) => {
+        smells[k]!.push(field[fy * farm.fieldWidth + fx]!);
+        field[fy * farm.fieldWidth + fx] = 0;
+      });
+    }
+  }
+  const lay = (ox: number, oy: number) => {
+    let n = 0;
+    for (let cy = nest.y + oy; cy < nest.y + oy + nest.height; cy++) {
+      for (let cx = nest.x + ox; cx < nest.x + ox + nest.width; cx++, n++) cells.forEach((layer, k) => (layer[cy * farm.width + cx] = lifted[k]![n]!));
+    }
+    n = 0;
+    const [gx, gy] = [ox / FIELD_CELL, oy / FIELD_CELL];
+    for (let fy = fy0; fy < fy1; fy++) {
+      for (let fx = fx0; fx < fx1; fx++, n++) fields.forEach((field, k) => (field[(fy + gy) * farm.fieldWidth + fx + gx] = smells[k]![n]!));
+    }
+  };
+
+  // It goes down only on bare table, clear of everything else.
+  for (let cy = nest.y + dy - CLEAR; cy < nest.y + dy + nest.height + CLEAR; cy++) {
+    for (let cx = nest.x + dx - CLEAR; cx < nest.x + dx + nest.width + CLEAR; cx++) {
+      if (cx < 0 || cy < 0 || cx >= farm.width || cy >= farm.height) continue;
+      if (farm.material[cy * farm.width + cx] !== Material.table) {
+        lay(0, 0);
+        return false;
+      }
+    }
+  }
+  lay(dx, dy);
+  nest.x += dx;
+  nest.y += dy;
+  nest.waterX += dx;
+  nest.waterY += dy;
+  for (const p of nest.ports) [p.x, p.y] = [p.x + dx, p.y + dy];
+  for (const c of nest.chambers) [c.x, c.y] = [c.x + dx, c.y + dy];
+  refreshTable(world);
+  return true;
+}
+
+/**
  * The keeper joins the ports at `a` and `b` with a tube, with a cotton plug
  * in it (`plugged`) or open. Both ports must be free. Returns the tube's id,
  * or null when no tube can be laid between them without crossing something.

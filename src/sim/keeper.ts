@@ -15,7 +15,7 @@ import { BroodStage, addBrood } from './brood';
 import { cellSolid } from './farm';
 import { Purpose, Rng } from './rng';
 import { DEFAULT_NEST, type NestSetup, type TubeEnd } from './nest';
-import { addModule, connect, connectArena, removeModule, removeTube, setPlug } from './table';
+import { addModule, connect, connectArena, moveModule, removeModule, removeTube, setPlug } from './table';
 import type { Cut, Insect } from './prey';
 import {
   cleanArena,
@@ -48,6 +48,8 @@ export type KeeperCommand =
   | { type: 'addNest'; nest: NestSetup; x?: number; y?: number }
   /** An empty module with nothing plugged into it taken off the table (N8). */
   | { type: 'removeNest'; module: number }
+  /** An empty module with nothing plugged into it moved so its corner is near (x, y) (N8). */
+  | { type: 'moveNest'; module: number; x: number; y: number }
   /** A tube laid between two free ports, with a cotton plug in it or open (N8). */
   | { type: 'connect'; a: TubeEnd; b: TubeEnd; plugged: boolean }
   /** A tube's cotton plug pushed in or pulled out (N8). */
@@ -174,6 +176,9 @@ export function applyCommand(world: World, command: KeeperCommand): void {
       break;
     case 'removeNest':
       removeModule(world, command.module);
+      break;
+    case 'moveNest':
+      moveModule(world, command.module, command.x, command.y);
       break;
     case 'connect':
       connect(world, command.a, command.b, command.plugged);

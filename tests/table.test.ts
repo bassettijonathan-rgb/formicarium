@@ -7,7 +7,7 @@ import { Material } from '../src/sim/materials';
 import { COVER_LEAK, TEST_TUBE, TEST_TUBE_SETUP, lightAt, moduleById } from '../src/sim/nest';
 import type { AntParams } from '../src/sim/params';
 import { SAVE_VERSION, loadWorld } from '../src/sim/save';
-import { MODULE_GAP, addModule, connect, connectArena, removeModule, removeTube, setPlug } from '../src/sim/table';
+import { MODULE_GAP, addModule, connect, connectArena, moveModule, removeModule, removeTube, setPlug } from '../src/sim/table';
 import { createWorld, setCover, step, type World } from '../src/sim/world';
 
 function tableOf(seed = 5): World {
@@ -120,6 +120,50 @@ describe('the table of nests (Nests 3, N8)', () => {
     expect(world.farm.table!.modules.length).toBe(1);
   });
 
+  it('an empty nest with nothing plugged in can be moved onto bare table, its smell and damp with it', () => {
+    const world = tableOf();
+    const { farm } = world;
+    const id = addModule(world, { size: 'S', layout: 'organic', material: 'plaster' })!;
+    const nest = moduleById(farm.table!, id)!;
+    const [x0, y0, w, h] = [nest.x, nest.y, nest.width, nest.height];
+    const block = (x: number, y: number) => {
+      const out: number[] = [];
+      for (let cy = y; cy < y + h; cy++) for (let cx = x; cx < x + w; cx++) out.push(farm.material[cy * farm.width + cx]!, farm.moisture[cy * farm.width + cx]!);
+      return out;
+    };
+    const before = block(x0, y0);
+    const chamber = { ...nest.chambers[0]! };
+    const smell = (x: number, y: number) => farm.odour[Math.floor(y / FIELD_CELL) * farm.fieldWidth + Math.floor(x / FIELD_CELL)]!;
+    farm.odour[Math.floor(chamber.y / FIELD_CELL) * farm.fieldWidth + Math.floor(chamber.x / FIELD_CELL)] = 0.7;
+    // Not onto the first nest, nor with an ant inside.
+    expect(moveModule(world, id, 10, 10)).toBe(false);
+    const i = addAnt(world.ants);
+    world.ants.place[i] = Place.farm;
+    world.ants.state[i] = AntState.wandering;
+    world.ants.carriedBy[i] = -1;
+    [world.ants.x[i], world.ants.y[i]] = [chamber.x, chamber.y];
+    expect(moveModule(world, id, 200, y0)).toBe(false);
+    expect(block(x0, y0)).toEqual(before);
+    world.ants.place[i] = Place.gone;
+    // Off to the right: the table grows, the block arrives whole, bare table is left behind.
+    expect(moveModule(world, id, 200, y0)).toBe(true);
+    expect([nest.x, nest.y]).toEqual([200, y0]);
+    expect(farm.width).toBeGreaterThanOrEqual(200 + w);
+    expect(block(200, y0)).toEqual(before);
+    expect(farm.material[(y0 + 10) * farm.width + x0 + 10]).toBe(Material.table);
+    expect(nest.chambers[0]).toEqual({ x: chamber.x + 200 - x0, y: chamber.y });
+    expect(smell(nest.chambers[0]!.x, nest.chambers[0]!.y)).toBeCloseTo(0.7);
+    expect(smell(chamber.x, chamber.y)).toBe(0);
+    // Joined by a tube where it lies now, the ants can walk from one nest into the other.
+    const tube = connect(world, { module: 1, port: 1 }, { module: id, port: 0 }, false)!;
+    const first = farm.table!.modules[0]!.chambers[0]!;
+    expect(reachable(farm, first.x, first.y, nest.chambers[0]!.x, nest.chambers[0]!.y)).toBe(true);
+    // With a tube plugged into it, it stays where it is.
+    expect(moveModule(world, id, 200, y0 + 40)).toBe(false);
+    expect(removeTube(world, tube)).toBe(true);
+    expect(moveModule(world, id, 200, y0 + 40)).toBe(true);
+  });
+
   it("the arena's tube can go into another port; the fresh air comes in there", () => {
     const world = tableOf();
     const id = addModule(world, { size: 'S', layout: 'classic' })!;
@@ -139,11 +183,14 @@ describe('the table of nests (Nests 3, N8)', () => {
       { step: 40, command: { type: 'connect', a: { module: 1, port: 1 }, b: { module: 2, port: 0 }, plugged: true } },
       { step: 60, command: { type: 'plug', tube: 3, plugged: false } },
       { step: 80, command: { type: 'cover', from: 0, to: 50, module: 2 } },
+      { step: 90, command: { type: 'addNest', nest: { size: 'S', layout: 'organic', material: 'wood' } } },
+      { step: 100, command: { type: 'moveNest', module: 4, x: 260, y: 0 } },
     ];
     const a = replayTank(21, log, 400, { size: 'S', layout: 'classic', material: 'ytong' });
     const b = replayTank(21, log, 400, { size: 'S', layout: 'classic', material: 'ytong' });
     expect(a.farm.table!.tubes[0]!.plugged).toBe(false);
     expect(moduleById(a.farm.table!, 2)!.litTo).toBe(50);
+    expect(moduleById(a.farm.table!, 4)!.x).toBe(260);
     expect(hashState(a)).toBe(hashState(b));
     const loaded = loadWorld(structuredClone({ version: SAVE_VERSION, seed: 21, savedAt: 0, log, world: a }))!;
     expect(hashState(loaded)).toBe(hashState(a));
