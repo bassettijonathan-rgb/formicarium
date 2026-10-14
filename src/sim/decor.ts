@@ -9,6 +9,7 @@
  * is the same shape the page draws, so an ant on a stone is drawn on it.
  */
 import type { Arena } from './arena';
+import type { Cut, Insect } from './prey';
 import { Purpose, Rng } from './rng';
 
 export type Decoration =
@@ -29,9 +30,18 @@ export type Decoration =
   /**
    * The keeper's liquid feeder (B5): a test tube of sugar water lying on the
    * floor from (x0, y) to (x1, y), its cotton plug at x0, holding `capacity`
-   * µL when full. The sugar water itself is a food drop at the plug.
+   * µL when full. The sugar water itself is a food drop at the plug. An
+   * automatic one (`auto`, the sugar water's mol/L) has a bottle on its
+   * closed end that keeps it full as the ants drink (Marco, 2026-10-14).
    */
-  | { kind: 'feeder'; x0: number; x1: number; y: number; radius: number; capacity: number }
+  | { kind: 'feeder'; x0: number; x1: number; y: number; radius: number; capacity: number; auto?: number }
+  /**
+   * The keeper's insect dispenser (Marco, 2026-10-14): a box `width` x
+   * `depth` x `height` mm on the floor with its middle at (x, y). It drops
+   * an `insect`, given `cut`, through a chute in front of it whenever the
+   * last one it dropped (`dropped`, its pieces' ids) is gone from the arena.
+   */
+  | { kind: 'dispenser'; x: number; y: number; width: number; depth: number; height: number; insect: Insect; cut: Cut; dropped: number[] }
   /** A round branch lying on the floor (B3), from one end to the other, thick enough to climb along. */
   | { kind: 'branch'; x0: number; y0: number; x1: number; y1: number; radius: number };
 
@@ -47,7 +57,7 @@ const GAP = 12;
 
 /** True if the decoration stands up from the floor (and ants climb it). */
 export function isObstacle(d: Decoration): boolean {
-  return d.kind === 'stone' || d.kind === 'bark' || d.kind === 'tube' || d.kind === 'dish' || d.kind === 'feeder' || d.kind === 'branch';
+  return d.kind === 'stone' || d.kind === 'bark' || d.kind === 'tube' || d.kind === 'dish' || d.kind === 'feeder' || d.kind === 'branch' || d.kind === 'dispenser';
 }
 
 /** Where a decoration that stands up is drawn in depth (the floor y of its middle), and its highest point, mm. */
@@ -61,6 +71,8 @@ export function standing(d: Decoration): { y: number; top: number } {
       return { y: d.y, top: 2 * d.radius };
     case 'dish':
       return { y: d.y, top: d.rim };
+    case 'dispenser':
+      return { y: d.y, top: d.height };
     case 'branch':
       return { y: (d.y0 + d.y1) / 2, top: 2 * d.radius };
     default:
@@ -210,10 +222,19 @@ export function reliefOf(d: Decoration, x: number, y: number): number {
       const r = Math.hypot(x - d.x, y - d.y);
       return r > d.radius ? 0 : r > d.radius - DISH_WALL ? d.rim : d.base;
     }
+    case 'dispenser':
+      return Math.abs(x - d.x) < d.width / 2 && Math.abs(y - d.y) < d.depth / 2 ? d.height : 0;
     default:
       return 0;
   }
 }
+
+/** Where an insect dispenser's chute drops its insects: on the floor just in front of it. */
+export function chuteOf(d: Extract<Decoration, { kind: 'dispenser' }>): { x: number; y: number } {
+  return { x: d.x, y: d.y + d.depth / 2 + CHUTE };
+}
+/** How far in front of an insect dispenser its insects land, mm. */
+const CHUTE = 14;
 
 /** The thickness of the feeding dish's wall, mm. */
 export const DISH_WALL = 1.2;
@@ -308,6 +329,8 @@ function footprint(d: Decoration): [number, number, number, number] {
       return [Math.min(d.x0, d.x1) - d.radius, Math.min(d.y0, d.y1) - d.radius, Math.max(d.x0, d.x1) + d.radius, Math.max(d.y0, d.y1) + d.radius];
     case 'dish':
       return [d.x - d.radius, d.y - d.radius, d.x + d.radius, d.y + d.radius];
+    case 'dispenser':
+      return [d.x - d.width / 2, d.y - d.depth / 2, d.x + d.width / 2, d.y + d.depth / 2];
     default:
       return [0, 0, -1, -1];
   }

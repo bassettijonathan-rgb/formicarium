@@ -319,6 +319,7 @@ export class ArenaLayer {
       else if (d.kind === 'tube') g = this.waterTube(d);
       else if (d.kind === 'branch') g = this.branch(d);
       else if (d.kind === 'feeder') g = this.feeder(d, k);
+      else if (d.kind === 'dispenser') g = this.dispenser(d);
       else if (d.kind === 'dish') this.dish(d);
       if (!g) return;
       this.obstacles.push(g);
@@ -373,6 +374,55 @@ export class ArenaLayer {
     const h0 = p.toScene(d.x0 + 3, d.y - 0.35 * r, 1.75 * r);
     const h1 = p.toScene(d.x1 - 2, d.y - 0.35 * r, 1.75 * r);
     hl.moveTo(h0.x, h0.y).lineTo(h1.x, h1.y).stroke({ color: 0xffffff, alpha: 0.6, width: 0.25 * r * h0.k, cap: 'round' });
+    if (d.auto !== undefined) {
+      // A sugar dispenser: an upright bottle on the closed end that keeps the tube full.
+      const bottle = new Graphics();
+      g.addChild(bottle);
+      const u = d.x1 - 5;
+      const up = (h0: number, h1: number, width: number, colour: number, alpha: number) => {
+        const a = p.toScene(u, d.y, h0);
+        const b = p.toScene(u, d.y, h1);
+        bottle.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ color: colour, alpha, width: width * a.k, cap: 'round' });
+      };
+      up(1.6 * r, 2 * r + 30, 13, 0xdde9ee, 0.55);
+      up(1.8 * r, 2 * r + 24, 10.5, d.auto >= 0.5 ? 0xd9a43b : 0xe8d28f, 0.7);
+      up(2 * r + 30, 2 * r + 34, 8, 0x3d6f8f, 0.95);
+      const s0 = p.toScene(u - 3.5, d.y - 1, 2 * r + 4);
+      const s1 = p.toScene(u - 3.5, d.y - 1, 2 * r + 26);
+      bottle.moveTo(s0.x, s0.y).lineTo(s1.x, s1.y).stroke({ color: 0xffffff, alpha: 0.6, width: 1.2 * s0.k, cap: 'round' });
+    }
+    g.zIndex = d.y;
+    return g;
+  }
+
+  /** An insect dispenser: a grey plastic box with a chute at the bottom of its front, and a window showing what it gives. */
+  private dispenser(d: Extract<Decoration, { kind: 'dispenser' }>): Graphics {
+    const g = new Graphics();
+    const p = this.projection;
+    const x0 = d.x - d.width / 2;
+    const x1 = d.x + d.width / 2;
+    const y0 = d.y - d.depth / 2;
+    const y1 = d.y + d.depth / 2;
+    const h = d.height;
+    const face = (pts: [number, number, number][], colour: number, alpha = 1) =>
+      g.poly(pts.flatMap(([u, v, z]) => {
+        const q = p.toScene(u, v, z);
+        return [q.x, q.y];
+      })).fill({ color: colour, alpha });
+    const shadow = p.toScene(d.x + 2, y1 + 1, 0);
+    g.ellipse(shadow.x, shadow.y, (d.width / 2 + 3) * shadow.k, 3 * shadow.k).fill({ color: 0x3a2a18, alpha: 0.18 });
+    face([[x0, y0, h], [x1, y0, h], [x1, y1, h], [x0, y1, h]], 0xc3c8cd);
+    face([[x0, y1, 0], [x1, y1, 0], [x1, y1, h], [x0, y1, h]], 0x8e959c);
+    face([[x1, y0, 0], [x1, y1, 0], [x1, y1, h], [x1, y0, h]], 0x7a8188);
+    face([[x0, y0, 0], [x0, y1, 0], [x0, y1, h], [x0, y0, h]], 0x7a8188);
+    // The chute's mouth at the bottom of the front, and the lid's edge.
+    face([[d.x - 7, y1 + 0.1, 1], [d.x + 7, y1 + 0.1, 1], [d.x + 7, y1 + 0.1, 8], [d.x - 7, y1 + 0.1, 8]], 0x2b2a28);
+    face([[x0, y1 + 0.1, h - 2.5], [x1, y1 + 0.1, h - 2.5], [x1, y1 + 0.1, h], [x0, y1 + 0.1, h]], 0xaab0b6);
+    // A window on the front showing what it gives.
+    face([[d.x - 9, y1 + 0.1, 13], [d.x + 9, y1 + 0.1, 13], [d.x + 9, y1 + 0.1, 23], [d.x - 9, y1 + 0.1, 23]], 0xdfe7ea, 0.85);
+    const colour = d.insect === 'fly' ? 0x4a3a22 : d.insect === 'cricket' ? 0x8a6a3a : 0xc8963e;
+    const c = p.toScene(d.x, y1 + 0.2, 18);
+    g.ellipse(c.x, c.y, (d.insect === 'mealworm' ? 6 : d.insect === 'cricket' ? 4 : 1.8) * c.k, 1.4 * c.k).fill({ color: colour });
     g.zIndex = d.y;
     return g;
   }

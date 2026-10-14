@@ -11,7 +11,7 @@ import { ArenaLayer } from './render/arenaLayer';
 import { STEPS_PER_SECOND, formatAntTime } from './sim/time';
 import type { KeeperCommand } from './sim/keeper';
 import type { Item } from './sim/objects';
-import type { Cut } from './sim/prey';
+import type { Cut, Insect } from './sim/prey';
 import { type Decoration, decorationAt } from './sim/decor';
 import type { AntCard } from './sim/inspect';
 import { drawGraphs } from './ui/graphs';
@@ -529,15 +529,65 @@ async function start(): Promise<void> {
   /** The decoration being moved, waiting for the tap that says where it goes. */
   let moving = -1;
   const putButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-put]')];
-  const NAMES: Record<string, string> = { stone: 'stone', bark: 'cork bark', tube: 'water tube', dish: 'feeding dish', feeder: 'sugar feeder', branch: 'branch', twig: 'twig', leaf: 'leaf', moss: 'moss' };
+  const NAMES: Record<string, string> = {
+    stone: 'stone',
+    bark: 'cork bark',
+    tube: 'water tube',
+    dish: 'feeding dish',
+    feeder: 'sugar feeder',
+    autoFeeder: 'sugar dispenser',
+    dispenser: 'insect dispenser',
+    branch: 'branch',
+    twig: 'twig',
+    leaf: 'leaf',
+    moss: 'moss',
+  };
+  /** What a sugar dispenser is filled with and what an insect dispenser gives, chosen on its card before placing it. */
+  const dispense: { concentration: number; insect: Insect; cut: Cut } = { concentration: 1, insect: 'fly', cut: 'whole' };
+  const startPutting = (b: HTMLButtonElement, put: string) => {
+    tool = put;
+    b.setAttribute('aria-pressed', 'true');
+    const where = put === 'dispenser' ? ' Its insects drop just in front of it.' : '';
+    hint('arena', `Tap where the ${NAMES[put]} should go. It can't cover the tube's mouth or stand on something else.${where}`, 0);
+  };
   for (const b of putButtons) {
     b.addEventListener('click', () => {
       const put = b.dataset.put!;
       const on = tool !== put;
       cancelModes();
-      tool = on ? put : null;
-      b.setAttribute('aria-pressed', String(on));
-      hint('arena', on ? `Tap where the ${NAMES[put]} should go. It can't cover the tube's mouth or stand on something else.` : '', 0);
+      if (!on) {
+        hint('arena', '', 0);
+        return;
+      }
+      if (put === 'autoFeeder') {
+        showCard('Sugar dispenser', [
+          'A sugar feeder with a bottle on its end that keeps it full as the ants drink.',
+          choices<number>([[1, 'Rich sugar'], [0.1, 'Weak sugar']], () => dispense.concentration, (k) => (dispense.concentration = k)),
+        ], [
+          ['Place it', () => {
+            closeCard();
+            startPutting(b, put);
+          }, true],
+          ['Cancel', closeCard],
+        ]);
+      } else if (put === 'dispenser') {
+        const cutRow = choices<Cut>([['whole', 'whole'], ['halved', 'cut in two'], ['pieces', 'in pieces']], () => dispense.cut, (k) => (dispense.cut = k));
+        cutRow.hidden = dispense.insect === 'fly';
+        showCard('Insect dispenser', [
+          'It drops an insect in front of it, and the next one once the last is gone: carried into the nest or cleaned away. Ants take insects only while they have larvae to feed.',
+          choices<Insect>([['fly', 'Fruit fly'], ['cricket', 'Cricket'], ['mealworm', 'Mealworm']], () => dispense.insect, (k) => {
+            dispense.insect = k;
+            cutRow.hidden = k === 'fly';
+          }),
+          cutRow,
+        ], [
+          ['Place it', () => {
+            closeCard();
+            startPutting(b, put);
+          }, true],
+          ['Cancel', closeCard],
+        ]);
+      } else startPutting(b, put);
     });
   }
   $('clean').addEventListener('click', () => command({ type: 'clean' }));
@@ -553,8 +603,14 @@ async function start(): Promise<void> {
   };
   function decorationCard(k: number): void {
     const d = view.arena.decorations[k]!;
-    const name = NAMES[d.kind] ?? d.kind;
-    showCard(name[0]!.toUpperCase() + name.slice(1), [], [
+    const name = d.kind === 'feeder' && d.auto !== undefined ? NAMES.autoFeeder! : (NAMES[d.kind] ?? d.kind);
+    const about: string[] = [];
+    if (d.kind === 'feeder' && d.auto !== undefined) about.push(`Kept full of ${d.auto >= 0.5 ? 'rich' : 'weak'} sugar water as the ants drink.`);
+    if (d.kind === 'dispenser') {
+      const given = d.insect === 'fly' ? 'a fruit fly' : `a ${d.insect}${{ whole: ', whole', halved: ', cut in two', pieces: ', in pieces' }[d.cut]}`;
+      about.push(`Drops ${given} each time the last one is gone.`);
+    }
+    showCard(name[0]!.toUpperCase() + name.slice(1), about, [
       ['Move', () => {
         closeCard();
         moving = k;
@@ -899,7 +955,8 @@ async function start(): Promise<void> {
       const { u: x, v: y } = view.arena.toFloor(p.x, p.y);
       fitCheck = { before: view.arena.decorations, snapshots: 0 };
       if (moving >= 0) command({ type: 'move', index: moving, x, y });
-      else command({ type: 'put', item: tool as Item, x, y, concentration: sugar() });
+      else if (tool === 'dispenser') command({ type: 'put', item: 'dispenser', x, y, concentration: 1, insect: dispense.insect, cut: dispense.cut });
+      else command({ type: 'put', item: tool as Item, x, y, concentration: tool === 'autoFeeder' ? dispense.concentration : sugar() });
       cancelModes();
       hint('arena', '');
       return;
@@ -1041,6 +1098,22 @@ function nestPicker(pick: Required<Pick<NestSetup, 'size' | 'layout' | 'material
     group<NestLayout>('Layout', (['classic', 'organic', 'honeycomb'] as NestLayout[]).map((k) => [k, LAYOUT_NAMES[k]]), () => pick.layout, (k) => (pick.layout = k)),
   );
   return box;
+}
+
+/** A row of buttons for one choice, the chosen one pressed. */
+function choices<K>(options: [K, string][], get: () => K, set: (k: K) => void): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const buttons = options.map(([k, label]) =>
+    button(label, () => {
+      set(k);
+      sync();
+    }),
+  );
+  const sync = () => buttons.forEach((b, i) => b.setAttribute('aria-pressed', String(options[i]![0] === get())));
+  sync();
+  row.append(...buttons);
+  return row;
 }
 
 function text(tag: string, content: string): HTMLElement {

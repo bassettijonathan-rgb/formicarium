@@ -60,8 +60,11 @@ export type KeeperCommand =
   | { type: 'arenaTube'; to: TubeEnd }
   /** The arena cleaned: the dead lying there and mouldy food taken out (M5c), and the feeding dishes emptied (B4). */
   | { type: 'clean' }
-  /** An object put in the arena with its middle at (x, y); a liquid feeder comes full of sugar water of `concentration` mol/L (B3-B5). */
-  | { type: 'put'; item: Item; x: number; y: number; concentration: number }
+  /**
+   * An object put in the arena with its middle at (x, y); a liquid feeder comes full of sugar water of `concentration` mol/L
+   * (B3-B5), and an automatic one keeps it so; an insect dispenser gives `insect`, cut as `cut`.
+   */
+  | { type: 'put'; item: Item; x: number; y: number; concentration: number; insect?: Insect; cut?: Cut }
   /** The decoration at `index` in the tank's list moved so its middle is at (x, y), with any food in it (B3). */
   | { type: 'move'; index: number; x: number; y: number }
   /** The decoration at `index` taken out, with any food in it (B3). */
@@ -194,7 +197,7 @@ export function applyCommand(world: World, command: KeeperCommand): boolean {
       emptyDishes(world);
       break;
     case 'put':
-      putItem(world, command.item, command.x, command.y, command.concentration);
+      putItem(world, command.item, command.x, command.y, { concentration: command.concentration, insect: command.insect, cut: command.cut });
       break;
     case 'move':
       moveDecoration(world, command.index, command.x, command.y);
