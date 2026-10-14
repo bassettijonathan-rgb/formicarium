@@ -20,6 +20,7 @@ import { pourWater, updateHumidity, updateWater } from './water';
 import { agePrey, updateMould } from './mould';
 import { type Cut, type Insect, type Piece, agePieces, edible, makeInsect } from './prey';
 import { STEPS_PER_SECOND } from './time';
+import { runDispensers } from './objects';
 import { type History, createHistory, recordHistory } from './history';
 
 export type { Farm } from './farm';
@@ -216,6 +217,7 @@ export function step(world: World): void {
   if (world.step % WATER_EVERY === 0) {
     agePrey(world.food, world.params, WATER_EVERY / STEPS_PER_SECOND);
     agePieces(world, WATER_EVERY / STEPS_PER_SECOND);
+    runDispensers(world);
   }
   if (world.step % EVAPORATE_EVERY === 0) {
     evaporateTrail(world.arena, EVAPORATE_EVERY / STEPS_PER_SECOND, world.params.trailHalfLife);

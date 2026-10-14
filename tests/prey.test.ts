@@ -131,6 +131,10 @@ describe('feeder insects (DESIGN.md 3.4, B6)', () => {
     piece.place = Place.farm;
     piece.x = 151;
     piece.y = 151;
+    // Two days of ant time (preyMouldDays tank days) before it goes mouldy, not two hours.
+    agePieces(world, (world.params.preyMouldDays - 0.1) * world.params.daySeconds);
+    expect(world.prey.some((p) => p.mouldy)).toBe(false);
+    expect(world.params.preyMouldDays * world.params.daySeconds).toBe(2 * 24 * 60 * 60);
     for (let t = 0; t < 4 * world.params.daySeconds; t += 10) {
       agePieces(world, 10);
       updateMould(world.farm, world.ants, world.params, 10, world.prey);

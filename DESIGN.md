@@ -226,7 +226,8 @@ they took them apart". He approved this plan as drafted
   it drink from it now and then (`pieceSipRate`, 0.2 per second) and feed
   the protein on to the larvae; the husk, and a piece gone mouldy, is
   carried out to the midden as a corpse is. A piece left uneaten goes mouldy
-  after `preyMouldDays` (2 tank days at 25 °C), and in the damp nest feeds
+  after `preyMouldDays` (48 tank days at 25 °C: two days of ant time, see
+  below), and in the damp nest feeds
   mould as a corpse does. Clean arena takes out husks and mouldy pieces;
   Clear food takes out every insect lying in the arena. B9: old tanks load
   with no insects; an old insect puddle stays a puddle (the protein drop is
@@ -237,6 +238,23 @@ they took them apart". He approved this plan as drafted
   many workers come and how long each drinks: 10 hungry workers took a
   cricket's juice in 97-115 minutes whole or in pieces, and a mealworm's in
   about 5.5 hours either way.
+- **Dispensers (Marco, 2026-10-14).** Two more things to put in the arena,
+  both run every 10 s of ant time (`runDispensers` in `src/sim/objects.ts`).
+  A *sugar dispenser* is the liquid feeder with a bottle on its closed end:
+  it is topped up to full as the ants drink, with rich or weak sugar water
+  chosen when it is put in (Refill and Clear food do not empty it for
+  long). An *insect dispenser* is a plastic box 4 x 3 x 3 cm that ants climb
+  like the other objects; it drops a fruit fly, a cricket or a mealworm
+  (whole, cut in two or in pieces, chosen when it is put in) through a chute
+  14 mm in front of it, and drops the next only once nothing of the last
+  lies in the arena to be eaten: carried into the nest, drunk to a husk or
+  taken out. A mouldy piece still counts, so mouldy insects do not pile up;
+  the next drops once Clean arena takes it out. It is refused where its
+  chute would face the glass or something standing. Since ants take insects
+  only while they have hungry larvae (B7), a colony without brood leaves the
+  first insect lying and gets no more. Keepers buy automatic sugar feeders;
+  an automatic insect dispenser is Marco's invention. Tested: a test-tube
+  colony with larvae carries off the flies one gives and gets more.
 
 ### 3.5 Bought nests (Marco, 2026-10-13)
 
@@ -963,9 +981,15 @@ What grows mould, as Marco chose: uneaten prey and corpses (`src/sim/mould.ts`).
 3. **Nurses carry brood out of mould.** A worker standing in mould (5% or
    more) treats brood there like brood that is too cold or too dry: it picks
    it up readily and holds on to it while it is still in mould.
-4. **Prey in the arena.** An insect left for 2 tank days at 25 °C (rough:
-   keepers take prey out after a day or two) goes mouldy, grey and furred,
-   and ants no longer take it; the keeper should clear it away. Ants drink
+4. **Prey in the arena.** An insect left for two days of ant time at 25 °C
+   (48 tank days, since a tank day is an hour of ant time; rough: keepers
+   take prey out after a day or two) goes mouldy, grey and furred, and ants
+   no longer take it; the keeper should clear it away. It was 2 tank days
+   (two hours of ant time) until Marco found it too soon (2026-10-14): a
+   mealworm went mouldy before a colony could finish it, which takes about
+   5.5 hours of ant time (section 9.12). A fungus grows on the ants' clock,
+   as their eating does, not on the colony's compressed one. At 1× an
+   insect now keeps for two real days; at 64× for 45 minutes. Ants drink
    prey where it lies rather than carrying pieces home, so overfeeding
    wastes food but brings no mould into the nest.
 

@@ -592,7 +592,11 @@ export interface AntParams {
 
   /** True: uneaten prey and corpses lying in the farm go mouldy. Off in the experiments unless they say otherwise; the page turns it on. */
   mould: boolean;
-  /** Tank days an insect lies in the arena at 25 °C before it is mouldy and ants no longer take it (rough: keepers take prey out after a day or two). */
+  /**
+   * Tank days an insect lies uneaten at 25 °C before it is mouldy and ants no longer take it. A fungus grows on the
+   * ants' clock, not the colony's (a tank day is an hour of ant time), so 48 is two days of ant time (rough: keepers
+   * take prey out after a day or two). At 2, a mealworm went mouldy before a colony could finish it (section 9.12).
+   */
   preyMouldDays: number;
   /** Tank days a corpse lies in the farm at 25 °C before mould grows on it (rough). */
   corpseMouldDays: number;
@@ -855,7 +859,7 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   hygrotaxis: true,
 
   mould: false,
-  preyMouldDays: 2,
+  preyMouldDays: 48,
   corpseMouldDays: 2,
   mouldDoubling: 10,
   mouldGrowth: 3,

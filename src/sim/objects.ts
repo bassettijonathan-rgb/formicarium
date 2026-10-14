@@ -9,13 +9,21 @@
  * so ants climb whatever now stands there.
  */
 import { isBlocked, reliefAt } from './arena';
-import { type Decoration, buildRelief, extent, inDish, isObstacle, middleOf, reliefOf, shifted, stampDecorations } from './decor';
+import { type Decoration, buildRelief, chuteOf, extent, inDish, isObstacle, middleOf, reliefOf, shifted, stampDecorations } from './decor';
 import { Place } from './ants';
+import { type Cut, type Insect, edible, makeInsect } from './prey';
 import { Purpose, Rng } from './rng';
 import type { World } from './world';
 
 /** What the keeper can put in the arena. */
-export type Item = 'dish' | 'feeder' | 'stone' | 'bark' | 'branch';
+export type Item = 'dish' | 'feeder' | 'stone' | 'bark' | 'branch' | 'autoFeeder' | 'dispenser';
+
+/** What a new liquid feeder is filled with (mol/L), and what an insect dispenser gives. */
+export interface ItemSetup {
+  concentration: number;
+  insect?: Insect | undefined;
+  cut?: Cut | undefined;
+}
 
 /** A liquid feeder holds 2 mL of sugar water when full (B5). */
 export const FEEDER_CAPACITY = 2000;
@@ -26,7 +34,7 @@ const MOUTH_CLEAR = 25;
 const WALL_CLEAR = 3;
 
 /** The object `item` with its middle at (x, y). Stones, bark and branches take their shape from the tank's seed and the step. */
-export function makeItem(world: World, item: Item, x: number, y: number): Decoration {
+export function makeItem(world: World, item: Item, x: number, y: number, setup: ItemSetup = { concentration: 1 }): Decoration {
   const rng = new Rng(world.seed, Purpose.decor, world.step, world.decor.length);
   switch (item) {
     case 'dish':
@@ -35,6 +43,12 @@ export function makeItem(world: World, item: Item, x: number, y: number): Decora
     case 'feeder':
       // A test tube 8 cm long and 15 mm across, its cotton plug at the left end (B5).
       return { kind: 'feeder', x0: x - 40, x1: x + 40, y, radius: 7.5, capacity: FEEDER_CAPACITY };
+    case 'autoFeeder':
+      // The same tube, with a bottle on its closed end that keeps it full.
+      return { kind: 'feeder', x0: x - 40, x1: x + 40, y, radius: 7.5, capacity: FEEDER_CAPACITY, auto: setup.concentration };
+    case 'dispenser':
+      // A plastic box 4 cm wide, 3 cm deep and 3 cm high, its chute in front.
+      return { kind: 'dispenser', x, y, width: 40, depth: 30, height: 30, insect: setup.insect ?? 'fly', cut: setup.cut ?? 'whole', dropped: [] };
     case 'stone': {
       const radius = rng.range(11, 17);
       return { kind: 'stone', x, y, radius, height: radius * rng.range(0.55, 0.8), outline: Array.from({ length: 20 }, () => rng.range(0.84, 1.1)) };
@@ -62,6 +76,11 @@ function fits(world: World, d: Decoration, others: Float32Array, carried: Set<nu
   const nx = Math.max(x0, Math.min(arena.entranceX, x1));
   const ny = Math.max(y0, Math.min(arena.entranceY, y1));
   if (Math.hypot(nx - arena.entranceX, ny - arena.entranceY) < MOUTH_CLEAR) return false;
+  if (d.kind === 'dispenser') {
+    // Its insects must land on open floor inside the box.
+    const c = chuteOf(d);
+    if (c.y > arena.height - WALL_CLEAR - 4 || others[Math.floor(c.y) * arena.width + Math.floor(c.x)]! > 0) return false;
+  }
   if (!isObstacle(d)) return true;
   for (let cy = Math.max(0, Math.floor(y0)); cy <= Math.min(arena.height - 1, Math.ceil(y1)); cy++) {
     for (let cx = Math.max(0, Math.floor(x0)); cx <= Math.min(arena.width - 1, Math.ceil(x1)); cx++) {
@@ -88,15 +107,41 @@ function foodWith(world: World, d: Decoration): number[] {
 
 /**
  * Puts `item` in the arena with its middle at (x, y), if it fits there. A
- * feeder comes full of sugar water of `concentration` mol/L. Returns true if it was put in.
+ * feeder comes full of sugar water of `setup.concentration` mol/L; an insect
+ * dispenser gives `setup.insect`, cut as `setup.cut`. Returns true if it was put in.
  */
-export function putItem(world: World, item: Item, x: number, y: number, concentration: number): boolean {
-  const d = makeItem(world, item, x, y);
+export function putItem(world: World, item: Item, x: number, y: number, setup: ItemSetup): boolean {
+  const d = makeItem(world, item, x, y, setup);
   if (!fits(world, d, world.arena.relief, new Set())) return false;
   world.decor.push(d);
   stampDecorations(world.arena, world.decor);
-  if (d.kind === 'feeder') fillFeeder(world, d, concentration);
+  if (d.kind === 'feeder') fillFeeder(world, d, setup.concentration);
   return true;
+}
+
+/**
+ * The automatic feeders and dispensers at work (Marco, 2026-10-14), run
+ * every few seconds: an automatic sugar feeder is topped up to full, and an
+ * insect dispenser drops a new insect at its chute once nothing of the last
+ * one lies in the arena to be eaten. A husk does not count; a mouldy piece
+ * does, so mouldy insects do not pile up: the next drops once Clean arena
+ * has taken it out. A colony with no hungry brood leaves insects lying
+ * (B7), so its dispenser waits.
+ */
+export function runDispensers(world: World): void {
+  for (const d of world.decor) {
+    if (d.kind === 'feeder' && d.auto !== undefined) fillFeeder(world, d, d.auto);
+    if (d.kind !== 'dispenser') continue;
+    const last = new Set(d.dropped);
+    const lying = world.prey.some((p) => last.has(p.id) && p.place === Place.arena && p.carriedBy < 0 && (edible(p) || p.mouldy));
+    if (lying) continue;
+    const c = chuteOf(d);
+    if (!canPutFood(world, c.x, c.y)) continue;
+    const pieces = makeInsect(world.seed, world.step, world.nextFoodId, d.insect, d.cut, c.x, c.y);
+    world.nextFoodId += pieces.length;
+    world.prey.push(...pieces);
+    d.dropped = pieces.map((p) => p.id);
+  }
 }
 
 /** Moves the decoration at `index` so its middle is at (x, y), with the food in it, if it fits there. Returns true if it moved. */
