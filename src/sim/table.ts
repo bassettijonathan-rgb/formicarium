@@ -103,14 +103,15 @@ export function addModule(world: World, setup: NestSetup, at?: { x: number; y: n
   const y = Math.round(at?.y ?? front + MODULE_GAP);
   const { nest, air } = carveModule(new Rng(world.seed, Purpose.nest, id), setup, id, x, y);
   if (x < 0 || y < 0) return null;
-  growTable(farm, Math.max(farm.width, x + nest.width + TABLE_MARGIN), Math.max(farm.height, y + nest.height), params.roomTemperature, params.roomHumidity);
-  // Bare table under it and round it.
+  // Bare table under it and round it (beyond the table's edge it will be, once the table grows), checked before
+  // the table grows so a refused nest leaves the tank as it was.
   for (let cy = y - CLEAR; cy < y + nest.height + CLEAR; cy++) {
     for (let cx = x - CLEAR; cx < x + nest.width + CLEAR; cx++) {
       if (cx < 0 || cy < 0 || cx >= farm.width || cy >= farm.height) continue;
       if (farm.material[cy * farm.width + cx] !== Material.table) return null;
     }
   }
+  growTable(farm, Math.max(farm.width, x + nest.width + TABLE_MARGIN), Math.max(farm.height, y + nest.height), params.roomTemperature, params.roomHumidity);
   table.nextId++;
   table.modules.push(nest);
   layModule(farm, nest, air);

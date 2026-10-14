@@ -39,10 +39,10 @@ export class Camera {
     this.target.position.set(this.element.clientWidth / 2 - x * s, this.element.clientHeight / 2 - y * s);
   }
 
-  /** Fits a rectangle (in mm) to the element with a margin, leaving `top` pixels free for the panel. */
-  fit(bounds: { x: number; y: number; width: number; height: number }, top = 0): void {
+  /** Fits a rectangle (in mm) to the element with a margin, leaving `top` and `bottom` pixels free for the bars. */
+  fit(bounds: { x: number; y: number; width: number; height: number }, top = 0, bottom = 0): void {
     const w = this.element.clientWidth;
-    const h = this.element.clientHeight - top;
+    const h = this.element.clientHeight - top - bottom;
     const scale = Math.min(w / bounds.width, h / bounds.height) * 0.94;
     this.target.scale.set(scale);
     this.target.position.set(

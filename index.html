@@ -6,145 +6,179 @@
     <title>Formicarium</title>
     <link rel="icon" href="data:," />
     <style>
-      html, body { margin: 0; height: 100%; overflow: hidden; background: #111317; color: #d8dde3;
+      :root { --panel: rgba(20, 23, 28, 0.9); --ink: #e3e7ec; --muted: #9aa4b1; --button: #2a3038; --line: #3f4650;
+        --honey: #e8a83c; --honey-dark: #4a3a1e; --title: #f3e6cc; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #111317; color: var(--ink);
         font: 14px/1.4 system-ui, sans-serif; }
       #stage { position: fixed; inset: 0; touch-action: none; cursor: grab; }
       #stage:active { cursor: grabbing; }
-      #hud { position: fixed; top: 12px; left: 12px; padding: 10px 12px; border-radius: 8px;
-        background: rgba(17, 19, 23, 0.82); max-width: calc(100vw - 48px); }
-      #hud h1 { font-size: 16px; margin: 0 0 4px; font-weight: 600; display: flex; gap: 10px; align-items: center; }
-      #hud h1 button { font-size: 13px; font-weight: 400; margin-left: auto; }
-      #hud.small > :not(h1, #status, #outside) { display: none; }
-      #hud p { margin: 2px 0; color: #9aa4b1; }
-      #hud .row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-      #hud button { background: #262b33; color: #d8dde3; border: 1px solid #3a404a; border-radius: 5px;
-        padding: 3px 9px; font: inherit; cursor: pointer; }
-      #hud button[aria-pressed='true'] { background: #3d4a5c; border-color: #6d84a3; }
-      #inspector { position: fixed; left: 12px; bottom: 12px; padding: 10px 12px; border-radius: 8px; width: min(340px, calc(100vw - 48px));
-        background: rgba(17, 19, 23, 0.9); border: 1px solid #5a5236; }
+      [hidden] { display: none !important; }
+      button { background: var(--button); color: var(--ink); border: 1px solid var(--line); border-radius: 6px;
+        padding: 4px 10px; font: inherit; cursor: pointer; }
+      button:hover { border-color: #6d7888; }
+      button:focus-visible { outline: 2px solid var(--honey); outline-offset: 1px; }
+      button[aria-pressed='true'] { background: var(--honey-dark); border-color: var(--honey); }
+      button.primary { background: var(--honey); color: #1d1606; border-color: var(--honey); font-weight: 600; }
+      input[type='text'] { font: inherit; background: #1e2228; color: var(--ink); border: 1px solid var(--line);
+        border-radius: 6px; padding: 6px 10px; width: 100%; box-sizing: border-box; }
+      .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      .label { color: var(--muted); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+      .note { color: var(--muted); }
+
+      /* The start screen and the new-tank questions (U1-U3). */
+      .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px;
+        background: rgba(17, 19, 23, 0.35); }
+      .screen .panel { background: var(--panel); border-radius: 12px; padding: 20px 22px; width: min(480px, 100%);
+        box-sizing: border-box; display: grid; gap: 14px; max-height: calc(100vh - 32px); overflow: auto; }
+      .screen h1, .screen h2 { font: 600 28px/1.1 Georgia, serif; margin: 0; color: var(--title); }
+      .screen h2 { font-size: 24px; }
+      #tank-list { display: grid; gap: 8px; }
+      .tank { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 10px 12px; border: 1px solid var(--line);
+        border-radius: 8px; background: #1e2228; }
+      .tank b { font-weight: 600; }
+      .tank span { color: var(--muted); font-size: 13px; grid-column: 1; }
+      .tank .row { grid-row: 1 / span 2; grid-column: 2; }
+      .choice { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .choice button { text-align: left; padding: 10px 12px; display: grid; gap: 2px; }
+      .choice small { color: var(--muted); font-size: 12px; }
+
+      /* The tank: a bar on top, the tabs at the bottom (U4). */
+      #top { position: fixed; top: 0; left: 0; right: 0; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center;
+        padding: 7px 10px; background: var(--panel); }
+      #tank-name { font: 600 17px/1 Georgia, serif; color: var(--title); }
+      #clock { color: var(--muted); font-variant-numeric: tabular-nums; }
+      #top .spacer { flex: 1; }
+      .seg { display: inline-flex; }
+      .seg button { border-radius: 0; margin-left: -1px; padding: 4px 9px; }
+      .seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+      .seg button:last-child { border-radius: 0 6px 6px 0; }
+      #counts { position: fixed; left: 10px; margin: 0; padding: 4px 9px; border-radius: 6px; background: rgba(20, 23, 28, 0.75);
+        color: var(--muted); font-size: 12.5px; max-width: calc(100vw - 40px); }
+      #dock { position: fixed; left: 0; right: 0; bottom: 0; background: var(--panel); }
+      .pane { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px 6px; align-items: center; }
+      .pane .hint { color: var(--muted); font-size: 13px; flex-basis: 100%; }
+      #tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+      #tabs button { background: none; border: 0; border-radius: 0; padding: 9px 2px 10px; color: var(--muted); font-weight: 500;
+        border-top: 2px solid transparent; margin-top: -1px; }
+      #tabs button[aria-selected='true'] { color: var(--title); border-top-color: var(--honey); }
+      #tabs button:disabled { opacity: 0.35; cursor: default; }
+
+      /* Cards: a nest, a tube, a thing in the arena, a nest being added (U5). */
+      #card { position: fixed; right: 10px; width: min(300px, calc(100vw - 20px)); box-sizing: border-box; padding: 12px;
+        border-radius: 10px; background: var(--panel); border: 1px solid #5a4a2a; display: grid; gap: 10px;
+        max-height: 60vh; overflow: auto; }
+      #card h3 { margin: 0; font: 600 16px/1.2 Georgia, serif; color: var(--title); }
+      #card p { margin: 0; color: var(--muted); font-size: 13px; }
+      .swatch { width: 26px; height: 26px; padding: 0; border-width: 2px; }
+
+      #inspector { position: fixed; left: 10px; padding: 10px 12px; border-radius: 8px; width: min(340px, calc(100vw - 44px));
+        background: var(--panel); border: 1px solid #5a5236; }
       #inspector h2 { font-size: 15px; margin: 0 0 4px; font-weight: 600; color: #ffd36b; }
       #inspector p { margin: 3px 0; color: #c2cad4; }
       #inspector p.doing { color: #e8ecf0; }
-      #inspector div { display: flex; gap: 6px; }
-      #inspector button { margin-top: 8px; background: #262b33; color: #d8dde3; border: 1px solid #3a404a; border-radius: 5px;
-        padding: 3px 9px; font: inherit; cursor: pointer; }
-      #inspector button[aria-pressed='true'] { background: #3d4a5c; border-color: #6d84a3; }
+      #inspector div { display: flex; gap: 6px; margin-top: 8px; }
+      #away { position: fixed; right: 10px; padding: 10px 12px; border-radius: 8px; width: min(360px, calc(100vw - 44px));
+        background: var(--panel); border: 1px solid var(--line); }
+      #away h2 { font-size: 15px; margin: 0 0 6px; font-weight: 600; }
+      #away p { margin: 3px 0; color: #c2cad4; }
+      #away button { margin-top: 8px; }
       #history { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(900px, calc(100vw - 32px));
         max-height: calc(100vh - 32px); overflow: auto; padding: 10px 12px; border-radius: 8px; box-sizing: border-box;
-        background: rgba(17, 19, 23, 0.95); border: 1px solid #3a404a; }
+        background: rgba(17, 19, 23, 0.96); border: 1px solid var(--line); }
       #history h2 { font-size: 15px; margin: 0; font-weight: 600; flex: 1; }
       #history .bar { display: flex; gap: 8px; align-items: center; }
-      #history button { background: #262b33; color: #d8dde3; border: 1px solid #3a404a; border-radius: 5px;
-        padding: 3px 9px; font: inherit; cursor: pointer; }
       #graph-box { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 8px; margin-top: 8px; }
       #graph-box canvas { width: 100%; height: 190px; background: #16191e; border-radius: 5px; }
       #lapse { display: block; width: 100%; max-height: 60vh; object-fit: contain; image-rendering: pixelated; margin: 8px 0; }
-      [hidden] { display: none !important; }
       #lapse-at { flex: 1; }
-      #away { position: fixed; right: 12px; bottom: 12px; padding: 10px 12px; border-radius: 8px; width: min(360px, calc(100vw - 48px));
-        background: rgba(17, 19, 23, 0.9); border: 1px solid #3a404a; }
-      #away h2 { font-size: 15px; margin: 0 0 6px; font-weight: 600; }
-      #away p { margin: 3px 0; color: #c2cad4; }
-      #away button { margin-top: 8px; background: #262b33; color: #d8dde3; border: 1px solid #3a404a; border-radius: 5px;
-        padding: 3px 9px; font: inherit; cursor: pointer; }
     </style>
   </head>
   <body>
     <div id="stage"></div>
-    <div id="hud">
-      <h1>Formicarium <button id="hud-toggle" aria-expanded="true">Hide controls</button></h1>
-      <p id="status">Setting up the tank…</p>
-      <p id="counts"></p>
-      <p id="outside"></p>
-      <p>Tap an ant to inspect and follow it. Tap the arena floor or a feeding dish to put down a drop of sugar water or an insect. Drag to move, scroll or pinch to zoom.</p>
-      <div class="row">
-        <button data-sugar="1" aria-pressed="true">Rich sugar (1 M)</button>
-        <button data-sugar="0.1">Weak sugar (0.1 M)</button>
-        <button data-sugar="fly">Fruit fly</button>
-        <button data-sugar="cricket">Cricket</button>
-        <button data-sugar="mealworm">Mealworm</button>
-        <button id="clear">Clear food</button>
-        <button id="clean">Clean arena</button>
-        <button id="trails" aria-pressed="true">Show trails</button>
-        <button id="from-above" aria-pressed="false">From above</button>
-      </div>
-      <div class="row" id="cut-row" hidden>
-        <span style="align-self: center; color: #9aa4b1">Give it:</span>
-        <button data-cut="whole" aria-pressed="true">Whole</button>
-        <button data-cut="halved">Cut in two</button>
-        <button data-cut="pieces">In pieces</button>
-      </div>
-      <div class="row">
-        <span style="align-self: center; color: #9aa4b1">Put in the arena:</span>
-        <button data-put="dish">Feeding dish</button>
-        <button data-put="feeder">Sugar feeder</button>
-        <button data-put="stone">Stone</button>
-        <button data-put="bark">Cork bark</button>
-        <button data-put="branch">Branch</button>
-        <button data-put="move">Move</button>
-        <button data-put="remove">Take out</button>
-        <button id="refill">Refill feeders</button>
-      </div>
-      <p id="put-hint" hidden></p>
-      <div class="row">
-        <span style="align-self: center; color: #9aa4b1">Heat mat:</span>
-        <button data-mat="off">Off</button>
-        <button data-mat="left">Left</button>
-        <button data-mat="middle" aria-pressed="true">Middle</button>
-        <button data-mat="right">Right</button>
-        <button id="warmth">Show warmth</button>
-      </div>
-      <div class="row">
-        <button id="damp">Show damp</button>
-        <span id="damp-note" style="align-self: center; color: #9aa4b1"></span>
-      </div>
-      <div class="row" id="table-row" hidden>
-        <span style="align-self: center; color: #9aa4b1">Table:</span>
-        <button data-put="join">Join ports</button>
-        <button data-put="plug">Plug</button>
-        <button data-put="arena">Arena tube</button>
-        <button data-put="moveNest">Move a nest</button>
-        <button data-put="takeAway">Take away</button>
-        <button data-put="coverOne">Cover one</button>
-      </div>
-      <div class="row" id="cover-row" hidden>
-        <span style="align-self: center; color: #9aa4b1">All covers:</span>
-        <button data-cover="on" aria-pressed="true">On</button>
-        <button data-cover="left">Lift left half</button>
-        <button data-cover="right">Lift right half</button>
-        <button data-cover="off">Off</button>
-      </div>
-      <div class="row">
+
+    <div id="top" hidden>
+      <button id="to-tanks">‹ Tanks</button>
+      <span id="tank-name"></span>
+      <span id="clock"></span>
+      <span class="spacer"></span>
+      <span class="seg">
         <button data-speed="0">Pause</button>
         <button data-speed="1" aria-pressed="true">1×</button>
         <button data-speed="4">4×</button>
         <button data-speed="16">16×</button>
         <button data-speed="64">64×</button>
+      </span>
+      <button id="save-file">Save to a file</button>
+    </div>
+    <p id="counts" hidden></p>
+
+    <div id="dock" hidden>
+      <div class="pane" data-pane="watch">
+        <span class="hint">Tap an ant to read what it is doing and follow it. Drag to move, scroll or pinch to zoom.</span>
+        <button id="trails" aria-pressed="true">Show trails</button>
+        <button id="warmth" aria-pressed="false">Show warmth</button>
+        <button id="damp" aria-pressed="false">Show damp</button>
+        <button id="from-above" aria-pressed="false">From above</button>
         <button id="fit">Fit view</button>
+        <span class="hint" id="damp-note" hidden></span>
       </div>
-      <div class="row">
-        <span style="align-self: center; color: #9aa4b1">Bought nest:</span>
-        <button data-material="ytong">Ytong</button>
-        <button data-material="plaster">Plaster</button>
-        <button data-material="acrylic">Acrylic</button>
-        <button data-material="wood">Wood</button>
-        <button data-size="S">Small</button>
-        <button data-size="M">Medium</button>
-        <button data-size="L">Large</button>
-        <button data-layout="classic">Rooms</button>
-        <button data-layout="organic">Organic</button>
-        <button data-layout="honeycomb">Honeycomb</button>
-        <button id="add-nest">Add it to the table</button>
-        <button id="new-tank">Start new tank in it</button>
-        <button id="new-tube">Start new tank in a test tube</button>
+      <div class="pane" data-pane="feed" hidden>
+        <span class="hint">Choose the food, then tap the arena floor or a feeding dish.</span>
+        <button data-sugar="1" aria-pressed="true">Rich sugar</button>
+        <button data-sugar="0.1" aria-pressed="false">Weak sugar</button>
+        <button data-sugar="fly" aria-pressed="false">Fruit fly</button>
+        <button data-sugar="cricket" aria-pressed="false">Cricket</button>
+        <button data-sugar="mealworm" aria-pressed="false">Mealworm</button>
+        <span class="row" id="cut-row" hidden>
+          <span class="note">given</span>
+          <button data-cut="whole" aria-pressed="true">whole</button>
+          <button data-cut="halved" aria-pressed="false">cut in two</button>
+          <button data-cut="pieces" aria-pressed="false">in pieces</button>
+        </span>
+        <button id="refill">Refill feeders</button>
+        <button id="clear">Clear food</button>
       </div>
-      <div class="row">
+      <div class="pane" data-pane="arena" hidden>
+        <span class="hint" id="arena-hint">Choose a thing, then tap where it goes. Tap something already in the arena to move it or take it out.</span>
+        <button data-put="dish">Feeding dish</button>
+        <button data-put="feeder">Sugar feeder</button>
+        <button data-put="stone">Stone</button>
+        <button data-put="bark">Cork bark</button>
+        <button data-put="branch">Branch</button>
+        <button id="clean">Clean arena</button>
+      </div>
+      <div class="pane" data-pane="nests" hidden>
+        <span class="hint" id="nests-hint">Tap a nest or a tube to change it.</span>
+        <button class="primary" id="add-nest">Add a nest</button>
+      </div>
+      <div class="pane" data-pane="climate" hidden>
+        <span class="hint" id="outside"></span>
+        <span class="note">Heat mat:</span>
+        <span class="seg">
+          <button data-mat="off">Off</button>
+          <button data-mat="left">Left</button>
+          <button data-mat="middle" aria-pressed="true">Middle</button>
+          <button data-mat="right">Right</button>
+        </span>
+      </div>
+      <div class="pane" data-pane="colony" hidden>
+        <span class="hint">How the colony has grown since the tank was set up.</span>
         <button id="graphs">Colony graphs</button>
         <button id="timelapse">Timelapse of the nest</button>
       </div>
+      <nav id="tabs" role="tablist">
+        <button role="tab" data-tab="watch" aria-selected="true">Watch</button>
+        <button role="tab" data-tab="feed" aria-selected="false">Feed</button>
+        <button role="tab" data-tab="arena" aria-selected="false">Arena</button>
+        <button role="tab" data-tab="nests" aria-selected="false">Nests</button>
+        <button role="tab" data-tab="climate" aria-selected="false">Climate</button>
+        <button role="tab" data-tab="colony" aria-selected="false">Colony</button>
+      </nav>
     </div>
-    <div id="away" hidden></div>
+
+    <div id="card" hidden></div>
     <div id="inspector" hidden></div>
+    <div id="away" hidden></div>
     <div id="history" hidden>
       <div class="bar"><h2 id="history-title"></h2><button id="to-graphs">Graphs</button><button id="to-lapse">Timelapse</button><button id="history-close">Close</button></div>
       <div id="graph-box">
@@ -159,6 +193,37 @@
         </div>
       </div>
     </div>
+
+    <section class="screen" id="start">
+      <div class="panel">
+        <h1>Formicarium</h1>
+        <p class="note" id="start-note">Your tanks are kept in this browser.</p>
+        <div id="tank-list"></div>
+        <div class="row">
+          <button class="primary" id="go-new">New tank</button>
+          <button id="go-load">Load from a file</button>
+        </div>
+        <p class="note" id="load-note" hidden></p>
+        <input type="file" id="load-file" accept=".formicarium,application/gzip" hidden />
+      </div>
+    </section>
+
+    <section class="screen" id="new" hidden>
+      <div class="panel">
+        <h2>New tank</h2>
+        <label style="display: grid; gap: 4px"><span class="label">Name</span><input type="text" id="new-name" /></label>
+        <div style="display: grid; gap: 6px">
+          <span class="label">The colony starts in</span>
+          <div class="choice">
+            <button data-start="tube" aria-pressed="true"><b>A test tube</b><small>As keepers buy one: a queen, 20 workers and a little brood. Add nests when they need room.</small></button>
+            <button data-start="nest" aria-pressed="false"><b>A bought nest</b><small>The colony is moved straight into a nest you choose.</small></button>
+          </div>
+        </div>
+        <div id="new-nest" hidden></div>
+        <div class="row"><button class="primary" id="create">Set up the tank</button><button id="new-back">Back</button></div>
+      </div>
+    </section>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

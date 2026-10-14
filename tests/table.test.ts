@@ -282,3 +282,23 @@ describe('the test tube and moving house (Nests 3, N8, N9)', () => {
     expect(world.ants.site[i]).toBe(0);
   });
 });
+
+describe("the keeper's table changes report whether they happened (the page's hints, U5)", () => {
+  it('a refused change returns false and leaves the tank as it was', () => {
+    const world = tableOf();
+    const before = hashState(world);
+    expect(applyCommand(world, { type: 'addNest', nest: { size: 'S', layout: 'classic' }, x: 20, y: 20 })).toBe(false);
+    expect(applyCommand(world, { type: 'removeNest', module: 99 })).toBe(false);
+    expect(applyCommand(world, { type: 'removeTube', tube: 99 })).toBe(false);
+    expect(hashState(world)).toBe(before);
+  });
+
+  it('an accepted change returns true', () => {
+    const world = tableOf();
+    expect(applyCommand(world, { type: 'addNest', nest: { size: 'S', layout: 'classic' } })).toBe(true);
+    const id = world.farm.table!.modules.at(-1)!.id;
+    expect(applyCommand(world, { type: 'arenaTube', to: { module: id, port: 0 } })).toBe(true);
+    expect(world.farm.table!.arena.module).toBe(id);
+    expect(applyCommand(world, { type: 'sugar', x: 60, y: 120, volume: 10, concentration: 0.1 })).toBe(true);
+  });
+});

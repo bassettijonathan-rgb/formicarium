@@ -34,6 +34,8 @@ export class NestView {
   private readonly lid = new Graphics();
   /** The covers over the lids, tinted, where the keeper has not lifted them (N7). */
   private readonly cover = new Graphics();
+  /** The keeper's marks over the table: a nest being placed, and the nests it can be joined to (U5). */
+  private readonly marks = new Graphics();
   /** Where things lie on the floor: under the ants and brood, over the floor picture. */
   readonly below = new Container();
   /** Keeps what is drawn on the floor (the warmth or damp reading) to the chambers and tubes. */
@@ -52,7 +54,7 @@ export class NestView {
   private anchor = { u: 0, v: 0 };
 
   constructor() {
-    this.floor.addChild(this.desk, this.floors, this.tubeBeds, this.below, this.belowMask, this.above, this.tubeGlass, this.walls, this.front, this.lid, this.cover);
+    this.floor.addChild(this.desk, this.floors, this.tubeBeds, this.below, this.belowMask, this.above, this.tubeGlass, this.walls, this.front, this.lid, this.cover, this.marks);
     this.below.mask = this.belowMask;
     this.root.addChild(this.floor);
   }
@@ -108,6 +110,31 @@ export class NestView {
     if (JSON.stringify(lit) === JSON.stringify(this.lit)) return;
     this.lit = lit;
     this.drawCover();
+  }
+
+  /**
+   * Draws a nest being placed (`ghost`, its corner and size in table mm, green
+   * where it fits) and rings round the modules it can be joined to, the chosen
+   * ones solid, and, while placing, the stretch of table a nest can go on
+   * (`room`); nothing when all are empty.
+   */
+  setMarks(
+    ghost: { x: number; y: number; width: number; height: number; ok: boolean } | null,
+    targets: { id: number; chosen: boolean }[],
+    room: { width: number; height: number } | null = null,
+  ): void {
+    const g = this.marks.clear();
+    const px = 1 / NEST_VIEW.scale;
+    if (room) g.rect(0, 0, room.width, room.height).fill({ color: 0xffffff, alpha: 0.07 }).stroke({ width: 1.5 * px, color: 0xffffff, alpha: 0.35 });
+    if (ghost) {
+      const colour = ghost.ok ? 0x5fb57a : 0xd8644f;
+      g.rect(ghost.x, ghost.y, ghost.width, ghost.height).fill({ color: colour, alpha: 0.3 }).stroke({ width: 2.5 * px, color: colour });
+    }
+    for (const t of targets) {
+      const m = this.table?.modules.find((n) => n.id === t.id);
+      if (!m) continue;
+      g.roundRect(m.x - 4, m.y - 4, m.width + 8, m.height + 8, 4).stroke({ width: (t.chosen ? 4 : 2) * px, color: t.chosen ? 0xe8a83c : 0xffffff, alpha: t.chosen ? 1 : 0.8 });
+    }
   }
 
   /** Scene point of the table point (u, v) lifted h mm. */

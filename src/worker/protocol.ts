@@ -6,14 +6,24 @@ import type { KeeperCommand } from '../sim/keeper';
 import type { Decoration } from '../sim/decor';
 import type { Insect, Part } from '../sim/prey';
 import type { NestLayout, NestMaterial, NestSetup, NestSize, TubeEnd } from '../sim/nest';
+import type { Save } from '../sim/save';
+import type { ShelfEntry } from './store';
 
 export type ToWorker =
-  /**
-   * Opens the kept tank, or a new tank `seed` (M6a). With `fresh` false and a
-   * kept tank of another seed, the worker asks first (`ask`); with `seed`
-   * null it opens whatever tank is kept, or tank 1.
-   */
-  | { type: 'open'; seed: number | null; fresh: boolean; nest?: NestSetup }
+  /** Sends the kept tanks for the start screen (`tanks`) (U1, U2). */
+  | { type: 'list' }
+  /** Opens kept tank `id`; it catches up on the time it was closed (M6a). */
+  | { type: 'open'; id: string }
+  /** Sets up a new tank called `name`, its colony in `nest` (a test tube or a bought nest), and opens it (U3). */
+  | { type: 'create'; name: string; nest: NestSetup }
+  /** Keeps a tank read from a file as a new tank called `name`, and opens it. */
+  | { type: 'import'; save: Save; name: string }
+  /** Keeps the running tank and stops it (back to the start screen). */
+  | { type: 'close' }
+  | { type: 'rename'; id: string; name: string }
+  | { type: 'delete'; id: string }
+  /** Sends the running tank as a save (`exported`), for the page to write to a file. */
+  | { type: 'export' }
   /** Simulation speed: 0 pauses, 1 is real ant time. */
   | { type: 'speed'; value: number }
   /** One of the keeper's tools, applied between steps and logged. */
@@ -143,13 +153,19 @@ export type FromWorker =
   | AntsSnapshot
   | ArenaSnapshot
   | HeatSnapshot
+  /** The kept tanks, most recently kept first. */
+  | { type: 'tanks'; tanks: ShelfEntry[] }
   /**
-   * The tank now running. `resumed` when it is the kept tank; `note` when
-   * something about the kept tank needs saying (it could not be read).
+   * The tank now running. `resumed` when it is a kept tank; `note` when
+   * something about it needs saying (it could not be read).
    */
-  | { type: 'tank'; seed: number; resumed: boolean; note?: string }
-  /** Another tank is kept than the one asked for: replace it? Answer with `open`. */
-  | { type: 'ask'; seed: number; kept: { seed: number; step: number; workers: number } }
+  | { type: 'tank'; id: string; name: string; seed: number; resumed: boolean; note?: string }
+  /** Whether a keeper's change to the table was done (refused: no room, not empty, no free port, no way for a tube). */
+  | { type: 'result'; command: KeeperCommand['type']; ok: boolean }
+  /** The running tank as a save, to be written to a file. */
+  | { type: 'exported'; name: string; save: Save }
+  /** A tank from a file could not be read. */
+  | { type: 'importFailed' }
   /** Catching up on the time the tank was closed: steps done of `total`. */
   | { type: 'catchUp'; done: number; total: number }
   /** What happened while the tank was closed, line by line. */

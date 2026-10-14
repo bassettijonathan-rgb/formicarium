@@ -32,6 +32,8 @@ export const SAVE_VERSION = 1;
 export interface Save {
   version: number;
   seed: number;
+  /** The keeper's name for the tank (U2); saves from before the tank list have none. */
+  name?: string;
   /** When the page saved, ms since 1970 by the page's clock; never read by the simulation. */
   savedAt: number;
   log: LoggedCommand[];
