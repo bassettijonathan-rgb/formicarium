@@ -177,8 +177,18 @@ export interface AntParams {
   restJoin: number;
   restStay: number;
   restCompanyMax: number;
-  /** Resting nestmates touching beyond which a worker settles (n - restCrowd)² + 1 times less readily: they lie no more than a few deep (rough). */
+  /**
+   * Resting nestmates touching beyond which a worker in a bought nest counts
+   * as packed too tight: it does not settle there, and resting there it gets
+   * up 1 + n² times as soon for n too many (one loose layer; rough).
+   */
   restCrowd: number;
+  /**
+   * A resting worker needs about a body's width of floor (Lasius niger
+   * workers are about 1.2 mm across): within `restSpace` mm of more than one
+   * resting nestmate it counts as packed too tight, as past `restCrowd`.
+   */
+  restSpace: number;
   /**
    * Seconds a wandering worker in a bought nest can spend among nestmates
    * packed too tight to settle by before it stops keeping to the colony's
@@ -504,6 +514,8 @@ export interface AntParams {
   lightPick: number;
   /** In the light, workers settle to rest this much less readily (1: not at all). */
   lightRest: number;
+  /** In the light, a resting ant (the queen too) gets up 1 + `lightWake` times as soon (Nests 3; rough). */
+  lightWake: number;
   /** False: ants ignore light (the control for the darkness check). */
   photophobia: boolean;
 
@@ -724,8 +736,9 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   restAlone: 0.2,
   restJoin: 3,
   restStay: 5,
-  restCompanyMax: 8,
-  restCrowd: 8,
+  restCompanyMax: 5,
+  restCrowd: 5,
+  restSpace: 1.2,
   restlessAfter: 30,
   restlessCalm: 0.5,
   moving: true,
@@ -821,6 +834,7 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   lightSight: 6,
   lightPick: 1,
   lightRest: 0.9,
+  lightWake: 20,
   photophobia: true,
 
   waterFlow: false,

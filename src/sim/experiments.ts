@@ -17,7 +17,7 @@ import { STEPS_PER_SECOND } from './time';
 import { addCorpse, colonyCrop, createWorld, deathsBy, killAnt, setCover, setHeatMat, placeInsect, placeProtein, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
 import { createArena } from './arena';
 import type { Cut, Insect } from './prey';
-import { type NestLayout, type NestMaterial, type NestSize, TEST_TUBE_SETUP, moduleAt } from './nest';
+import { type NestLayout, type NestMaterial, type NestSize, TEST_TUBE, TEST_TUBE_SETUP, moduleAt } from './nest';
 import { addModule, connect, connectArena } from './table';
 import { TANK_ARENA } from './tank';
 
@@ -1266,7 +1266,7 @@ export interface MovingHouseResult {
  * small ytong nest, dark under its cover and damp at its water hole, and
  * moves the arena's tube to the nest's other port. Does the colony move in?
  */
-export function runMovingHouse(opts: RunOptions & { hours: number; brood?: number }): MovingHouseResult {
+export function runMovingHouse(opts: RunOptions & { hours: number; brood?: number; lit?: boolean }): MovingHouseResult {
   const params: Partial<AntParams> = {
     forageRate: 0,
     returnToFoodRate: 0,
@@ -1302,6 +1302,8 @@ export function runMovingHouse(opts: RunOptions & { hours: number; brood?: numbe
   const nest = addModule(world, { size: 'S', layout: 'classic', material: 'ytong' })!;
   connectArena(world, { module: nest, port: 0 });
   connect(world, { module: 1, port: 0 }, { module: nest, port: 1 }, false);
+  // The keeper's way to make a colony move: the old home in the light, the new one dark.
+  if (opts.lit) setCover(world, 0, TEST_TUBE.width, 1);
   const table = farm.table!;
   const inNest = (x: number, y: number) => moduleAt(table, x, y)?.id === nest;
   const inTube = (x: number, y: number) => moduleAt(table, x, y)?.id === 1;
@@ -1324,9 +1326,13 @@ export function runMovingHouse(opts: RunOptions & { hours: number; brood?: numbe
           if (ants.caste[i] !== Caste.worker || ants.place[i] !== Place.farm) continue;
           if (ants.state[i] === AntState.resting) { er += ants.encounters[i]!; nr++; } else if (ants.state[i] === AntState.wandering) { ew += ants.encounters[i]!; nw++; }
         }
-        console.log(`  encounters resting ${(er / nr).toFixed(2)} (${nr}), wandering ${(ew / nw).toFixed(2)} (${nw})`);
+        let rt = 0, rn = 0;
+        for (let i = 0; i < ants.count; i++) if (ants.place[i] === Place.farm && ants.state[i] === AntState.resting) { if (inTube(ants.x[i]!, ants.y[i]!)) rt++; else if (inNest(ants.x[i]!, ants.y[i]!)) rn++; }
+        console.log(`  encounters resting ${(er / nr).toFixed(2)} (${nr}), wandering ${(ew / nw).toFixed(2)} (${nw}); resting tube ${rt} nest ${rn}`);
         const m = (a: number[]) => (a.length ? (a.reduce((p, c) => p + c, 0) / a.length).toFixed(2) : '-');
-        console.log(`h${h} +${s / 20 / 60}min brood nest ${bn} carried ${bc}; site1 ${s1} site2 ${s2} restless ${rl}; temp tube ${m(tT)} nest ${m(tN)}; hum tube ${m(hT)} nest ${m(hN)}; queen ${ants.x[q]!.toFixed(0)},${ants.y[q]!.toFixed(0)}`);
+        let bt = 0, bo = 0;
+        for (let k = 0; k < brood.count; k++) { if (brood.stage[k] === BroodStage.none || brood.carried[k]) continue; if (inTube(brood.x[k]!, brood.y[k]!)) bt++; else if (!inNest(brood.x[k]!, brood.y[k]!)) bo++; }
+        console.log(`h${h} +${s / 20 / 60}min brood nest ${bn} tube ${bt} between ${bo} carried ${bc}; site1 ${s1} site2 ${s2} restless ${rl}; temp tube ${m(tT)} nest ${m(tN)}; hum tube ${m(hT)} nest ${m(hN)}; queen ${ants.x[q]!.toFixed(0)},${ants.y[q]!.toFixed(0)}`);
       }
     }
     let n = 0;

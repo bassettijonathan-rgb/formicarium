@@ -70,6 +70,7 @@ let minutesSet = false;
 let layout: NestLayout = 'classic';
 let material: NestMaterial = 'ytong';
 let gradient = false;
+let lit = false;
 const params: Partial<AntParams> = {};
 for (let i = 0; i < rest.length; i++) {
   if (rest[i] === '--runs') runs = Number(rest[++i]);
@@ -79,6 +80,7 @@ for (let i = 0; i < rest.length; i++) {
   else if (rest[i] === '--layout') layout = rest[++i] as NestLayout;
   else if (rest[i] === '--material') material = rest[++i] as NestMaterial;
   else if (rest[i] === '--gradient') gradient = true;
+  else if (rest[i] === '--lit') lit = true;
   else if (rest[i] === '--no-light') params.photophobia = false;
   else if (rest[i] === '--ants') ants = Number(rest[++i]);
   else if (rest[i] === '--hours') hours = Number(rest[++i]);
@@ -275,7 +277,7 @@ for (let seed = first; seed < first + runs; seed++) {
         `chambers of the first holding 90% of its workers ${r.chambersByHour.join(' ')} of ${r.chambers}`,
     );
   } else if (name === 'moving') {
-    const r = runMovingHouse({ seed, hours: hours || 24, ants: ants || 60, params });
+    const r = runMovingHouse({ seed, hours: hours || 24, ants: ants || 60, params, lit });
     console.log(
       `seed ${seed}, ${ants || 60} workers: brood in the nest by hour ${r.broodInNestByHour.map(pct).join(' ')}; queen in the nest ${r.queenInNestByHour.map((b) => (b ? 'Y' : '-')).join('')}; ` +
         `resting in the tube ${r.tubeRestingByHour.join(' ')}, in the nest ${r.nestRestingByHour.join(' ')}`,

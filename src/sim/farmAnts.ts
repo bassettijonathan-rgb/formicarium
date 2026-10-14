@@ -47,6 +47,8 @@ const TUBE_CLEAR = 15;
 
 /** Scratch, rebuilt every step: how many resting nestmates each ant is touching (up to 255). */
 let restingNear = new Uint8Array(0);
+/** Resting nestmates within `restSpace` of each ant: closer than a body's width (Nests 3). */
+let restingClose = new Uint8Array(0);
 /** Scratch, rebuilt every step: the queens in the farm. */
 const queens: number[] = [];
 /** Scratch for bucketing ants by position: bucket starts, fill pointers, each ant's bucket, ants by bucket. */
@@ -62,7 +64,10 @@ let members = new Int32Array(0);
 export function computeContacts(ctx: AntContext): void {
   const { ants, farm, params } = ctx;
   if (restingNear.length !== ants.count) restingNear = new Uint8Array(ants.count);
+  if (restingClose.length !== ants.count) restingClose = new Uint8Array(ants.count);
   restingNear.fill(0);
+  restingClose.fill(0);
+  const space2 = params.restSpace * params.restSpace;
   queens.length = 0;
   for (let i = 0; i < ants.count; i++) if (ants.place[i] === Place.farm && ants.caste[i] === Caste.queen) queens.push(i);
 
@@ -116,7 +121,10 @@ export function computeContacts(ctx: AntContext): void {
           touching++;
           if (ants.recruiting[j]! > 0) recruiters++;
           if (ants.broodNeed[j]! > need) need = ants.broodNeed[j]!;
-          if (ants.state[j] === AntState.resting && restingNear[i]! < 255) restingNear[i]!++;
+          if (ants.state[j] === AntState.resting && restingNear[i]! < 255) {
+            restingNear[i]!++;
+            if (dx * dx + dy * dy <= space2) restingClose[i]!++;
+          }
         }
       }
     }
@@ -254,7 +262,8 @@ function carryBrood(ctx: AntContext, i: number, outside: boolean): void {
   }
   const n = broodAround(ctx, ants.x[i]!, ants.y[i]!, i, -1, brood.stage[k] as BroodStage);
   const thick = n / (params.broodDropHalf + n);
-  const tired = carried > (outside ? 2 : 1) * params.broodCarryMax;
+  // In full light it carries on for longer, looking for the dark (Nests 3).
+  const tired = carried > (outside ? 2 : 1) * (lightPull(ctx, ctx.farm, i) >= 1 ? 5 : 1) * params.broodCarryMax;
   // A carrier that still feels a better temperature or damper air ahead holds on to its load.
   const hold = 1 + params.thermoHold * broodPull(ctx, ctx.farm, i);
   if (tired || (!outside && rng.chance((params.broodDropRate * thick * thick * DT) / hold))) {
@@ -372,6 +381,25 @@ function lightPull(ctx: AntContext, farm: Farm, i: number): number {
   const { params } = ctx;
   if (!params.photophobia || !farm.table) return 0;
   return Math.min(1, Math.max(0, (lightAt(farm, ctx.ants.x[i]!, ctx.ants.y[i]!) - params.lightSense) / params.lightSense));
+}
+
+/** The light an ant sees `lightSight` ahead, to its left and right (Nests 2). */
+function lightSeen(ctx: AntContext, i: number): [number, number] {
+  const { ants, farm, params } = ctx;
+  const x = ants.x[i]!;
+  const y = ants.y[i]!;
+  const heading = ants.heading[i]!;
+  const sight = params.lightSight;
+  return [
+    lightAt(farm, x + sight * Math.cos(heading - params.antennaAngle), y + sight * Math.sin(heading - params.antennaAngle)),
+    lightAt(farm, x + sight * Math.cos(heading + params.antennaAngle), y + sight * Math.sin(heading + params.antennaAngle)),
+  ];
+}
+
+/** The brightest light an ant sees ahead. */
+function lightAhead(ctx: AntContext, i: number): number {
+  const [left, right] = lightSeen(ctx, i);
+  return Math.max(left, right);
 }
 
 /** The strongest of the reasons to move brood: temperature (M5a), humidity and mould where the ant stands (M5b), and light (Nests 2). */
@@ -521,8 +549,9 @@ function rest(ctx: AntContext, i: number): void {
   if (queen) layEggs(ctx, i);
   if (setOffToForage(ctx, i)) return;
   // In a bought nest a worker packed in too tight gets up sooner, the sooner the tighter (Amé et al. 2006; Nests 3).
-  const packed = params.aggregation && ctx.farm.table && !queen ? Math.max(0, restingNear[i]! - params.restCrowd) : 0;
-  ants.timer[i]! -= 1 + packed * packed;
+  const packed = params.aggregation && ctx.farm.table && !queen ? Math.max(0, restingNear[i]! - params.restCrowd) + Math.max(0, restingClose[i]! - 1) : 0;
+  // So does any ant lying in the light, the queen too: keepers see them scatter when a cover comes off.
+  ants.timer[i]! -= Math.round((1 + packed * packed) * (1 + params.lightWake * lightPull(ctx, ctx.farm, i)));
   if (ants.timer[i]! <= 0) ants.state[i] = AntState.wandering;
 }
 
@@ -644,7 +673,10 @@ function walkFarm(ctx: AntContext, i: number): void {
   // Colony odour: going home follows it strongly, and so does a wandering ant out in the open (it goes
   // back in); wandering ants inside keep near it.
   const moving = state === AntState.carryingBrood && ants.site[i] === 2;
-  if (!toBrood && !moving && (inbound || state === AntState.wandering || state === AntState.carryingBrood)) {
+  // A brood carrier that sees light ahead goes by the light, not the colony odour: it does not carry brood
+  // back into a lit chamber, however strongly the colony that lived there still smells (Nests 3).
+  const shunning = state === AntState.carryingBrood && params.photophobia && farm.table !== null && lightAhead(ctx, i) > params.lightSense;
+  if (!toBrood && !moving && !shunning && (inbound || state === AntState.wandering || state === AntState.carryingBrood)) {
     const ol = sampleField(farm, farm.odour, lx, ly);
     const or = sampleField(farm, farm.odour, rx, ry);
     // The queen keeps to where the colony is thickest, as a queen stays among her workers.
@@ -728,7 +760,9 @@ function walkFarm(ctx: AntContext, i: number): void {
 
   // Brood carriers feel which way it gets warmer (or cooler) across their antennae and carry the brood
   // towards the temperature nurses keep it at (M5a).
-  if (state === AntState.carryingBrood && params.thermotaxis) {
+  // In full light it only looks for the dark: warmth and damp can wait (Nests 3).
+  const fleeing = state === AntState.carryingBrood && lightPull(ctx, farm, i) >= 1;
+  if (state === AntState.carryingBrood && params.thermotaxis && !fleeing) {
     const want = thermalWant(params, temperatureAt(farm, x, y));
     if (want !== 0) {
       const across = (temperatureAt(farm, rx, ry) - temperatureAt(farm, lx, ly)) * want;
@@ -737,16 +771,14 @@ function walkFarm(ctx: AntContext, i: number): void {
   }
 
   // ...and towards damper air, where the air is drier than nurses keep brood in (M5b).
-  if (state === AntState.carryingBrood && params.hygrotaxis && humidityAt(farm, x, y) < params.broodHumidity) {
+  if (state === AntState.carryingBrood && params.hygrotaxis && !fleeing && humidityAt(farm, x, y) < params.broodHumidity) {
     const across = humidityAt(farm, rx, ry) - humidityAt(farm, lx, ly);
     turn += params.thermoTurn * DT * Math.max(-1, Math.min(1, across / params.hygroSense));
   }
 
   // ...and away from the light, which they see on one side brighter than the other (Nests 2).
   if (state === AntState.carryingBrood && params.photophobia && farm.table) {
-    const sight = params.lightSight;
-    const lightLeft = lightAt(farm, x + sight * Math.cos(heading - params.antennaAngle), y + sight * Math.sin(heading - params.antennaAngle));
-    const lightRight = lightAt(farm, x + sight * Math.cos(heading + params.antennaAngle), y + sight * Math.sin(heading + params.antennaAngle));
+    const [lightLeft, lightRight] = lightSeen(ctx, i);
     turn += params.thermoTurn * DT * Math.max(-1, Math.min(1, (lightLeft - lightRight) / params.lightSense));
   }
 
@@ -792,10 +824,12 @@ function walkFarm(ctx: AntContext, i: number): void {
     // Nor do workers settle in the light (Nests 2).
     const dark = 1 - params.lightRest * lightPull(ctx, farm, i);
     // Workers stop more readily, and stay longer, beside nestmates already resting (Depickère et al. 2004).
-    // But no more than a few deep: past `restCrowd` resting nestmates touching, a worker hardly settles (rough).
+    // But no more than one loose layer: past `restCrowd` resting nestmates touching, a worker does not settle (Nests 3).
     const near = params.aggregation && farm.table ? restingNear[i]! : 0;
     const company = Math.min(near, params.restCompanyMax);
-    const packed = Math.max(0, near - params.restCrowd);
+    // The queen lies where she will: her workers make room for her.
+    // Nor does it lie down on top of a nestmate: each needs about a body's width of floor (`restSpace`).
+    const packed = queen || !params.aggregation || !farm.table ? 0 : Math.max(0, near - params.restCrowd) + Math.max(0, restingClose[i]! - 1);
     // Among nestmates packed too tight it grows restless; where there is room it calms down again, more slowly.
     const wasRestless = ants.restless[i]! > params.restlessAfter;
     if (!queen) ants.restless[i] = Math.max(0, ants.restless[i]! + (packed > 0 ? DT : -params.restlessCalm * DT));
@@ -805,16 +839,21 @@ function walkFarm(ctx: AntContext, i: number): void {
       ants.digY[i] = ants.piY[i]!;
     }
     const single = params.aggregation && farm.table && !queen ? params.restAlone : 1;
-    if (rng.chance(params.restRate * enclosed * (1 + params.restOdourGain * nestLike) * onBrood * dark * ((single + params.restJoin * company) / (1 + packed * packed)) * DT)) {
+    if (rng.chance(params.restRate * enclosed * (1 + params.restOdourGain * nestLike) * onBrood * dark * (packed > 0 ? 0 : single + params.restJoin * company) * DT)) {
       ants.state[i] = AntState.resting;
       ants.hasDigSite[i] = 0;
       // Room found after a crowd sent it looking: it remembers the spot (Nests 3).
       // When it wakes, it goes back to the crowd (and takes brood from it to here).
-      if (farm.table && params.moving && ants.restless[i]! > params.restlessAfter) {
+      // Only room well away from the crowd counts as a new site; room found at the crowd's edge is just room.
+      if (farm.table && params.moving && ants.restless[i]! > params.restlessAfter &&
+        Math.hypot(ants.digX[i]! - ants.piX[i]!, ants.digY[i]! - ants.piY[i]!) > params.siteFar) {
         ants.site[i] = 1;
         ants.siteX[i] = ants.piX[i]!;
         ants.siteY[i] = ants.piY[i]!;
-        ants.hasDigSite[i] = Math.hypot(ants.digX[i]! - ants.piX[i]!, ants.digY[i]! - ants.piY[i]!) > params.siteFar ? 1 : 0;
+        ants.hasDigSite[i] = 1;
+      } else {
+        // Settling down where it is, unhurried, it is no longer moving anywhere.
+        ants.site[i] = 0;
       }
       ants.restless[i] = 0;
       // A queen rests ten times as long: she spends her life lying in the nest, laying.

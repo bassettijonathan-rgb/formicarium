@@ -357,12 +357,11 @@ colony spread through a big nest (20 workers over 8-9 of 20 chambers,
 resting workers only to shelter, colony odour and brood. Lasius niger
 workers also stop more readily, and stay stopped longer, beside nestmates
 already resting (Depickère et al. 2004). So in a bought nest, a wandering
-worker touching `n` resting nestmates (up to 8) settles 0.2 + 3n times as
-readily as it would alone in the sand farm, and rests 1 + 5n times as long
+worker touching `n` resting nestmates settles 0.2 + 3n times as readily
+as it would alone in the sand farm, and rests 1 + 5n times as long
 (`restAlone`, `restJoin`, `restStay`, rough): on its own it seldom stops,
-and walks on until it meets resting nestmates. Past 8 touching
-(`restCrowd`, rough: they lie at most a few deep in a 5 mm chamber) it
-settles (n - 8)² + 1 times less readily; and wandering workers turn toward
+and walks on until it meets resting nestmates. Packed too tight (more than
+5 touching, Nests 3 below) it does not settle; and wandering workers turn toward
 colony odour as strongly as ants going home, not a quarter as strongly. A
 colony now gathers in a few chambers and fills more as it grows (9.13).
 (The first version, with lone workers settling as readily as in the sand
@@ -371,6 +370,72 @@ chambers only in the two tanks it was tried on; in six more it used 3-10.
 Nests 3 checked eight tanks and strengthened it.) The sand farm keeps its old rules: its validations
 (digging, nest size, food flow, 9.1-9.3) were tuned without these, and in a
 dug nest the tunnels themselves keep the colony together.
+
+**Nests 3 (built): the table, tubes and plugs, the test tube, moving house**
+(`src/sim/table.ts`; `farm.table` replaces `farm.nest`).
+
+- **The table (N8).** The bought nests lie on a table: the farm's 1 mm
+  grid, seen from above, holds every module, with bare table
+  (`Material.table`, 9) between them. Each module (a carved nest, or a test
+  tube) has its corner and size on the table and its ports: a nest has two,
+  in its right end a third and three quarters of the way from the back,
+  each joined to the nearest chamber by a 4 mm corridor. "Add it to the
+  table" puts a nest of any material, size and layout in front of the
+  others (25 mm apart); the grid grows to the right and to the front and
+  never moves what is on it, so a module keeps its cells, fields and ants.
+  A module with no tube in it and nothing in it can be taken away.
+- **Tubes and plugs.** The keeper joins two free ports with a tube ("Join
+  ports"): a 6 mm channel of air through the table, 12 mm straight out of
+  each port and then with one bend (whichever of the two ways keeps 4 mm
+  clear of the other modules and tubes). A tube starts plugged: 8 mm of
+  cotton (`Material.cotton`, 8) at its middle that ants cannot pass, so a
+  new module can be joined before the colony is let in; "Plug" pulls it out
+  or pushes it back. An empty tube can be taken away. The arena's tube is
+  one of the keeper's tubes too ("Arena tube" moves it to another port):
+  its mouth is where foragers come and go (`farm.tubeX`, `tubeY`) and the
+  only place the room's air comes in, so fresh air (and the dry room air
+  with it) reaches only the modules it can flow to along open tubes.
+  Tubes are clear, so they are as light as the room; humidity spreads
+  along them from module to module (vapour reach 20 mm) and so does warmth.
+- **The test tube (N9).** New tanks start in a test tube: 15 cm of glass,
+  14 mm across inside, with 40 mm of water behind a 12 mm wet cotton plug
+  at the closed end and its mouth as its one port, joined to the arena. A
+  queen, 20 workers and a little brood (8 eggs, 6 larvae, 4 pupae) start in
+  it. Glass holds no water and takes up no vapour, so its air is saturated
+  from the cotton nearly to the mouth (95% to 3 cm from it, 64% at it); it
+  has a cover like the nests (keepers wrap test tubes in foil or card),
+  passes warmth well and hardly grows mould. The keeper connects a nest
+  when the colony needs one: add it, join a port to the tube's mouth and
+  move the arena's tube to the nest's other port. "Start new tank in it"
+  still starts straight in a bought nest.
+- **Room to lie down.** Resting workers lie at most one loose layer deep
+  and each needs about a body's width of floor: a worker counts as packed
+  too tight with more than 5 resting nestmates touching (`restCrowd`) or
+  more than one closer than 1.2 mm (`restSpace`, a Lasius niger worker's
+  width). Packed too tight it does not settle, and if nestmates settle
+  round it while it rests it gets up sooner, 1 + n² times as fast for n
+  too many (the leaving rate of a crowded shelter rises with crowding, Amé
+  et al. 2006; the values are rough). So the 16 mm test tube holds about
+  480 resting workers, lined along the glass and between.
+- **No room: looking further off.** A worker that has wandered among
+  nestmates packed too tight to settle by for 30 s (`restlessAfter`)
+  stops keeping to the colony odour and wanders off, remembering where the
+  crowd was by its path integrator; it calms down again where there is
+  room, at half the rate. When it settles at last, more than 25 mm from the
+  crowd (`siteFar`), it remembers that spot as a new site; when it wakes it
+  goes back to the crowd, and there it picks up brood it touches (as
+  readily as an item lying alone) and carries it to its site by its path
+  integrator, then goes back for more, until it settles down unhurried
+  somewhere, which ends it. The brood a few workers bring draws the nurses
+  and the queen after it (they settle by brood, section 4.4). This is how
+  Temnothorax colonies move (workers who know the new site carry the
+  brood, Pratt et al. 2002); Lasius niger keepers see their colonies move
+  into a connected nest when the old one is crowded, but the details have
+  not been measured as far as I know. A worker going out through the
+  arena's tube forgets its site: its path integrator starts again.
+- **Not yet:** connecting an old sand-farm tank to a bought nest, and
+  moving a module once it is on the table.
+- Validation: section 9, tests 17 and 18.
 
 ---
 
