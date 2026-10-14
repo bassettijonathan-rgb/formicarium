@@ -12,9 +12,9 @@ import { type KeeperCommand, type LoggedCommand, applyCommand, createTank } from
 import { SAVE_VERSION, type Save, awayReport, catchUpSteps, census, loadWorld } from '../sim/save';
 import { ANT_STRIDE, type FromWorker, Look, type PieceView, type ToWorker } from './protocol';
 import { edible } from '../sim/prey';
-import { readSave, setAside, writeSave } from './store';
+import { type ShelfEntry, deleteTank, freeName, newId, readShelf, readTank, renameTank, setAside, writeTank } from './store';
 import { inspectAnt } from '../sim/inspect';
-import { DEFAULT_NEST, type NestSetup, nestMaterialName } from '../sim/nest';
+import { type NestSetup, nestMaterialName } from '../sim/nest';
 import { Purpose, Rng } from '../sim/rng';
 
 const INTERVAL_MS = 50;
@@ -28,6 +28,8 @@ const SAVE_EVERY_MS = 15_000;
 const CATCH_UP_SLICE = 2000;
 
 let world: World | undefined;
+/** The running tank's place on the shelf: its id and name. */
+let current: { id: string; name: string } | undefined;
 /** The keeper's actions on this tank since it was set up. */
 let log: LoggedCommand[] = [];
 let speed = 1;
@@ -192,11 +194,15 @@ function sendHeat(w: World): void {
 function applyPending(w: World): boolean {
   const any = pending.length > 0;
   for (const command of pending.splice(0)) {
-    applyCommand(w, command);
+    const ok = applyCommand(w, command);
     log.push({ step: w.step, command });
+    if (TABLE_COMMANDS.has(command.type)) post({ type: 'result', command: command.type, ok });
   }
   return any;
 }
+
+/** The keeper's changes to the table, which can be refused; the page hears whether each was done. */
+const TABLE_COMMANDS: ReadonlySet<KeeperCommand['type']> = new Set(['addNest', 'removeNest', 'moveNest', 'connect', 'plug', 'removeTube', 'arenaTube']);
 
 function sendInspected(w: World): void {
   if (inspected >= 0 && inspected < w.ants.count) post({ type: 'ant', id: inspected, card: inspectAnt(w, inspected) });
@@ -233,10 +239,21 @@ function sendAll(w: World): void {
   sendInspected(w);
 }
 
-function save(): void {
-  if (!world || catching) return;
-  const kept: Save = { version: SAVE_VERSION, seed: world.seed, savedAt: Date.now(), log, world };
-  writeSave(kept).catch(() => undefined); // storage full or blocked: the tank runs on unkept
+function save(): Promise<void> {
+  if (!world || !current || catching) return Promise.resolve();
+  const kept: Save = { version: SAVE_VERSION, seed: world.seed, name: current.name, savedAt: Date.now(), log, world };
+  return writeTank(kept, entryFor(kept, current.id)).catch(() => undefined); // storage full or blocked: the tank runs on unkept
+}
+
+/** The shelf's line for a save. */
+function entryFor(save: Save, id: string): ShelfEntry {
+  return { id, name: save.name ?? `Tank ${save.seed}`, savedAt: save.savedAt, ...summary(save) };
+}
+
+/** What the tank list shows of a save's world. */
+function summary(save: Save): Omit<ShelfEntry, 'id' | 'name' | 'savedAt'> {
+  const c = census(save.world);
+  return { seed: save.seed, step: save.world.step, workers: c.workers, queen: c.queen };
 }
 
 function begin(w: World, savedLog: LoggedCommand[], resumed: boolean, note?: string): void {
@@ -244,63 +261,112 @@ function begin(w: World, savedLog: LoggedCommand[], resumed: boolean, note?: str
   inspected = -1;
   log = savedLog;
   owed = 0;
-  post({ type: 'tank', seed: w.seed, resumed, ...(note ? { note } : {}) });
+  post({ type: 'tank', id: current!.id, name: current!.name, seed: w.seed, resumed, ...(note ? { note } : {}) });
   sendAll(w);
 }
 
-/** Lets the tank live through `total` steps as fast as it can, in slices, then reports what happened. */
-function catchUp(w: World, total: number): void {
-  catching = { done: 0, total, before: census(w), skip: false };
+/** Real seconds a tank must have been closed before the page says what happened while it was (a quick look at the tank list is not being away). */
+const REPORT_AFTER = 10 * 60;
+
+/** Lets the tank live through `total` steps as fast as it can, in slices, then, if `report`, says how far it has got and what happened. */
+function catchUp(w: World, total: number, report: boolean): void {
+  const c = { done: 0, total, before: census(w), skip: false };
+  catching = c;
   const slice = () => {
-    const c = catching!;
+    if (catching !== c) return; // the tank was closed
     const n = Math.min(CATCH_UP_SLICE, c.total - c.done);
     for (let i = 0; i < n; i++) step(w);
     c.done += n;
-    post({ type: 'catchUp', done: c.done, total: c.total });
+    if (report) post({ type: 'catchUp', done: c.done, total: c.total });
     sendAll(w);
     if (c.done < c.total && !c.skip) {
       setTimeout(slice, 0);
       return;
     }
     catching = undefined;
-    post({ type: 'away', lines: awayReport(c.before, census(w), w.params.daySeconds) });
-    save();
+    if (report) post({ type: 'away', lines: awayReport(c.before, census(w), w.params.daySeconds) });
+    void save();
   };
   setTimeout(slice, 0);
 }
 
-async function open(seed: number | null, fresh: boolean, nest: NestSetup = DEFAULT_NEST): Promise<void> {
-  const kept = fresh ? undefined : await readSave();
-  if (kept && (seed === null || seed === kept.seed)) {
-    const w = loadWorld(kept);
-    if (w) {
-      begin(w, kept.log ?? [], true);
-      const away = catchUpSteps(w, (Date.now() - kept.savedAt) / 1000);
-      if (away > 0) catchUp(w, away);
-      return;
-    }
-    await setAside(kept).catch(() => undefined);
-    begin(createTank(seed ?? kept.seed, nest), [], false, 'Your kept tank was saved by an older version that cannot be carried over, so this is a new one. The old save is set aside in the browser.');
-    save();
+async function list(): Promise<void> {
+  post({ type: 'tanks', tanks: await readShelf(summary) });
+}
+
+/** Opens kept tank `id`: it lives through the time it was closed, then runs on. */
+async function open(id: string): Promise<void> {
+  await close();
+  const kept = await readTank(id);
+  if (!kept) {
+    await list();
     return;
   }
-  if (kept && seed !== null) {
-    const workers = census(kept.world).workers;
-    post({ type: 'ask', seed, kept: { seed: kept.seed, step: kept.world.step, workers } });
+  current = { id, name: kept.name ?? `Tank ${kept.seed}` };
+  const w = loadWorld(kept);
+  if (w) {
+    begin(w, kept.log ?? [], true);
+    const seconds = (Date.now() - kept.savedAt) / 1000;
+    const away = catchUpSteps(w, seconds);
+    if (away > 0) catchUp(w, away, seconds >= REPORT_AFTER);
     return;
   }
-  begin(createTank(seed ?? 1, nest), [], false);
-  save();
+  await setAside(kept).catch(() => undefined);
+  begin(createTank(kept.seed, null), [], false, 'This tank was saved by an older version that cannot be carried over, so it starts again with a new colony. The old save is set aside in the browser.');
+  await save();
+}
+
+/** Sets up a new tank on the shelf, with the next seed after those kept. */
+async function create(name: string, nest: NestSetup): Promise<void> {
+  await close();
+  const shelf = await readShelf(summary);
+  const seed = Math.max(0, ...shelf.map((e) => e.seed)) + 1;
+  current = { id: newId(shelf), name: freeName(name, shelf) };
+  begin(createTank(seed, nest), [], false);
+  await save();
+}
+
+/** Keeps a tank read from a file as a new tank, and opens it. */
+async function importTank(file: Save, name: string): Promise<void> {
+  if (!loadWorld(structuredClone(file))) {
+    post({ type: 'importFailed' });
+    return;
+  }
+  const shelf = await readShelf(summary);
+  const id = newId(shelf);
+  const kept: Save = { ...file, name: freeName(name, shelf) };
+  await writeTank(kept, entryFor(kept, id));
+  await open(id);
+}
+
+/** Keeps the running tank and stops it. */
+async function close(): Promise<void> {
+  if (catching) catching.skip = true;
+  catching = undefined;
+  await save();
+  world = undefined;
+  current = undefined;
+  pending.length = 0;
 }
 
 onmessage = (e: MessageEvent<ToWorker>) => {
   const msg = e.data;
-  if (msg.type === 'open') void open(msg.seed, msg.fresh, msg.nest);
-  else if (msg.type === 'speed') speed = msg.value;
+  if (msg.type === 'list') void list();
+  else if (msg.type === 'open') void open(msg.id);
+  else if (msg.type === 'create') void create(msg.name, msg.nest);
+  else if (msg.type === 'import') void importTank(msg.save, msg.name);
+  else if (msg.type === 'close') void close().then(list);
+  else if (msg.type === 'rename') {
+    if (current?.id === msg.id) current.name = msg.name;
+    void renameTank(msg.id, msg.name).then(list);
+  } else if (msg.type === 'delete') void deleteTank(msg.id).then(list);
+  else if (msg.type === 'export') {
+    if (world && current) post({ type: 'exported', name: current.name, save: { version: SAVE_VERSION, seed: world.seed, name: current.name, savedAt: Date.now(), log, world } });
+  } else if (msg.type === 'speed') speed = msg.value;
   else if (msg.type === 'command') pending.push(msg.command);
   else if (msg.type === 'skip') {
     if (catching) catching.skip = true;
-  } else if (msg.type === 'save') save();
+  } else if (msg.type === 'save') void save();
   else if (msg.type === 'history') {
     if (world) sendHistory(world);
   } else if (msg.type === 'inspect') {

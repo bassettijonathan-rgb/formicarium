@@ -406,8 +406,8 @@ dug nest the tunnels themselves keep the colony together.
   has a cover like the nests (keepers wrap test tubes in foil or card),
   passes warmth well and hardly grows mould. The keeper connects a nest
   when the colony needs one: add it, join a port to the tube's mouth and
-  move the arena's tube to the nest's other port. "Start new tank in it"
-  still starts straight in a bought nest.
+  move the arena's tube to the nest's other port. A new tank can still
+  start straight in a bought nest (section 8.2, U3).
 - **Room to lie down.** Resting workers lie at most one loose layer deep
   and each needs about a body's width of floor: a worker counts as packed
   too tight with more than 5 resting nestmates touching (`restCrowd`) or
@@ -433,7 +433,7 @@ dug nest the tunnels themselves keep the colony together.
   into a connected nest when the old one is crowded, but the details have
   not been measured as far as I know. A worker going out through the
   arena's tube forgets its site: its path integrator starts again.
-- **Moving a module.** "Move a nest" picks up an empty module with no
+- **Moving a module.** Move, on a nest's card, picks up an empty module with no
   tube plugged into it and puts it down where the keeper taps, on bare
   table clear of everything else (`moveModule`, rounded to 2 mm). The block
   takes its damp and the smells soaked into it with it; the table it left
@@ -1039,12 +1039,11 @@ they come with a seed-harvesting species (M7).
 
 What M6a builds (`src/sim/keeper.ts`, `src/sim/save.ts`, `src/worker/store.ts`):
 
-1. **One tank, kept.** The page keeps one tank, as on a shelf, in the
-   browser's storage (IndexedDB). It is kept every 15 s while it runs and
-   when the page is hidden or closed, so at most a few seconds are lost.
-   Opening the page again opens the kept tank. Asking for another tank
-   (`?seed=N`, or the New tank button) asks first, since the kept colony
-   is lost.
+1. **Tanks, kept.** The page keeps the keeper's tanks, as on a shelf, in
+   the browser's storage (IndexedDB), each under its own name (section 8.2,
+   U2). The open tank is kept every 15 s while it runs, when the keeper goes
+   back to the tank list and when the page is hidden or closed, so at most a
+   few seconds are lost.
 2. **What a save holds:** the seed, the keeper's log (every tool used, with
    the step it was used at) and a snapshot of the world, which is plain
    data stored as it is. The seed and the log rebuild the tank exactly
@@ -1060,7 +1059,9 @@ What M6a builds (`src/sim/keeper.ts`, `src/sim/save.ts`, `src/worker/store.ts`):
    was closed, at 1× (an hour away is a tank day), up to 3 tank days. It
    runs as fast as it can, about a minute for 3 days with a young colony;
    the page shows the progress and can skip the rest. It lives through it
-   even if it was paused, since a real tank does not pause.
+   even if it was paused, since a real tank does not pause. A tank closed
+   for less than 10 minutes (a look at another tank, say) catches up
+   without a word.
 5. **The report.** Then the page says what happened while it was closed:
    workers out of the cocoon, deaths by cause, the queen's death or the
    colony's, the brood then and now, brood lost to drying or mould, mould
@@ -1116,8 +1117,9 @@ What M6c builds (`src/sim/history.ts`, `src/ui/`):
 
 ## 8. Your role
 
-Tools on the left, overlays on the right. Every tool is an ordinary command
-logged with its tick, which keeps saves deterministic and replayable.
+The tools sit in tabs along the bottom of the page (section 8.2). Every tool
+is an ordinary command logged with its tick, which keeps saves deterministic
+and replayable.
 
 - **Feed:** drop sugar drop, insect piece or seeds in the arena.
 - **Water:** wet a region of soil (off the page since the farm waters itself, section 7.7; kept as a command for old saves and the experiments).
@@ -1165,6 +1167,61 @@ All of it is drawing: nothing here reaches the simulation.
   make it greyer and sunset makes it warmer. When the room grows dark, a desk
   lamp lights the tank warmly, so the ants stay visible. Overlays (warmth,
   damp, trails' markers) are readings and are not dimmed.
+
+### 8.2 The page: tanks, tabs and adding nests
+
+Asked by Marco on 2026-10-14: it was unclear whether the link opened an old
+tank or a new one, unclear how to add nests, and there were too many buttons
+at once. Approved the same day (choices U1 to U6; clickable mockup at
+https://claude.ai/artifact/7dym5hSDk7qbK5qf1JW6wX). All of it is the page:
+nothing here changes the simulation, except that the keeper's table
+commands now report whether they were carried out, so the page can say why
+one was not.
+
+- **U1 Start screen.** The page always opens on the list of kept tanks: each
+  with its name, its age in tank days, its workers (or that the colony has
+  died out) and when it was last kept, an Open button and a ⋯ menu to
+  rename or delete it (delete asks once). Under the list: New tank and Load
+  from a file. "‹ Tanks" at the top left of a tank goes back to the list,
+  keeping the tank. `?seed=N` no longer picks a tank.
+- **U2 Several tanks, and files.** Each tank is kept under its own key with a
+  line on the shelf (`src/worker/store.ts`); the single tank kept before the
+  list existed joins it the first time, named "Tank <seed>". A new tank's
+  seed is one more than the highest kept. "Save to a file" downloads the
+  open tank as `<name>.formicarium`: the save (seed, keeper's log and world)
+  as JSON with its typed arrays in base64, gzipped (`src/ui/tankFile.ts`).
+  Loading one keeps it as a new tank and opens it; a file that is not a
+  tank, or a save this code cannot read, is turned down with a line saying
+  so. Two tanks never share a name: a copy gets "(2)".
+- **U3 New tank.** Asks only a name and where the colony starts: a test tube
+  (the default, as keepers buy one) or a bought nest, whose material, size
+  and layout are then chosen on the same screen.
+- **U4 Tabs.** The tank fills the screen between a top bar (back to the
+  list, the tank's name and age, speed, save to a file) and six tabs at the
+  bottom, each showing only its own tools: Watch (trails, warmth, damp,
+  view from above, fit view), Feed (sugar or insects, then tap the arena;
+  refill feeders; clear food), Arena (put a dish, feeder, stone, bark or
+  branch; tap one to move or take it out; clean), Nests (add a nest; tap a
+  nest or a tube for its card), Climate (the heat mat; the room's reading),
+  Colony (graphs, the timelapse). Old sand-farm tanks have no Nests tab.
+  Tapping an ant opens the inspector from any tab.
+- **U5 Adding a nest.** Add a nest, pick the material, size and layout, and
+  an outline follows the pointer over the table, green where the nest fits
+  (bare table all round, as the worker checks) and red where it does not;
+  a faint patch shows the stretch of table it can go on, and the outline
+  slips into a free spot within 12 mm, so the keeper need not aim to the
+  millimetre. Tapping puts it down; then a card asks what to join it to:
+  the arena and any nest with a free opening (they are ringed on the table
+  and can be tapped there too). Done lays the tubes, each with its cotton
+  plug in; the arena's tube is laid first, since moving it can free the
+  opening another tube needs. A nest's card has its cover (on, left or
+  right half off, off) and Join, Move and Take away; a tube's card has its
+  plug and Take away. What the worker refuses (no clear way for a tube, a
+  nest with ants in it) is said in a line in the Nests tab. A refused nest
+  leaves the table as it was (the fit is checked before the table grows).
+- **U6 One arena entrance.** The arena keeps one entrance. Joining a nest
+  to the arena moves the arena's tube there from wherever it was; two
+  entrances would mean redoing the foraging checks (section 9.1).
 
 ---
 

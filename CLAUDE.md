@@ -7,7 +7,7 @@ update DESIGN.md in the same pull request when a model changes.
 
 ## Commands
 
-- `npm run dev`: run in the browser (`?seed=N` picks the tank; new tanks start in a test tube)
+- `npm run dev`: run in the browser (opens on the list of kept tanks; New tank starts one, in a test tube by default)
 - `npm test`: Vitest
 - `npm run typecheck`, `npm run lint`: must pass before every push
 - `npm run sim -- --seed 42 --seconds 600`: headless run in Node, prints a summary and state hash

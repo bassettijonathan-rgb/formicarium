@@ -147,8 +147,12 @@ export function furnishArena(world: World, keepClear: { x: number; y: number; ra
   stampDecorations(world.arena, world.decor);
 }
 
-/** Applies a keeper's action to the world. */
-export function applyCommand(world: World, command: KeeperCommand): void {
+/**
+ * Applies a keeper's action to the world. Returns false when a change to the
+ * table was refused (no room, not empty, no free port, no way for a tube);
+ * every other action returns true.
+ */
+export function applyCommand(world: World, command: KeeperCommand): boolean {
   switch (command.type) {
     case 'sugar':
       // Food put down on a stone, the bark or a tube would roll off, so it is refused; in a dish it stays.
@@ -172,26 +176,19 @@ export function applyCommand(world: World, command: KeeperCommand): void {
       setCover(world, command.from, command.to, command.module);
       break;
     case 'addNest':
-      addModule(world, command.nest, command.x !== undefined && command.y !== undefined ? { x: command.x, y: command.y } : undefined);
-      break;
+      return addModule(world, command.nest, command.x !== undefined && command.y !== undefined ? { x: command.x, y: command.y } : undefined) !== null;
     case 'removeNest':
-      removeModule(world, command.module);
-      break;
+      return removeModule(world, command.module);
     case 'moveNest':
-      moveModule(world, command.module, command.x, command.y);
-      break;
+      return moveModule(world, command.module, command.x, command.y);
     case 'connect':
-      connect(world, command.a, command.b, command.plugged);
-      break;
+      return connect(world, command.a, command.b, command.plugged) !== null;
     case 'plug':
-      setPlug(world, command.tube, command.plugged);
-      break;
+      return setPlug(world, command.tube, command.plugged);
     case 'removeTube':
-      removeTube(world, command.tube);
-      break;
+      return removeTube(world, command.tube);
     case 'arenaTube':
-      connectArena(world, command.to);
-      break;
+      return connectArena(world, command.to);
     case 'clean':
       cleanArena(world);
       emptyDishes(world);
@@ -212,6 +209,7 @@ export function applyCommand(world: World, command: KeeperCommand): void {
       if (canPutFood(world, command.x, command.y)) placeInsect(world, command.insect, command.cut, command.x, command.y);
       break;
   }
+  return true;
 }
 
 /**
