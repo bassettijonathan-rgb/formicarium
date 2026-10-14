@@ -61,7 +61,7 @@ describe('a bought nest', () => {
         const { farm } = createWorld(3, { bought: { size, layout } });
         expect(farm.width).toBe(NEST_SIZES[size].width);
         expect(farm.height).toBe(NEST_SIZES[size].height);
-        expect(farm.nest!.chambers.length).toBeGreaterThanOrEqual(4);
+        expect(farm.table!.modules[0]!.chambers.length).toBeGreaterThanOrEqual(4);
         const seen = reachable(farm);
         let air = 0;
         for (let i = 0; i < farm.material.length; i++) {
@@ -167,7 +167,7 @@ describe('tanks kept from before bought nests', () => {
     const kept = structuredClone({ version: SAVE_VERSION, seed: 9, savedAt: 0, log: [], world });
     delete (kept.world.farm as unknown as Record<string, unknown>).nest; // saved before bought nests
     const loaded = loadWorld(kept)!;
-    expect(loaded.farm.nest).toBeNull();
+    expect(loaded.farm.table).toBeNull();
     expect(loaded.farm.width).toBe(300);
     expect(hashState(loaded.farm.material)).toBe(hashState(world.farm.material));
     for (let s = 0; s < 400; s++) {
@@ -181,12 +181,12 @@ describe('tanks kept from before bought nests', () => {
     const world = createTank(10, { size: 'L', layout: 'honeycomb' });
     for (let s = 0; s < 200; s++) step(world);
     const loaded = loadWorld(structuredClone({ version: SAVE_VERSION, seed: 10, savedAt: 0, log: [], world }))!;
-    expect(loaded.farm.nest!.size).toBe('L');
+    expect(loaded.farm.table!.modules[0]!.size).toBe('L');
     expect(hashState(loaded)).toBe(hashState(world));
   });
 
   it('a new sand farm is still the one the experiments use', () => {
-    expect(createWorld(1).farm.nest).toBeNull();
+    expect(createWorld(1).farm.table).toBeNull();
     expect(DEFAULT_ANT_PARAMS.nestMatShare).toBeGreaterThan(0);
   });
 });

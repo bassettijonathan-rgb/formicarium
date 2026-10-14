@@ -21,7 +21,7 @@ import { Cause } from './sim/ants';
 import { BroodStage } from './sim/brood';
 import { BROOD_STRIDE, type FromWorker, type HistorySnapshot, type ToWorker } from './worker/protocol';
 import { RoomLayer } from './render/room/roomLayer';
-import { DEFAULT_NEST, NEST_MATERIALS, NEST_SIZES, type NestLayout, type NestMaterial, type NestSetup, type NestSize } from './sim/nest';
+import { DEFAULT_NEST, NEST_MATERIALS, NEST_SIZES, type NestLayout, type NestMaterial, type NestSetup, type NestSize, TEST_TUBE_SETUP } from './sim/nest';
 import { MAT_WIDTH } from './sim/heat';
 import { legnanoClock } from './room/sky';
 import { CLEAR, REFRESH_MS, type Weather, fetchLegnanoWeather } from './room/weather';
@@ -91,6 +91,8 @@ async function start(): Promise<void> {
 
   /** Whether the view has been fitted to the tank since it arrived. */
   let framed = false;
+  /** True after the keeper adds a nest, so the next picture of the table is framed. */
+  let fitAfterTable = false;
   /** The step at which the colony died out, or -1 while it lives (from the arena snapshots). */
   let diedOut = -1;
   /** After the keeper puts in or moves an object: the decorations as they were, until the snapshots show whether it fitted. */
@@ -124,9 +126,10 @@ async function start(): Promise<void> {
     } else if (msg.type === 'farm') {
       const before = view.boughtNest;
       view.setSoil(msg);
-      showNestControls(msg.nest?.material ?? null);
-      // The first picture of the tank, or a tank of the other kind: frame it.
-      if (!framed || before !== view.boughtNest) fit();
+      showNestControls(msg.table?.modules[0]?.material ?? null, msg.table?.modules[0]?.kind === 'tube');
+      // The first picture of the tank, a tank of the other kind, or a table with a new nest on it: frame it.
+      if (!framed || before !== view.boughtNest || fitAfterTable) fit();
+      fitAfterTable = false;
       framed = true;
     }
     else if (msg.type === 'ants') {
@@ -342,6 +345,7 @@ async function start(): Promise<void> {
     button.addEventListener('click', () => {
       const put = button.dataset.put!;
       if (tool === put) chooseTool(null);
+      else if (put in TABLE_HINTS) chooseTool(put, TABLE_HINTS[put]);
       else if (put === 'move') chooseTool(put, 'Tap the thing to move.');
       else if (put === 'remove') chooseTool(put, 'Tap the thing to take out.');
       else chooseTool(put, `Tap where the ${NAMES[put]} should go. It can't cover the tube's mouth or stand on something else.`);
@@ -352,8 +356,88 @@ async function start(): Promise<void> {
     const { u, v } = view.arena.surfaceAt(p.x, p.y);
     return decorationAt([...view.arena.decorations], u, v);
   };
+  // The table of nests (N8): join two ports with a tube, push a tube's plug in or pull it out, move the arena's tube, take things away.
+  const TABLE_HINTS: Record<string, string> = {
+    join: 'Tap a free port in the right end of a nest, then another.',
+    plug: "Tap a tube to pull its cotton plug out, or push one in.",
+    arena: "Tap the port the arena's tube should go into.",
+    moveNest: 'Tap an empty nest with nothing plugged in, then the spot where its middle should go.',
+    takeAway: 'Tap an empty tube or an empty nest with nothing plugged in to take it away.',
+    coverOne: 'Tap a nest or the test tube to take its cover off, or put it back. Ants move out of the light into a dark nest.',
+  };
+  /** The first port tapped while joining two. */
+  let joinFrom: { module: number; port: number } | null = null;
+  /** The nest picked up while moving one. */
+  let moveFrom: number | null = null;
+  /** The port, tube or nest of the table under a tap (within a finger's width), if any. */
+  const onTable = (p: { x: number; y: number }) => {
+    const t = view.nest.shape;
+    if (!t || !view.boughtNest) return {};
+    const { u, v } = view.nest.toFloor(p.x, p.y);
+    const reach = Math.max(6, 14 / camera.scale);
+    let port: { module: number; port: number } | undefined;
+    let best = reach;
+    for (const m of t.modules) {
+      m.ports.forEach((q, k) => {
+        const d = Math.hypot(q.x - u, q.y - v);
+        if (d < best) [best, port] = [d, { module: m.id, port: k }];
+      });
+    }
+    let tube: number | undefined;
+    best = reach;
+    for (const tb of t.tubes) {
+      for (let k = 2; k < tb.path.length; k += 2) {
+        const d = segmentDistance(u, v, tb.path[k - 2]!, tb.path[k - 1]!, tb.path[k]!, tb.path[k + 1]!);
+        if (d < best) [best, tube] = [d, tb.id];
+      }
+    }
+    const module = t.modules.find((m) => u >= m.x && u < m.x + m.width && v >= m.y && v < m.y + m.height)?.id;
+    return { port, tube, module };
+  };
+  /** A keeper's tap with a table tool chosen. */
+  const useTableTool = (p: { x: number; y: number }) => {
+    const { port, tube, module } = onTable(p);
+    if (tool === 'join' && port && !joinFrom) {
+      joinFrom = port;
+      putHint.textContent = 'Now tap the port the tube goes to.';
+      return;
+    }
+    if (tool === 'moveNest' && moveFrom === null && module !== undefined) {
+      moveFrom = module;
+      putHint.textContent = 'Now tap where its middle should go.';
+      return;
+    }
+    if (tool === 'moveNest' && moveFrom !== null) {
+      const m = view.nest.shape!.modules.find((x) => x.id === moveFrom)!;
+      const { u, v } = view.nest.toFloor(p.x, p.y);
+      command({ type: 'moveNest', module: moveFrom, x: Math.round(u - m.width / 2), y: Math.round(v - m.height / 2) });
+    } else if (tool === 'join' && port && joinFrom) {
+      command({ type: 'connect', a: joinFrom, b: port, plugged: true });
+      showPutHint('The tube has a cotton plug in it: choose "Plug" and tap the tube to open it.', 6000);
+    } else if (tool === 'plug' && tube !== undefined) {
+      const t = view.nest.shape!.tubes.find((x) => x.id === tube)!;
+      command({ type: 'plug', tube, plugged: !t.plugged });
+    } else if (tool === 'arena' && port) command({ type: 'arenaTube', to: port });
+    else if (tool === 'takeAway' && tube !== undefined) command({ type: 'removeTube', tube });
+    else if (tool === 'takeAway' && module !== undefined) command({ type: 'removeNest', module });
+    else if (tool === 'coverOne' && module !== undefined) {
+      const m = view.nest.shape!.modules.find((x) => x.id === module)!;
+      const at = coverLit.find((c) => c.module === module);
+      const covered = !at || at.to <= at.from;
+      command({ type: 'cover', from: 0, to: covered ? m.width : 0, module });
+    }
+    joinFrom = null;
+    moveFrom = null;
+    tool = null;
+    for (const b of putButtons) b.setAttribute('aria-pressed', 'false');
+    if (putHint.textContent === TABLE_HINTS.join || putHint.textContent === TABLE_HINTS.moveNest || putHint.textContent?.startsWith('Now tap')) showPutHint('');
+  };
   /** A keeper's tap with an object tool chosen. */
   const useTool = (p: { x: number; y: number }) => {
+    if (tool && tool in TABLE_HINTS) {
+      useTableTool(p);
+      return;
+    }
     const { u: x, v: y } = view.arena.toFloor(p.x, p.y);
     if (tool === 'move' && moving < 0) {
       moving = picked(p);
@@ -429,6 +513,18 @@ async function start(): Promise<void> {
   for (const b of materialButtons) b.addEventListener('click', () => choose(materialButtons, (x) => x === b));
   for (const b of sizeButtons) b.addEventListener('click', () => choose(sizeButtons, (x) => x === b));
   for (const b of layoutButtons) b.addEventListener('click', () => choose(layoutButtons, (x) => x === b));
+  // A nest of the kind chosen laid on the table, in front of the others (N8).
+  document.getElementById('add-nest')!.addEventListener('click', () => {
+    const size = (sizeButtons.find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.size ?? DEFAULT_NEST.size) as NestSize;
+    const layout = (layoutButtons.find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.layout ?? DEFAULT_NEST.layout) as NestLayout;
+    const material = (materialButtons.find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.material ?? 'ytong') as NestMaterial;
+    command({ type: 'addNest', nest: { size, layout, material } });
+    showPutHint('The new nest lies in front of the others. Choose "Join ports" to lay a tube to it.', 6000);
+    fitAfterTable = true;
+  });
+  document.getElementById('new-tube')!.addEventListener('click', () => {
+    if (confirm(`Start a new tank with a young colony in a test tube? The colony in tank ${seed} will be lost.`)) location.search = `?seed=${seed + 1}&new&tube`;
+  });
   document.getElementById('new-tank')!.addEventListener('click', () => {
     const size = sizeButtons.find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.size ?? DEFAULT_NEST.size;
     const layout = layoutButtons.find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.layout ?? DEFAULT_NEST.layout;
@@ -452,25 +548,38 @@ async function start(): Promise<void> {
   });
 
   /** Says how the nest's water works, which differs between materials and the sand farm; only a bought nest has a cover. */
-  function showNestControls(material: NestMaterial | null): void {
-    document.getElementById('damp-note')!.textContent = material ? DAMP_NOTES[material] : 'Soil darkens when damp; the farm waters itself and never dries.';
+  function showNestControls(material: NestMaterial | null, testTube = false): void {
+    document.getElementById('damp-note')!.textContent = testTube
+      ? "The test tube's wet cotton keeps its air damp nearly to the mouth; nests added to the table have their own water."
+      : material
+        ? DAMP_NOTES[material]
+        : 'Soil darkens when damp; the farm waters itself and never dries.';
     document.getElementById('cover-row')!.hidden = material === null;
+    document.getElementById('table-row')!.hidden = material === null;
+    document.getElementById('add-nest')!.hidden = material === null;
   }
 
-  // The cover on the nest (N7): on, lifted from its left or right half, or off. Under it the ants are in the dark.
+  /** Where each module's cover is lifted, as the worker last said. */
+  let coverLit: { module: number; from: number; to: number }[] = [];
+  // The covers on the nests (N7): on, lifted from each nest's left or right half, or off. Under them the ants are in the dark.
   const coverButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-cover]')];
   for (const button of coverButtons) {
     button.addEventListener('click', () => {
-      const w = view.nestWidth;
-      const [from, to] = { on: [0, 0], left: [0, w / 2], right: [w / 2, w], off: [0, w] }[button.dataset.cover as 'on'];
-      command({ type: 'cover', from: from!, to: to! });
+      for (const m of view.nest.shape?.modules ?? []) {
+        const w = m.width;
+        const [from, to] = { on: [0, 0], left: [0, w / 2], right: [w / 2, w], off: [0, w] }[button.dataset.cover as 'on'];
+        command({ type: 'cover', from: from!, to: to!, module: m.id });
+      }
     });
   }
-  /** Marks the cover button that matches where the cover is lifted. */
-  function showCover(lit: { from: number; to: number } | null): void {
-    if (!lit) return;
-    const w = view.nestWidth;
-    const at = lit.to <= lit.from ? 'on' : lit.from <= 0 && lit.to >= w ? 'off' : lit.from <= 0 ? 'left' : 'right';
+  /** Marks the cover button that matches where the first nest's cover is lifted. */
+  function showCover(lit: { module: number; from: number; to: number }[] | null): void {
+    coverLit = lit ?? [];
+    const first = lit?.[0];
+    const m = view.nest.shape?.modules[0];
+    if (!first || !m) return;
+    const w = m.width;
+    const at = first.to <= first.from ? 'on' : first.from <= 0 && first.to >= w ? 'off' : first.from <= 0 ? 'left' : 'right';
     for (const b of coverButtons) b.setAttribute('aria-pressed', String(b.dataset.cover === at));
   }
 
@@ -519,8 +628,17 @@ function button(label: string, onClick: () => void): HTMLButtonElement {
   return b;
 }
 
-/** The bought nest asked for in the page's address, or the default. */
+/** Distance from (x, y) to the segment from (ax, ay) to (bx, by). */
+function segmentDistance(x: number, y: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(x - ax - t * dx, y - ay - t * dy);
+}
+
+/** The bought nest asked for in the page's address, or (by default) a test tube (N9). */
 function nestFrom(query: URLSearchParams): NestSetup {
+  if (query.has('tube') || !query.has('size')) return TEST_TUBE_SETUP;
   const size = query.get('size') ?? '';
   const layout = query.get('layout') ?? '';
   const material = query.get('material') ?? '';

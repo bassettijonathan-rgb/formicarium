@@ -185,6 +185,16 @@ export interface Ants {
    * workers forage, fat ones stay in (see `AntParams.fatRef`, M4).
    */
   fat: Float64Array;
+  /** Seconds a worker has wandered in a bought nest among nestmates packed too tight to settle by, since it last rested (Nests 3). */
+  restless: Float64Array;
+  /**
+   * Moving house (Nests 3): 1 when the worker has found room to rest further
+   * off after a crowd made it restless, and remembers where (`siteX`,
+   * `siteY`, by its path integrator); 2 while it carries brood there.
+   */
+  site: Uint8Array;
+  siteX: Float64Array;
+  siteY: Float64Array;
   /** Trips out of the farm to forage since the ant was born or poured in. */
   trips: Int32Array;
   /** Workers: age at which the ant dies, tank days (0: never; M4c). */
@@ -279,6 +289,10 @@ export function createAnts(count: number): Ants {
     reserve: new Float64Array(count),
     age: new Float64Array(count),
     fat: new Float64Array(count),
+    restless: new Float64Array(count),
+    site: new Uint8Array(count),
+    siteX: new Float64Array(count),
+    siteY: new Float64Array(count),
     trips: new Int32Array(count),
     lifespan: new Float64Array(count),
     deadFor: new Float64Array(count),
@@ -506,9 +520,11 @@ function walkTube(ctx: AntContext, i: number): void {
     ants.walked[i]! += ctx.params.speed * DT;
     return;
   }
-  // Out of the tube: path integration starts again from its mouth, the one landmark both ends share.
+  // Out of the tube: path integration starts again from its mouth, the one landmark both ends share
+  // (so a new nest site it remembered in the old frame is forgotten).
   ants.piX[i] = 0;
   ants.piY[i] = 0;
+  ants.site[i] = 0;
   if (isOutbound(ants.state[i]!) || ants.state[i] === AntState.carryingCorpse) {
     ants.place[i] = Place.arena;
     ants.x[i] = arena.entranceX;

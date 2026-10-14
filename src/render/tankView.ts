@@ -138,16 +138,16 @@ export class TankView {
 
   /** Repaints the soil, or the bought nest, from a snapshot of the farm's layers. */
   setSoil(snapshot: FarmSnapshot): void {
-    const { width, height, material, moisture, loose, nest } = snapshot;
+    const { width, height, material, moisture, loose, table } = snapshot;
     this.farmWidth = width;
-    if ((nest !== null) !== this.bought) {
-      this.bought = nest !== null;
+    if ((table !== null) !== this.bought) {
+      this.bought = table !== null;
       this.sand.visible = !this.bought;
       this.nest.root.visible = this.bought;
       this.placeFarmLayers();
     }
-    if (nest) {
-      this.nest.setNest(nest, width, height, material, moisture);
+    if (table) {
+      this.nest.setTable(table, width, height, material, moisture);
       this.drawTube();
       return;
     }

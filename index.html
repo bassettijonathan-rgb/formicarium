@@ -98,8 +98,17 @@
         <button id="damp">Show damp</button>
         <span id="damp-note" style="align-self: center; color: #9aa4b1"></span>
       </div>
+      <div class="row" id="table-row" hidden>
+        <span style="align-self: center; color: #9aa4b1">Table:</span>
+        <button data-put="join">Join ports</button>
+        <button data-put="plug">Plug</button>
+        <button data-put="arena">Arena tube</button>
+        <button data-put="moveNest">Move a nest</button>
+        <button data-put="takeAway">Take away</button>
+        <button data-put="coverOne">Cover one</button>
+      </div>
       <div class="row" id="cover-row" hidden>
-        <span style="align-self: center; color: #9aa4b1">Cover:</span>
+        <span style="align-self: center; color: #9aa4b1">All covers:</span>
         <button data-cover="on" aria-pressed="true">On</button>
         <button data-cover="left">Lift left half</button>
         <button data-cover="right">Lift right half</button>
@@ -114,7 +123,7 @@
         <button id="fit">Fit view</button>
       </div>
       <div class="row">
-        <span style="align-self: center; color: #9aa4b1">New tank in a bought nest:</span>
+        <span style="align-self: center; color: #9aa4b1">Bought nest:</span>
         <button data-material="ytong">Ytong</button>
         <button data-material="plaster">Plaster</button>
         <button data-material="acrylic">Acrylic</button>
@@ -125,7 +134,9 @@
         <button data-layout="classic">Rooms</button>
         <button data-layout="organic">Organic</button>
         <button data-layout="honeycomb">Honeycomb</button>
-        <button id="new-tank">Start new tank</button>
+        <button id="add-nest">Add it to the table</button>
+        <button id="new-tank">Start new tank in it</button>
+        <button id="new-tube">Start new tank in a test tube</button>
       </div>
       <div class="row">
         <button id="graphs">Colony graphs</button>

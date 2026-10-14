@@ -10,8 +10,12 @@ import { layDecorations, stampDecorations } from './decor';
 import { type Item, canPutFood, emptyDishes, moveDecoration, putItem, refillFeeders, removeDecoration } from './objects';
 import { TANK_ARENA } from './tank';
 import { MAT_WIDTH } from './heat';
-import { Place } from './ants';
-import { DEFAULT_NEST, type NestSetup } from './nest';
+import { Caste, Place } from './ants';
+import { BroodStage, addBrood } from './brood';
+import { cellSolid } from './farm';
+import { Purpose, Rng } from './rng';
+import { DEFAULT_NEST, type NestSetup, type TubeEnd } from './nest';
+import { addModule, connect, connectArena, moveModule, removeModule, removeTube, setPlug } from './table';
 import type { Cut, Insect } from './prey';
 import {
   cleanArena,
@@ -38,8 +42,22 @@ export type KeeperCommand =
   | { type: 'heatMat'; x: number | null }
   /** Water poured on the farm from above at `x` mm (M5b). */
   | { type: 'water'; x: number }
-  /** A bought nest's cover lifted from `from` to `to` mm across, or put back (`to` <= `from`) (Nests 2, N7). */
-  | { type: 'cover'; from: number; to: number }
+  /** A bought nest's cover lifted from `from` to `to` mm across, or put back (`to` <= `from`) (Nests 2, N7); on module `module`, or the first. */
+  | { type: 'cover'; from: number; to: number; module?: number }
+  /** A new nest module laid on the table, at (x, y) or in front of the others (Nests 3, N8). */
+  | { type: 'addNest'; nest: NestSetup; x?: number; y?: number }
+  /** An empty module with nothing plugged into it taken off the table (N8). */
+  | { type: 'removeNest'; module: number }
+  /** An empty module with nothing plugged into it moved so its corner is near (x, y) (N8). */
+  | { type: 'moveNest'; module: number; x: number; y: number }
+  /** A tube laid between two free ports, with a cotton plug in it or open (N8). */
+  | { type: 'connect'; a: TubeEnd; b: TubeEnd; plugged: boolean }
+  /** A tube's cotton plug pushed in or pulled out (N8). */
+  | { type: 'plug'; tube: number; plugged: boolean }
+  /** An empty tube taken away (N8). */
+  | { type: 'removeTube'; tube: number }
+  /** The arena's tube plugged into another port (N8). */
+  | { type: 'arenaTube'; to: TubeEnd }
   /** The arena cleaned: the dead lying there and mouldy food taken out (M5c), and the feeding dishes emptied (B4). */
   | { type: 'clean' }
   /** An object put in the arena with its middle at (x, y); a liquid feeder comes full of sugar water of `concentration` mol/L (B3-B5). */
@@ -79,13 +97,42 @@ export const FIRST_DROP = { x: 100, y: TANK_ARENA.height / 2 - 45 } as const;
 export function createTank(seed: number, nest: NestSetup | null = DEFAULT_NEST): World {
   const world = createWorld(seed, {
     queen: true,
+    // A young colony in a test tube (N9): the queen, her first workers and some brood.
+    ...(nest?.testTube ? { ants: TUBE_COLONY.workers } : {}),
     params: { roomTemperature: TANK_ROOM, waterFlow: true, selfWatering: true, mould: true, mortal: true },
     ...(nest ? { bought: nest } : {}),
   });
+  if (nest?.testTube) startBrood(world);
   setHeatMat(world, nest ? (world.farm.width - MAT_WIDTH) / 2 : TANK_MAT_X);
   furnishArena(world, []);
   placeSugar(world, FIRST_DROP.x, FIRST_DROP.y, 40, 1);
   return world;
+}
+
+/** A test tube colony as keepers buy one (N9): a queen with her first workers, and eggs, larvae and pupae by her. */
+export const TUBE_COLONY = { workers: 20, eggs: 8, larvae: 6, pupae: 4 } as const;
+
+/** The test tube colony's brood, in a heap by the queen. */
+function startBrood(world: World): void {
+  const { ants, brood } = world;
+  const q = ants.caste.indexOf(Caste.queen);
+  const rng = new Rng(world.seed, Purpose.ants, 1);
+  const lay = (stage: BroodStage, n: number) => {
+    for (let k = 0; k < n; k++) {
+      let [x, y] = [ants.x[q]!, ants.y[q]!];
+      for (let tries = 0; tries < 20; tries++) {
+        const [tx, ty] = [ants.x[q]! + rng.range(-3, 3), ants.y[q]! + rng.range(-3, 3)];
+        if (!cellSolid(world.farm, Math.floor(tx), Math.floor(ty))) {
+          [x, y] = [tx, ty];
+          break;
+        }
+      }
+      addBrood(brood, stage, x, y);
+    }
+  };
+  lay(BroodStage.egg, TUBE_COLONY.eggs);
+  lay(BroodStage.larva, TUBE_COLONY.larvae);
+  lay(BroodStage.pupa, TUBE_COLONY.pupae);
 }
 
 /**
@@ -122,7 +169,28 @@ export function applyCommand(world: World, command: KeeperCommand): void {
       water(world, command.x);
       break;
     case 'cover':
-      setCover(world, command.from, command.to);
+      setCover(world, command.from, command.to, command.module);
+      break;
+    case 'addNest':
+      addModule(world, command.nest, command.x !== undefined && command.y !== undefined ? { x: command.x, y: command.y } : undefined);
+      break;
+    case 'removeNest':
+      removeModule(world, command.module);
+      break;
+    case 'moveNest':
+      moveModule(world, command.module, command.x, command.y);
+      break;
+    case 'connect':
+      connect(world, command.a, command.b, command.plugged);
+      break;
+    case 'plug':
+      setPlug(world, command.tube, command.plugged);
+      break;
+    case 'removeTube':
+      removeTube(world, command.tube);
+      break;
+    case 'arenaTube':
+      connectArena(world, command.to);
       break;
     case 'clean':
       cleanArena(world);

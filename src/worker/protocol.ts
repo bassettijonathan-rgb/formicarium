@@ -5,7 +5,7 @@ import type { AntCard } from '../sim/inspect';
 import type { KeeperCommand } from '../sim/keeper';
 import type { Decoration } from '../sim/decor';
 import type { Insect, Part } from '../sim/prey';
-import type { NestLayout, NestMaterial, NestSetup, NestSize } from '../sim/nest';
+import type { NestLayout, NestMaterial, NestSetup, NestSize, TubeEnd } from '../sim/nest';
 
 export type ToWorker =
   /**
@@ -85,12 +85,29 @@ export interface FarmSnapshot {
   moisture: Uint8Array;
   /** 1 for loose grains (spoil and fallen soil). */
   loose: Uint8Array;
-  /** The bought nest the grid holds (DESIGN.md 3.5), or null for the sand farm. */
-  nest: NestShape | null;
+  /** The bought nests the grid holds, on their table (DESIGN.md 3.5, Nests 3), or null for the sand farm. */
+  table: TableShape | null;
 }
 
-/** What the page needs to draw a bought nest besides its cells. */
+/** What the page needs to draw the table besides its cells: the modules, the tubes between them, and where the arena's tube plugs in. */
+export interface TableShape {
+  modules: NestShape[];
+  tubes: { id: number; a: TubeEnd; b: TubeEnd; path: number[]; plugged: boolean }[];
+  arena: TubeEnd;
+}
+
+/** What the page needs to draw a bought nest module besides its cells. */
 export interface NestShape {
+  id: number;
+  /** A carved nest, or a test tube (N9). */
+  kind: 'nest' | 'tube';
+  /** Its top left corner on the table, and its size, mm. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Its ports' mouths, table mm, and which way each faces out. */
+  ports: { x: number; y: number; dx: number; dy: number }[];
   size: NestSize;
   layout: NestLayout;
   material: NestMaterial;
@@ -100,8 +117,6 @@ export interface NestShape {
   waterX: number;
   waterY: number;
   waterRadius: number;
-  /** Where the tube's port is, mm. */
-  tubeY: number;
 }
 
 export interface HeatSnapshot {
@@ -113,8 +128,8 @@ export interface HeatSnapshot {
   temperature: Float32Array;
   /** Where the heat mat is under the farm, mm, or null. */
   mat: { x: number; width: number } | null;
-  /** Where a bought nest's cover is lifted, mm across (none when `from` equals `to`); null for the sand farm. */
-  lit: { from: number; to: number } | null;
+  /** Where each bought nest module's cover is lifted, mm across it (none when `from` equals `to`); null for the sand farm. */
+  lit: { module: number; from: number; to: number }[] | null;
   room: number;
   /** Mould in the farm, on the same grid, 0-1; null while there is none (M5b). */
   mould: Float32Array | null;
