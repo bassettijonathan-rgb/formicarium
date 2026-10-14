@@ -1211,6 +1211,16 @@ project. If one fails, we fix the model, not the test.
    cover lifted from half of a nest, most brood is under the cover within
    an hour (Temnothorax colonies offered a dark and a light cavity choose
    the dark one, Franks et al. 2003).
+17. **Room to grow, between nests** (Nests 3; check 3 of the bought-nests
+   plan, second half): a colony in one of two joined nests spreads into the
+   second only when the first is full (Temnothorax colonies choose a nest
+   whose area matches their size, Mallon & Franks 2000).
+18. **Moving house** (Nests 3; check 4, as changed in Nests 3): a colony in
+   a test tube joined to a dark, damp nest moves its queen and all its brood
+   into the nest within a day once the keeper uncovers the tube, as keepers
+   do to make a colony move, and stays in a covered tube that has room.
+   (The plan's check said "once the tube is crowded"; with the ants' local
+   rules a crowded tube only spills workers into the new nest, 9.16.)
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 

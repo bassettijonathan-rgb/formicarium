@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { AntState, Place, addAnt } from '../src/sim/ants';
+import { AntState, Caste, Place, addAnt } from '../src/sim/ants';
 import { FIELD_CELL, type Farm } from '../src/sim/farm';
 import { hashState } from '../src/sim/hash';
 import { applyCommand, createTank, type LoggedCommand, replayTank } from '../src/sim/keeper';
 import { Material } from '../src/sim/materials';
-import { COVER_LEAK, lightAt, moduleById } from '../src/sim/nest';
+import { COVER_LEAK, TEST_TUBE, TEST_TUBE_SETUP, lightAt, moduleById } from '../src/sim/nest';
+import type { AntParams } from '../src/sim/params';
 import { SAVE_VERSION, loadWorld } from '../src/sim/save';
 import { MODULE_GAP, addModule, connect, connectArena, removeModule, removeTube, setPlug } from '../src/sim/table';
-import { createWorld, step, type World } from '../src/sim/world';
+import { createWorld, setCover, step, type World } from '../src/sim/world';
 
 function tableOf(seed = 5): World {
   return createWorld(seed, { ants: 0, bought: { size: 'S', layout: 'classic', material: 'ytong' } });
@@ -159,5 +160,78 @@ describe('the table of nests (Nests 3, N8)', () => {
     const table = world.farm.table!;
     expect(table.modules.length).toBe(2);
     expect(table.arena).toEqual({ module: 1, port: 0 });
+  });
+});
+
+describe('the test tube and moving house (Nests 3, N8, N9)', () => {
+  function tube(params: Partial<AntParams> = {}): World {
+    return createWorld(5, { ants: 0, queen: false, params: { forageRate: 0, returnToFoodRate: 0, ...params }, bought: TEST_TUBE_SETUP });
+  }
+  function put(world: World, x: number, y: number, state: number, caste: number = Caste.worker): number {
+    const i = addAnt(world.ants);
+    world.ants.place[i] = Place.farm;
+    world.ants.state[i] = state;
+    world.ants.caste[i] = caste;
+    world.ants.carriedBy[i] = -1;
+    world.ants.corpseHeld[i] = -1;
+    world.ants.broodHeld[i] = -1;
+    world.ants.pieceHeld[i] = -1;
+    world.ants.partner[i] = -1;
+    world.ants.preyId[i] = -1;
+    world.ants.fat[i] = 1;
+    world.ants.x[i] = x;
+    world.ants.y[i] = y;
+    world.ants.timer[i] = 1e6;
+    return i;
+  }
+
+  it("a test tube's air is damp from the wet cotton nearly to its mouth", () => {
+    const world = tube();
+    const at = (x: number) => world.farm.humidity[Math.floor(9 / FIELD_CELL) * world.farm.fieldWidth + Math.floor(x / FIELD_CELL)]!;
+    expect(at(60)).toBeGreaterThan(0.99);
+    expect(at(110)).toBeGreaterThan(0.95);
+    expect(at(147)).toBeLessThan(0.8); // where the drier air comes in
+  });
+
+  it('a worker does not lie down on top of resting nestmates', () => {
+    const world = tube({ restRate: 1e3, speed: 0.01 });
+    put(world, 100, 9, AntState.resting);
+    put(world, 100.3, 9, AntState.resting);
+    const w = put(world, 100.1, 9.2, AntState.wandering);
+    for (let s = 0; s < 40; s++) step(world);
+    expect(world.ants.state[w]).toBe(AntState.wandering);
+    // With room beside one nestmate, it lies down at once.
+    const free = tube({ restRate: 1e3, speed: 0.01 });
+    put(free, 100, 9, AntState.resting);
+    const v = put(free, 101, 9, AntState.wandering);
+    for (let s = 0; s < 40; s++) step(free);
+    expect(free.ants.state[v]).toBe(AntState.resting);
+  });
+
+  it('a queen resting in the light gets up soon; under the cover she lies on', () => {
+    const dark = tube();
+    const lit = tube();
+    setCover(lit, 0, TEST_TUBE.width, 1);
+    const a = put(dark, 100, 9, AntState.resting, Caste.queen);
+    const b = put(lit, 100, 9, AntState.resting, Caste.queen);
+    dark.ants.timer[a] = 4000;
+    lit.ants.timer[b] = 4000;
+    for (let s = 0; s < 400; s++) {
+      step(dark);
+      step(lit);
+    }
+    expect(dark.ants.state[a]).toBe(AntState.resting);
+    expect(lit.ants.state[b]).not.toBe(AntState.resting);
+  });
+
+  it('a worker that goes out through the arena tube forgets the new site it found', () => {
+    const world = tube();
+    const i = put(world, 100, 9, AntState.homing);
+    world.ants.place[i] = Place.tube;
+    world.ants.timer[i] = 0;
+    world.ants.site[i] = 1;
+    step(world);
+    expect(world.ants.place[i]).toBe(Place.farm);
+    expect(world.ants.site[i]).toBe(0);
   });
 });

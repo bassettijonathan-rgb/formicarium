@@ -18,7 +18,7 @@
  *   npm run experiment -- nest-damp [--hours 3] [--no-hygro] [--layout classic|organic|honeycomb]
  *   npm run experiment -- nest-room [--hours 4] [--ants 40]
  *   npm run experiment -- nest-spread [--hours 3] [--ants 40]
- *   npm run experiment -- moving [--hours 24] [--ants 60]
+ *   npm run experiment -- moving [--hours 6] [--ants 250] [--lit]
  *   npm run experiment -- nest-dark [--hours 2] [--no-light] [--gradient] [--material ytong|plaster|acrylic|wood] [--layout ...]
  *   growth takes --mortal: adults die of hunger, drying out and heat (M5c)
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
@@ -277,9 +277,10 @@ for (let seed = first; seed < first + runs; seed++) {
         `chambers of the first holding 90% of its workers ${r.chambersByHour.join(' ')} of ${r.chambers}`,
     );
   } else if (name === 'moving') {
-    const r = runMovingHouse({ seed, hours: hours || 24, ants: ants || 60, params, lit });
+    const r = runMovingHouse({ seed, hours: hours || 6, ants: ants || 250, params, lit });
     console.log(
-      `seed ${seed}, ${ants || 60} workers: brood in the nest by hour ${r.broodInNestByHour.map(pct).join(' ')}; queen in the nest ${r.queenInNestByHour.map((b) => (b ? 'Y' : '-')).join('')}; ` +
+      `seed ${seed}, ${ants || 250} workers${lit ? ', tube uncovered' : ''}: brood in the nest by hour ${r.broodInNestByHour.map(pct).join(' ')}, ` +
+        `left in the tube ${r.broodInTubeByHour.map(pct).join(' ')}; queen in the nest ${r.queenInNestByHour.map((b) => (b ? 'Y' : '-')).join('')}; ` +
         `resting in the tube ${r.tubeRestingByHour.join(' ')}, in the nest ${r.nestRestingByHour.join(' ')}`,
     );
   } else if (name === 'nest-dark') {

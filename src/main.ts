@@ -126,7 +126,7 @@ async function start(): Promise<void> {
     } else if (msg.type === 'farm') {
       const before = view.boughtNest;
       view.setSoil(msg);
-      showNestControls(msg.table?.modules[0]?.material ?? null);
+      showNestControls(msg.table?.modules[0]?.material ?? null, msg.table?.modules[0]?.kind === 'tube');
       // The first picture of the tank, a tank of the other kind, or a table with a new nest on it: frame it.
       if (!framed || before !== view.boughtNest || fitAfterTable) fit();
       fitAfterTable = false;
@@ -362,6 +362,7 @@ async function start(): Promise<void> {
     plug: "Tap a tube to pull its cotton plug out, or push one in.",
     arena: "Tap the port the arena's tube should go into.",
     takeAway: 'Tap an empty tube or an empty nest with nothing plugged in to take it away.',
+    coverOne: 'Tap a nest or the test tube to take its cover off, or put it back. Ants move out of the light into a dark nest.',
   };
   /** The first port tapped while joining two. */
   let joinFrom: { module: number; port: number } | null = null;
@@ -407,6 +408,12 @@ async function start(): Promise<void> {
     } else if (tool === 'arena' && port) command({ type: 'arenaTube', to: port });
     else if (tool === 'takeAway' && tube !== undefined) command({ type: 'removeTube', tube });
     else if (tool === 'takeAway' && module !== undefined) command({ type: 'removeNest', module });
+    else if (tool === 'coverOne' && module !== undefined) {
+      const m = view.nest.shape!.modules.find((x) => x.id === module)!;
+      const at = coverLit.find((c) => c.module === module);
+      const covered = !at || at.to <= at.from;
+      command({ type: 'cover', from: 0, to: covered ? m.width : 0, module });
+    }
     joinFrom = null;
     tool = null;
     for (const b of putButtons) b.setAttribute('aria-pressed', 'false');
@@ -528,13 +535,19 @@ async function start(): Promise<void> {
   });
 
   /** Says how the nest's water works, which differs between materials and the sand farm; only a bought nest has a cover. */
-  function showNestControls(material: NestMaterial | null): void {
-    document.getElementById('damp-note')!.textContent = material ? DAMP_NOTES[material] : 'Soil darkens when damp; the farm waters itself and never dries.';
+  function showNestControls(material: NestMaterial | null, testTube = false): void {
+    document.getElementById('damp-note')!.textContent = testTube
+      ? "The test tube's wet cotton keeps its air damp nearly to the mouth; nests added to the table have their own water."
+      : material
+        ? DAMP_NOTES[material]
+        : 'Soil darkens when damp; the farm waters itself and never dries.';
     document.getElementById('cover-row')!.hidden = material === null;
     document.getElementById('table-row')!.hidden = material === null;
     document.getElementById('add-nest')!.hidden = material === null;
   }
 
+  /** Where each module's cover is lifted, as the worker last said. */
+  let coverLit: { module: number; from: number; to: number }[] = [];
   // The covers on the nests (N7): on, lifted from each nest's left or right half, or off. Under them the ants are in the dark.
   const coverButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-cover]')];
   for (const button of coverButtons) {
@@ -548,6 +561,7 @@ async function start(): Promise<void> {
   }
   /** Marks the cover button that matches where the first nest's cover is lifted. */
   function showCover(lit: { module: number; from: number; to: number }[] | null): void {
+    coverLit = lit ?? [];
     const first = lit?.[0];
     const m = view.nest.shape?.modules[0];
     if (!first || !m) return;
