@@ -14,8 +14,8 @@ export type ToWorker =
   | { type: 'list' }
   /** Opens kept tank `id`; it catches up on the time it was closed (M6a). */
   | { type: 'open'; id: string }
-  /** Sets up a new tank called `name`, its colony in `nest` (a test tube or a bought nest), and opens it (U3). */
-  | { type: 'create'; name: string; nest: NestSetup }
+  /** Sets up a new tank called `name`, its colony (of `species`, Lasius niger if none) in `nest` (a test tube or a bought nest), and opens it (U3). */
+  | { type: 'create'; name: string; nest: NestSetup; species?: number }
   /** Keeps a tank read from a file as a new tank called `name`, and opens it. */
   | { type: 'import'; save: Kept; name: string }
   /** Keeps the running tank and stops it (back to the start screen). */
@@ -38,8 +38,8 @@ export type ToWorker =
   | { type: 'history' }
   /** Show colony `slot` of the table: the snapshots are of it and the keeper's tools act on it (DESIGN.md 3.6). */
   | { type: 'choose'; slot: number }
-  /** Set up a new colony called `name` in free place `slot`, its colony in `nest` (T3); it is then shown. */
-  | { type: 'addColony'; name: string; slot: number; nest: NestSetup }
+  /** Set up a new colony called `name` (of `species`) in free place `slot`, in `nest` (T3); it is then shown. */
+  | { type: 'addColony'; name: string; slot: number; nest: NestSetup; species?: number }
   /** Give colony `slot` away (T4). */
   | { type: 'removeColony'; slot: number }
   /** While on, the page hears where every colony's ants are (`overview`), for the picture of the whole table. */
@@ -63,6 +63,10 @@ export interface AntsSnapshot {
   caste: Uint8Array;
   /** 1 for a callow: a worker in its first days out of the cocoon, still pale. */
   callow: Uint8Array;
+  /** 1 for a worker alarmed enough to show it (its gaster raised, in Crematogaster; DESIGN.md 4.4). */
+  alarmed: Uint8Array;
+  /** The colony's `Species`. */
+  species: number;
   /** Brood in the farm, `BROOD_STRIDE` numbers each: x, y (mm), `BroodStage`, size (mm). */
   brood: Float32Array;
   /** Pieces of feeder insects lying in the arena or the farm (Arena 3). */
@@ -173,7 +177,7 @@ export type FromWorker =
   /** The running tank as a save, to be written to a file. */
   | { type: 'exported'; name: string; save: TableSave }
   /** The colonies on the table by place, the one shown (`chosen`, a place), and the places still free. */
-  | { type: 'colonies'; chosen: number; colonies: { name: string; slot: number }[]; free: number[] }
+  | { type: 'colonies'; chosen: number; colonies: { name: string; slot: number; species: number }[]; free: number[] }
   /** Every colony's setup and ants, for the picture of the whole table. */
   | { type: 'overview'; colonies: ColonyView[] }
   /** A tank from a file could not be read. */
@@ -223,6 +227,8 @@ export const Look = { closed: 0, open: 1, husk: 2, mouldy: 3 } as const;
 export interface ColonyView {
   name: string;
   slot: number;
+  /** The colony's `Species`. */
+  species: number;
   workers: number;
   queen: boolean;
   /** The nests' table (or the sand farm), mm, and its nests and tubes; null for a sand farm. */

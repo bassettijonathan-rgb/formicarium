@@ -20,6 +20,7 @@ import type { Farm } from './farm';
 import { type BoughtNest, TEST_TUBE_SETUP, nestMaterialName } from './nest';
 import { TANK_ARENA } from './tank';
 import { STEPS_PER_SECOND } from './time';
+import { Species } from './species';
 import type { World } from './world';
 
 /**
@@ -70,6 +71,8 @@ export function loadWorld(save: Save): World | null {
   const template = createTank(
     save.seed,
     first ? (first.kind === 'tube' ? TEST_TUBE_SETUP : { size: first.size, layout: first.layout, material: nestMaterialName(first.material) }) : null,
+    // A tank saved before there were two species holds Lasius niger.
+    (saved as Partial<World>).species ?? Species.lasiusNiger,
   );
   if (old.nest) tableFromNest(old, old.nest, template.farm.table!.modules[0]!);
   delete old.nest;

@@ -139,6 +139,8 @@ export interface Ants {
   encounters: Float64Array;
   /** Urge to go foraging, raised by meeting foragers just back with food. */
   excitement: Float64Array;
+  /** How alarmed the ant is, 0 to 1 (a species that takes alarm, DESIGN.md 4.4; always 0 for Lasius niger). */
+  alarm: Float64Array;
   /**
    * How strongly the ant feels the brood's hunger for protein, 0 to 1: from
    * smelling hungry brood, or passed on by nestmates it touches (M3b).
@@ -270,6 +272,7 @@ export function createAnts(count: number): Ants {
     grainMoisture: new Uint8Array(count),
     encounters: new Float64Array(count),
     excitement: new Float64Array(count),
+    alarm: new Float64Array(count),
     broodNeed: new Float64Array(count),
     recruiting: new Int32Array(count),
     knowsTube: new Uint8Array(count),
@@ -391,6 +394,7 @@ export function stepAnts(ctx: AntContext): void {
   // Every worker burns the sugar in its crop on the life clock (D6); the lab nest has no metabolism.
   const burn = ctx.nestMode === 'farm' ? (params.burnRate / params.daySeconds) * DT : 0;
   const days = DT / params.daySeconds;
+  const alarmKeep = params.alarm ? Math.pow(0.5, DT / params.alarmHalfLife) : 1;
   for (let i = 0; i < ants.count; i++) {
     const place = ants.place[i]!;
     if (place === Place.gone) continue;
@@ -408,6 +412,7 @@ export function stepAnts(ctx: AntContext): void {
       ants.crop[i] = Math.max(0, ants.crop[i]! - burn);
       if (ants.cropProtein[i]! > ants.crop[i]!) ants.cropProtein[i] = ants.crop[i]!;
     }
+    if (ants.alarm[i]! > 0) ants.alarm[i] = ants.alarm[i]! * alarmKeep < 0.01 ? 0 : ants.alarm[i]! * alarmKeep;
     const state = ants.state[i]!;
     tally(ants, i, place, state);
     if (place === Place.tube) walkTube(ctx, i);
@@ -665,7 +670,9 @@ function walk(ctx: AntContext, i: number): void {
   // 5. Move, sliding along walls when blocked, and update the path integrator.
   // The arena is at room temperature; ants walk faster when it is warm (M5a). Up and
   // down a stone or the bark the same walking crosses less floor (A5).
-  const stepLength = floorStep(arena, x, y, heading, speedAt(params, params.roomTemperature) * DT);
+  // An alarmed ant runs (DESIGN.md 4.4).
+  const running = ants.alarm[i]! > params.alarmShow ? 1 + params.alarmSpeed * ants.alarm[i]! : 1;
+  const stepLength = floorStep(arena, x, y, heading, speedAt(params, params.roomTemperature) * running * DT);
   if (!moveAnt(ctx, i, heading, stepLength, (px, py) => isBlocked(arena, px, py))) return;
   const nx = ants.x[i]!;
   const ny = ants.y[i]!;

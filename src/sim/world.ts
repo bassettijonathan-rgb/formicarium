@@ -22,6 +22,7 @@ import { type Cut, type Insect, type Piece, agePieces, edible, makeInsect } from
 import { STEPS_PER_SECOND } from './time';
 import { runDispensers } from './objects';
 import { type History, createHistory, recordHistory } from './history';
+import { Species, speciesParams } from './species';
 
 export type { Farm } from './farm';
 
@@ -59,6 +60,8 @@ export interface World {
   diedOut: number;
   /** Censuses and pictures of the nest over time, for the colony graphs and the timelapse (M6c). */
   history: History;
+  /** The colony's `Species` (DESIGN.md 4.4); its parameters are the species'. */
+  species: number;
 }
 
 export interface WorldOptions {
@@ -72,11 +75,14 @@ export interface WorldOptions {
   params?: Partial<AntParams>;
   /** A bought nest instead of the sand farm (DESIGN.md 3.5); the colony lives in it. */
   bought?: NestSetup;
+  /** The colony's `Species` (default Lasius niger); `params` change its parameters further. */
+  species?: number;
 }
 
 export function createWorld(seed: number, options: WorldOptions = {}): World {
   const nestMode = options.nest ?? 'farm';
-  const params = { ...DEFAULT_ANT_PARAMS, ...options.params };
+  const species = options.species ?? Species.lasiusNiger;
+  const params = { ...DEFAULT_ANT_PARAMS, ...speciesParams(species), ...options.params };
   const farm = options.bought ? createNest(new Rng(seed, Purpose.nest), options.bought, params) : createFarm(new Rng(seed, Purpose.soil));
   farm.temperature.fill(params.roomTemperature);
   if (params.waterFlow && !farm.table) updateHumidity(farm, params);
@@ -105,6 +111,7 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
     heatMat: null,
     diedOut: -1,
     history: createHistory(),
+    species,
   };
 }
 

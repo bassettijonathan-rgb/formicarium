@@ -56,6 +56,9 @@ let start = new Int32Array(0);
 let fill = new Int32Array(0);
 let bucketOf = new Int32Array(0);
 let members = new Int32Array(0);
+/** Which way each ant smells alarm from: the sum of its alarmed neighbours' offsets, weighted by their alarm (DESIGN.md 4.4). */
+let alarmX = new Float64Array(0);
+let alarmY = new Float64Array(0);
 
 /**
  * Antennal contacts between ants in the farm. Each ant updates how crowded
@@ -67,6 +70,12 @@ export function computeContacts(ctx: AntContext): void {
   if (restingClose.length !== ants.count) restingClose = new Uint8Array(ants.count);
   restingNear.fill(0);
   restingClose.fill(0);
+  if (alarmX.length !== ants.count) {
+    alarmX = new Float64Array(ants.count);
+    alarmY = new Float64Array(ants.count);
+  }
+  alarmX.fill(0);
+  alarmY.fill(0);
   const space2 = params.restSpace * params.restSpace;
   queens.length = 0;
   for (let i = 0; i < ants.count; i++) if (ants.place[i] === Place.farm && ants.caste[i] === Caste.queen) queens.push(i);
@@ -109,6 +118,7 @@ export function computeContacts(ctx: AntContext): void {
     let touching = 0;
     let recruiters = 0;
     let need = 0;
+    let alarmed = 0;
     for (let y = Math.max(0, by - 1); y <= Math.min(bh - 1, by + 1); y++) {
       for (let x = Math.max(0, bx - 1); x <= Math.min(bw - 1, bx + 1); x++) {
         const cell = y * bw + x;
@@ -121,6 +131,12 @@ export function computeContacts(ctx: AntContext): void {
           touching++;
           if (ants.recruiting[j]! > 0) recruiters++;
           if (ants.broodNeed[j]! > need) need = ants.broodNeed[j]!;
+          // An alarmed nestmate's alarm pheromone, smelt by a worker touching it (Crematogaster: Leuthold & Schlunegger 1973).
+          if (ants.alarm[j]! > params.alarmShow) {
+            if (ants.alarm[j]! > alarmed) alarmed = ants.alarm[j]!;
+            alarmX[i]! += dx * ants.alarm[j]!;
+            alarmY[i]! += dy * ants.alarm[j]!;
+          }
           if (ants.state[j] === AntState.resting && restingNear[i]! < 255) {
             restingNear[i]!++;
             if (dx * dx + dy * dy <= space2) restingClose[i]!++;
@@ -132,6 +148,8 @@ export function computeContacts(ctx: AntContext): void {
     ants.excitement[i]! += params.recruitPerContact * recruiters * DT;
     // The brood's hunger, smelt here or passed on by touch, fading when nobody renews it.
     ants.broodNeed[i] = Math.max(ants.broodNeed[i]! * needKeep, smellBroodNeed(ctx, i), params.needRelay * need);
+    // Alarm spreads from worker to worker, weaker at each one, so it reaches only a few bodies' lengths (DESIGN.md 4.4).
+    if (alarmed > 0 && ants.caste[i] === Caste.worker) ants.alarm[i] = Math.max(ants.alarm[i]!, params.alarmRelay * alarmed);
     if (params.sharing && canShare(ants.state[i]!)) beg(ctx, i, bx, by, bw, bh);
   }
   tendBrood(ctx);
@@ -548,6 +566,11 @@ function rest(ctx: AntContext, i: number): void {
   addToField(farm, farm.odour, ants.x[i]!, ants.y[i]!, params.odourDeposit * (queen ? params.queenOdourGain : 1) * DT);
   if (queen) layEggs(ctx, i);
   if (setOffToForage(ctx, i)) return;
+  // An alarmed worker gets up at once (DESIGN.md 4.4).
+  if (!queen && ants.alarm[i]! > params.alarmShow) {
+    ants.state[i] = AntState.wandering;
+    return;
+  }
   // In a bought nest a worker packed in too tight gets up sooner, the sooner the tighter (Amé et al. 2006; Nests 3).
   const packed = params.aggregation && ctx.farm.table && !queen ? Math.max(0, restingNear[i]! - params.restCrowd) + Math.max(0, restingClose[i]! - 1) : 0;
   // So does any ant lying in the light, the queen too: keepers see them scatter when a cover comes off.
@@ -758,6 +781,12 @@ function walkFarm(ctx: AntContext, i: number): void {
     }
   }
 
+  // An alarmed worker about the nest runs towards where the alarm smells strongest (DESIGN.md 4.4).
+  const alarmed = ants.alarm[i]! > params.alarmShow;
+  if (alarmed && state === AntState.wandering && (alarmX[i] !== 0 || alarmY[i] !== 0)) {
+    turn += params.alarmTurn * DT * Math.sin(Math.atan2(alarmY[i]!, alarmX[i]!) - heading);
+  }
+
   // Brood carriers feel which way it gets warmer (or cooler) across their antennae and carry the brood
   // towards the temperature nurses keep it at (M5a).
   // In full light it only looks for the dark: warmth and damp can wait (Nests 3).
@@ -784,7 +813,8 @@ function walkFarm(ctx: AntContext, i: number): void {
 
   // Ants walk faster where it is warm (Hurlbert et al. 2008).
   const walking = speedAt(params, temperatureAt(farm, x, y));
-  const speed = ants.caste[i] === Caste.queen ? walking * params.queenSpeed : walking;
+  const running = alarmed ? 1 + params.alarmSpeed * ants.alarm[i]! : 1;
+  const speed = ants.caste[i] === Caste.queen ? walking * params.queenSpeed : walking * running;
   moveAnt(ctx, i, wrapAngle(heading + turn), speed * DT, (px, py) => isBlockedFarm(farm, px, py));
   const nx = ants.x[i]!;
   const ny = ants.y[i]!;
@@ -839,7 +869,9 @@ function walkFarm(ctx: AntContext, i: number): void {
       ants.digY[i] = ants.piY[i]!;
     }
     const single = params.aggregation && farm.table && !queen ? params.restAlone : 1;
-    if (rng.chance(params.restRate * enclosed * (1 + params.restOdourGain * nestLike) * onBrood * dark * (packed > 0 ? 0 : single + params.restJoin * company) * DT)) {
+    // An alarmed worker does not lie down until its alarm has faded.
+    const calm = alarmed ? 0 : 1;
+    if (rng.chance(params.restRate * calm * enclosed * (1 + params.restOdourGain * nestLike) * onBrood * dark * (packed > 0 ? 0 : single + params.restJoin * company) * DT)) {
       ants.state[i] = AntState.resting;
       ants.hasDigSite[i] = 0;
       // Room found after a crowd sent it looking: it remembers the spot (Nests 3).

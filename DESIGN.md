@@ -660,6 +660,62 @@ where everyone was showed why, one cause after another:
 Each ant logs short events (born, first foraging trip, found food, died) so
 you can open any ant and read its life.
 
+### 4.4 Species: Lasius niger and Crematogaster scutellaris (Marco, 2026-10-14)
+
+Asked by Marco on 2026-10-14 ("I want you to implement another species,
+Crematogaster scutellaris") and approved with the colonies plan (S1 to S9;
+step 2 of it, after 3.6). Each colony has a species, chosen when it is
+started (New tank, or Colony → New colony) and kept for good (`World.species`,
+`src/sim/species.ts`, an append-only saved enum; tanks kept before species
+are Lasius niger). A species is a set of parameters over the Lasius niger
+model, plus the alarm below; everything not listed is Lasius niger's, so
+Lasius colonies behave exactly as before (same ants in the same places
+after the same steps, checked against the code before species).
+
+C. scutellaris, the Mediterranean acrobat ant, as built:
+
+- **Looks (S2).** Drawn smaller (workers about 3.7 mm, the queen about
+  9 mm; keepers' care sheets give 3-5 and 8-10 mm), with a red, squarish
+  head on a black body, two waist nodes, two short spines on the back and
+  a heart-shaped gaster. A worker in alarm holds its gaster up over its
+  back, drawn foreshortened over the thorax, pointing forward.
+- **Trails (S3).** Laid by foragers coming back with food, as in Lasius
+  (in the model both species lay a continuous streak; the hind-leg gland
+  of Crematogaster, Gobin & Billen 1994, changes where it comes from, not
+  the streak), but fading faster: `trailHalfLife` 5.5 min instead of 15, so
+  the trail one forager lays is no longer followed after about 22 minutes
+  (Gobin & Billen 1994: artificial trails inactive after about 20 minutes;
+  Lasius niger's lasts about an hour in the model). Reinforced by every
+  returning forager, it still holds a colony to the shorter branch of the
+  double bridge (with the shorter half-life: 7 of 10 colonies above 90% on
+  the short branch, as Lasius in 9.1).
+- **Alarm (S4).** New per-ant state `alarm`, 0 to 1, used only by a species
+  that takes alarm (`params.alarm`; always 0 in Lasius). The keeper
+  disturbs workers: putting food, an insect or an object down, moving or
+  taking one, alarms the arena workers within 3 cm (`disturbRadius`); lifting
+  a cover alarms the workers the light falls on. An alarmed worker (above
+  `alarmShow`, 0.25) raises its gaster, gets up if it was resting, does not
+  lie down again, runs (up to twice as fast at full alarm) and turns towards
+  where alarmed nestmates are. A worker touching an alarmed nestmate smells
+  its alarm scent and takes alarm at 0.7 of that nestmate's (`alarmRelay`),
+  so alarm spreads a few bodies from each alarmed worker; in a young colony
+  packed in one or two chambers that is the whole colony within seconds,
+  as the alarmed run towards each other (9.17). It fades with
+  a half-life of 45 s, so a colony is calm about two minutes after the last
+  disturbance (Pasteels et al. 1989: gaster raising releases an alarm
+  pheromone that draws and excites nestmates; the numbers are rough). The
+  arena workers do not pass alarm on (the arena has no contact model), they
+  only run. Venom (S5) is not built: it is smeared only on other ants.
+- **Nest climate (S6).** Nurses carry brood only out of air drier than 65%
+  (Lasius: 90%), and brood dries out only below 40% (Lasius: 75%): the brood
+  ends in drier air (section 9, test 22). Rough, from keepers. The brood
+  temperature stays Lasius niger's 28 °C: the plan said both "warmer" and
+  "about 26 °C"; keepers' range for this species, 25-28 °C, includes 28.
+- **Everything else (S7-S9) is Lasius niger's,** for want of measurements:
+  egg, larva and pupa times, the queen's laying, how much food brood needs,
+  founding in a test tube with one queen, and food (sugar water, the
+  feeders, insects taken home when larvae are hungry).
+
 ---
 
 ## 5. Chemistry
@@ -1267,7 +1323,7 @@ one was not.
   Loading one keeps it as a new tank and opens it; a file that is not a
   tank, or a save this code cannot read, is turned down with a line saying
   so. Two tanks never share a name: a copy gets "(2)".
-- **U3 New tank.** Asks only a name and where the colony starts: a test tube
+- **U3 New tank.** Asks only a name, the species (4.4; Lasius niger by default) and where the colony starts: a test tube
   (the default, as keepers buy one) or a bought nest, whose material, size
   and layout are then chosen on the same screen.
 - **U4 Tabs.** The tank fills the screen between a top bar (back to the
@@ -1298,7 +1354,7 @@ one was not.
   entrances would mean redoing the foraging checks (section 9.1).
 - **U7 Several colonies** (3.6): chips in the top bar pick the colony shown,
   Whole table shows them all from above, and the Colony tab has New colony
-  and Give it away.
+  (which asks the species too, 4.4) and Give it away.
 
 ---
 
@@ -1366,6 +1422,19 @@ project. If one fails, we fix the model, not the test.
    table run exactly as each would alone, state for state (same state hash
    after the same steps), so nothing leaks between setups
    (`tests/colonies.test.ts`).
+20. **Trail lifetime** (step 2 of the colonies plan, its test 3; Gobin &
+   Billen 1994): the trail one Crematogaster scutellaris forager lays is
+   still followed at 15 minutes and no longer at 25 (about 20 in the paper);
+   a Lasius niger trail lasts about an hour.
+21. **Alarm** (qualitative; Pasteels et al. 1989): with half a nest's cover
+   lifted off a resting C. scutellaris colony, within a minute 15 or more
+   workers more are up than in the same Lasius colony, and alarmed (Lasius
+   never are); the alarm reaches nestmates the light did not fall on; five
+   minutes later none is alarmed. Without the alarm scent only the lit
+   workers take alarm.
+22. **Drier brood** (qualitative, keepers): in the humidity gradient of test
+   11, C. scutellaris brood ends in air at least 5 points drier than Lasius
+   niger brood.
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -1915,6 +1984,41 @@ do with satellite nests, and as keepers describe colonies that refuse to
 leave a test tube until it is dry or lit. This is why check 4 was changed
 from "once the tube is crowded" to "once the keeper uncovers the tube".
 
+### 9.17 Results so far (Crematogaster scutellaris, step 2 of the colonies plan)
+
+`tests/science/species.test.ts` checks tests 20-22.
+
+**Trail lifetime (test 20).** One forager walking once along a line lays
+its trail; an ant walking beside it, an antenna over it, smells across its
+antennae 0.23 at 10 minutes, 0.12 at 15, 0.05 at 22 (the threshold an ant
+follows a trail above) and 0.02 at 30. A Lasius niger trail crosses the
+threshold at about 59 minutes. So a C. scutellaris trail is given up after
+about 22 minutes, as Gobin & Billen (1994) found for artificial trails.
+With this half-life the double bridge (long branch 2x, 10 colonies of 60)
+still sends 7 colonies above 90% onto the short branch; 2 lock onto the
+long one and 1 stays at 32%, as with Lasius niger's trail in 9.1.
+
+**Alarm (test 21).** A tank colony of about 59 workers resting in a medium
+ytong nest for 10 minutes, then the left half of its cover lifted; workers
+up (not resting) and alarmed, after:
+
+| Seed | Lit | C. scutellaris: up / alarmed at 5 s, 60 s, 2 min, 5 min | Lasius niger: up at 5 s, 60 s, 5 min | No alarm scent: alarmed |
+|---|---|---|---|---|
+| 1 | 29 | 57/57, 59/59, 40/0, 17/0 | 6, 17, 8 | 29 (the lit), none after 2 min |
+| 2 | 39 | 59/58, 59/59, 40/0, 17/0 | 8, 19, 22 | 39 |
+| 3 | 14 | 58/58, 59/59, 17/0, 5/0 | 4, 9, 4 | 14 |
+
+The light falls on a quarter to two thirds of the colony; the alarm scent
+takes the rest within 5 seconds, and the whole colony is up with its
+gasters raised for a minute, then calm by two minutes. Lasius workers
+only leave the light, a few at a time. What the alarm looks like in a big
+colony, where it would stay local, is untested.
+
+**Drier brood (test 22).** In the humidity gradient of test 11 (60% to
+saturated, brood strewn evenly, mean 0.80), after an hour the mean air
+round Lasius niger brood is 0.92-0.96 and round C. scutellaris brood
+0.72-0.79: its nurses only carry brood out of air drier than 65%.
+
 ---
 
 ## 10. Architecture
@@ -1952,6 +2056,7 @@ Each milestone is one or a few small PRs, merged by Marco, with a link to play.
 | L | Looks (asked by Marco 2026-10-13, section 8.1): L1 the room and the window onto Legnano with its real sky and weather; L2 a bigger arena seen at an angle, with decorations |
 | A | The arena (asked by Marco 2026-10-13, section 3.4): Arena 1 climbing; Arena 2 dishes, feeders and placing objects; Arena 3 feeder insects |
 | N | Bought nests (asked by Marco 2026-10-13, section 3.5): Nests 1 one ytong nest, in three sizes and three layouts; Nests 2 plaster, acrylic and wood, covers and light; Nests 3a keeping together (settling beside resting nestmates); Nests 3 modules, tubes and cotton plugs, the test-tube start and moving house |
+| C | Colonies and species (asked by Marco 2026-10-14, sections 3.6 and 4.4): step 1 up to four colonies on one table; step 2 Crematogaster scutellaris |
 
 If a validation test in M1 or M2 cannot be made to pass with plausible
 parameters, I stop and report before changing the model.

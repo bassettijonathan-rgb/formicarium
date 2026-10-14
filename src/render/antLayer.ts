@@ -10,7 +10,7 @@ import { Container, Graphics, type Renderer, Sprite, type Texture } from 'pixi.j
 import { AntState, Caste } from '../sim/ants';
 import { ANT_STRIDE, type AntsSnapshot, type PieceView } from '../worker/protocol';
 import { drawPiece } from './insects';
-import { ANT_SCALE, CROP, GAIT_FRAMES, STRIDE, makeAntTextures, makeDeadTexture } from './antSprites';
+import { ANT_SCALE, CROP, GAIT_FRAMES, STRIDE, makeAntTextures, makeDeadTexture, speciesSize } from './antSprites';
 import { grainColor } from './soilColors';
 
 /** Where a carried grain sits, ahead of the head, in mm. */
@@ -18,9 +18,30 @@ const GRAIN_AHEAD = 2.6;
 /** Where the near end of a carried piece of insect is, ahead of the ant's middle, mm (as `HELD_AHEAD` in prey.ts). */
 const PIECE_AHEAD = 2.5;
 
-let shared: Texture[][] | undefined;
-let sharedPale: Texture[][] | undefined;
-let sharedDead: Texture | undefined;
+/** One species' textures: a worker, a callow, one with its gaster raised in alarm, and the dead. */
+interface SpeciesTextures {
+  normal: Texture[][];
+  pale: Texture[][];
+  raised: Texture[][];
+  dead: Texture;
+}
+
+/** Made once per species, when first needed, and shared by every layer. */
+const shared = new Map<number, SpeciesTextures>();
+
+function texturesFor(renderer: Renderer, species: number): SpeciesTextures {
+  let t = shared.get(species);
+  if (!t) {
+    t = {
+      normal: makeAntTextures(renderer, false, species),
+      pale: makeAntTextures(renderer, true, species),
+      raised: makeAntTextures(renderer, false, species, true),
+      dead: makeDeadTexture(renderer, species),
+    };
+    shared.set(species, t);
+  }
+  return t;
+}
 
 /** Where an ant at (x, y) on its floor is drawn, how it is stretched across and in depth, and its drawing order (nearer is higher). */
 export type AntProjection = (x: number, y: number) => { x: number; y: number; sx: number; sy: number; z: number };
@@ -32,9 +53,6 @@ export class AntLayer {
   private readonly ants: { at: Container; body: Container; sprite: Sprite; grain: Graphics; material: number; piece: Graphics; pieceKey: string }[] = [];
   /** The piece of insect each ant carries, by ant (Arena 3). */
   private carried = new Map<number, PieceView>();
-  private readonly textures: Texture[][];
-  private readonly pale: Texture[][];
-  private readonly dead: Texture;
 
   /** The two latest snapshots and when the newer one arrived. */
   private previous: AntsSnapshot | undefined;
@@ -44,13 +62,9 @@ export class AntLayer {
 
   /** `place` is the `Place` whose ants this layer draws. */
   constructor(
-    renderer: Renderer,
+    private readonly renderer: Renderer,
     private readonly place: number,
-  ) {
-    this.textures = shared ??= makeAntTextures(renderer);
-    this.pale = sharedPale ??= makeAntTextures(renderer, true);
-    this.dead = sharedDead ??= makeDeadTexture(renderer);
-  }
+  ) {}
 
   setAnts(snapshot: AntsSnapshot, now: number): void {
     if (this.current) this.interval = Math.min(200, Math.max(16, now - this.arrivedAt));
@@ -59,7 +73,7 @@ export class AntLayer {
     this.arrivedAt = now;
     this.carried = new Map(snapshot.carried.map((c) => [c.ant, c.piece]));
     while (this.ants.length < snapshot.full.length) {
-      const sprite = new Sprite(this.textures[0]![0]);
+      const sprite = new Sprite(texturesFor(this.renderer, snapshot.species).normal[0]![0]);
       sprite.anchor.set(0.5);
       sprite.scale.set(ANT_SCALE);
       const grain = new Graphics();
@@ -105,6 +119,8 @@ export class AntLayer {
     if (!cur) return;
     const prev = this.previous && this.previous.full.length === cur.full.length ? this.previous : cur;
     const t = Math.min(1, (now - this.arrivedAt) / this.interval);
+    const looks = texturesFor(this.renderer, cur.species);
+    const size = speciesSize(cur.species);
     for (let i = 0; i < this.ants.length; i++) {
       const ant = this.ants[i]!;
       const o = i * ANT_STRIDE;
@@ -126,13 +142,14 @@ export class AntLayer {
       } else ant.at.position.set(x, y);
       ant.body.rotation = prev.ants[o + 2]! + dh * k;
       const frame = Math.floor(((walked % STRIDE) / STRIDE) * GAIT_FRAMES) % GAIT_FRAMES;
-      const textures = cur.callow[i] ? this.pale : this.textures;
+      // An alarmed worker shows it (a Crematogaster raises its gaster); a callow is pale.
+      const textures = cur.alarmed[i] ? looks.raised : cur.callow[i] ? looks.pale : looks.normal;
       ant.sprite.texture = textures[cur.full[i]!]![frame]!;
-      // A Lasius niger queen is about twice a worker's length, her gaster always swollen.
+      // A queen is two to three times a worker's length, her gaster always swollen.
       const queen = cur.caste[i] === Caste.queen;
-      ant.sprite.scale.set(queen ? 2 * ANT_SCALE : ANT_SCALE);
-      if (queen) ant.sprite.texture = this.textures[1]![frame]!;
-      if (cur.ants[o + 3] === AntState.dead) ant.sprite.texture = this.dead;
+      ant.sprite.scale.set((queen ? size.queen * size.worker : size.worker) * ANT_SCALE);
+      if (queen) ant.sprite.texture = looks.normal[1]![frame]!;
+      if (cur.ants[o + 3] === AntState.dead) ant.sprite.texture = looks.dead;
       // What is at the mouth: a grain of soil (its material), a droplet being shared (-1), or nothing (0).
       const held = cur.ants[o + 3] === AntState.sharing ? -1 : cur.ants[o + 6]!;
       if (held !== ant.material) {
