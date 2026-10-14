@@ -321,7 +321,7 @@ export function carveModule(rng: Rng, setup: NestSetup, id: number, x: number, y
 
   // The ports in the right end, a third of the way from the back and a quarter from the front, each joined to the nearest chamber.
   const ports: Port[] = [];
-  for (const at of (globalThis as { ONEPORT?: boolean }).ONEPORT ? [0.35] : [0.35, 0.75]) {
+  for (const at of [0.35, 0.75]) {
     const portY = Math.round(height * at) + 0.5;
     let near = chambers[0]!;
     for (const c of chambers) if (Math.hypot(c.x - width, c.y - portY) < Math.hypot(near.x - width, near.y - portY)) near = c;

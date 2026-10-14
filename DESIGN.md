@@ -1640,7 +1640,7 @@ carried a fly into the farm within 2 tank hours, drank it by the brood and
 carried its husk out to the arena, and took the cricket's legs one by one
 over the day.
 
-### 9.13 Results so far (a bought nest, Nests 1; re-run with Nests 3a)
+### 9.13 Results so far (a bought nest, Nests 1; re-run with Nests 3)
 
 **Brood in a ytong nest.** `npm run experiment -- nest-damp`;
 `tests/science/nestDamp.test.ts` checks seeds 1-3 over 2 hours. A medium
@@ -1652,12 +1652,12 @@ where it lies is all that is measured. Share of the brood in air at least
 
 | Seed | Nurses as modelled | Nurses ignoring humidity (control) |
 |---|---|---|
-| 1 | 62% → 100% → 96% → 100% | 62% → 67% → 73% → 47% |
-| 2 | 73% → 93% → 98% → 100% | 73% → 40% → 47% → 82% |
-| 3 | 62% → 98% → 100% → 100% | 62% → 33% → 60% → 78% |
+| 1 | 67% → 93% → 100% → 96% | 67% → 80% → 56% → 71% |
+| 2 | 71% → 100% → 96% → 98% | 71% → 80% → 64% → 80% |
+| 3 | 64% → 100% → 96% → 100% | 64% → 67% → 36% → 56% |
 
 Within an hour nearly all the brood is in the damp chambers, mean humidity
-at the brood 97-100%, as keepers see brood kept on the wet side of a ytong
+at the brood 96-100%, as keepers see brood kept on the wet side of a ytong
 nest. Without hygrotaxis the colony still gathers its brood in one place,
 but that place is wherever the piles happen to grow, damp or not.
 
@@ -1669,19 +1669,22 @@ and the control. Workers and a queen strewn through a large classic nest
 
 | Workers | Floor under the colony (resting), seeds 1, 2 | mm² per resting worker | Chambers holding 90% of them |
 |---|---|---|---|
-| 20 | 80 (19), 56 (17) | 3.3-4.2 | 2, 2 |
-| 40 | 165 (39), 102 (35) | 2.9-4.2 | 4, 2 |
-| 80 | 320 (75), 277 (66) | 4.2-4.3 | 6, 7 |
-| 160 | 501 (145), 713 (146) | 3.5-4.9 | 7, 11 |
-| 20, not settling beside nestmates (control) | 92 (14), 99 (15) | 6.6 | 8, 9 |
+| 20 | 87 (20), 63 (19) | 3.3-4.4 | 1, 1 |
+| 40 | 101 (29), 181 (37) | 3.5-4.9 | 5, 5 |
+| 80 | 316 (73), 293 (73) | 4.0-4.3 | 4, 2 |
+| 160 | 642 (152), 703 (151) | 4.2-4.7 | 7, 6 |
+| 20, not settling beside nestmates (control) | 92 (14), 114 (16) | 6.6-7.1 | 10, 11 |
 
 The colony keeps together and fills more of the nest as it grows: the
 floor under it grows in proportion to its workers (3-5 mm² each, ants
 lying close, a few deep in places), as nests (dug, 9.2, or chosen, Mallon
-& Franks 2000) match the colony; 20 workers keep to 1-2 chambers of 20.
-Before Nests 3a (the control row) a small colony spread through 8-9
-chambers, lying apart. How deep Lasius niger workers pile up in a resting
-cluster has not been measured as far as I know; `restCrowd` is the
+& Franks 2000) match the colony; 20 workers keep to 1 chamber of 20 here,
+and to 1-3 in seven of eight tanks tried (seeds 1-8; 4 in seed 3). Without
+settling beside nestmates (the control row) a small colony spreads through
+10-11 chambers, lying apart. (Nests 3a's first rules gave 2 and 2 chambers
+on seeds 1-2 but 3-10 on seeds 3-8; Nests 3 strengthened them, section
+3.5.) How closely Lasius niger workers lie in a resting cluster has not
+been measured as far as I know; `restCrowd` and `restSpace` are the
 model's guess.
 
 ### 9.14 Results so far (darkness, Nests 2)
@@ -1695,21 +1698,77 @@ the start and after each hour:
 
 | Seed | Soaked ytong, as modelled | Soaked, ants ignoring light (control) | Ytong wet at the lit end | Acrylic, sponge at the lit end |
 |---|---|---|---|---|
-| 1 | 64% → 98% → 100% | 64% → 56% → 64% | 64% → 98% → 100% | 64% → 87% → 82% |
-| 2 | 58% → 100% → 100% | 58% → 82% → 69% | 58% → 96% → 100% | 58% → 91% → 91% |
-| 3 | 71% → 100% → 98% | 71% → 71% → 64% | 71% → 98% → 100% | 71% → 98% → 100% |
-| 4 | | 73% → 29% → 33% | | |
-| 5 | | 64% → 62% → 67% | | |
+| 1 | 56% → 100% → 98% | 56% → 51% → 69% | 56% → 96% → 100% | 56% → 100% → 100% |
+| 2 | 47% → 100% → 100% | 47% → 60% → 56% | 47% → 96% → 98% | 47% → 98% → 100% |
+| 3 | 49% → 96% → 98% | 49% → 76% → 71% | 49% → 100% → 100% | 49% → 100% → 100% |
+| 4 | | 58% → 62% → 49% | | |
+| 5 | | 42% → 62% → 49% | | |
 
-(Re-run with Nests 3a.) Within an hour nearly all the brood is in the
-dark, and 98-100% of the resting workers with it; without the dislike of
-light the colony gathers on one side or the other (29-82% under the cover
-after an hour, 5 tanks). When the lit end is also the damp end, light wins:
+(Re-run with Nests 3.) Within an hour nearly all the brood is in the
+dark, and all the resting workers with it; without the dislike of
+light the colony gathers on one side or the other or spreads over both
+(51-76% under the cover after an hour, 5 tanks). When the lit end is also the damp end, light wins:
 the brood goes to the dark, drier half, which in ytong is still damp near
 the cover's edge, and in acrylic is at the room's humidity. Keepers report
 that a colony moves its brood away from a lifted cover within minutes; how
 it weighs light against damp has not, as far as I know, been measured in
 Lasius niger, so that balance is the model's guess.
+
+### 9.15 Results so far (room to grow between nests, Nests 3)
+
+`npm run experiment -- nest-spread`; `tests/science/nestSpread.test.ts`
+checks seed 1 at 150 and 800 workers. Two small classic ytong nests joined
+by an open tube from the first's lower port to the second's upper one, the
+arena's tube in the first; the workers strewn through the first. Resting
+workers in each nest after each hour:
+
+| Workers | First nest, seeds 1, 2 | Second nest |
+|---|---|---|
+| 150 | 146 → 138 → 135, 150 → 149 → 148 | 4 → 8 → 14, 0 → 0 → 0 |
+| 400 | 370 → 369 → 366 | 29 → 25 → 30 |
+| 800 | 551 → 529 → 512 → 492 | 241 → 262 → 278 → 304 |
+
+A small nest (four chambers) holds about 500-550 resting workers. Below
+that nearly all of a colony stays in it (0-10% in the second nest, a few
+workers that wandered through the tube and settled there); above it the
+rest spill into the second nest. Real nests are a guide only: keepers
+sell a small nest as fit for a few hundred workers, and our ants lie one
+loose layer deep with no room taken by brood, so the model's nests hold
+somewhat more.
+
+### 9.16 Results so far (moving house, Nests 3)
+
+`npm run experiment -- moving [--lit]`;
+`tests/science/movingHouse.test.ts` checks seeds 1-2 uncovered and seed 1
+covered, over 2 hours. A queen, 250 workers and 30 eggs, larvae and pupae
+settled for an hour in a test tube (its arena tube at the mouth); then a
+small ytong nest, dark under its cover and damp at its water hole, is
+joined to the tube's mouth and the arena's tube moved to the nest's other
+port. By hour after joining:
+
+| Seed | Tube uncovered: brood in the nest; queen; workers resting in the tube | Tube covered: brood in the nest; queen; workers resting in the nest |
+|---|---|---|
+| 1 | 94% → 98% → 92% → 98%; in the nest from hour 1; 0 | 2% → 0% → 0% → 0%; in the tube; 0-2 |
+| 2 | 100% → 94% → 94% → 98%; from hour 1; 0 | 0% → 2% → 2% → 2%; in the tube; 0-1 |
+| 3 | 88% → 90% → 96% → 98%; from hour 1; 0 | 0% → 0% → 0% → 0%; in the tube; 0-16 |
+
+With the tube uncovered the whole colony is in the dark nest within the
+first hour; the brood not counted in it is being carried (none is left
+lying in the tube). Under its cover, with room to spare, the colony stays.
+Keepers make a colony move exactly this way, uncovering the old home and
+keeping the new one dark; Temnothorax colonies leave a lit nest for a dark
+one (Franks et al. 2003).
+
+**Crowding alone does not move it.** With 700 workers (more than the tube
+holds), seeds 1-2: after 6 hours 370-381 workers rest in the new nest and
+311-320 in the tube, and the queen and all the brood stay in the tube.
+The workers with no room spill into the nest and settle there; the few
+that carry brood toward it give up, since the nurses and the queen stay
+with the brood pile in the tube. So the model's colony keeps a crowded
+tube as its home and the nest as an outstation, as Lasius niger colonies
+do with satellite nests, and as keepers describe colonies that refuse to
+leave a test tube until it is dry or lit. This is why check 4 was changed
+from "once the tube is crowded" to "once the keeper uncovers the tube".
 
 ---
 
