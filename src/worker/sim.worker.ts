@@ -7,12 +7,13 @@ import { AntState, Caste, Place } from '../sim/ants';
 import { BroodStage } from '../sim/brood';
 import { STEPS_PER_SECOND } from '../sim/time';
 import { FIELD_CELL, createFarm } from '../sim/farm';
-import { colonyCrop, deathsBy, step, type World } from '../sim/world';
-import { type KeeperCommand, type LoggedCommand, applyCommand, createTank } from '../sim/keeper';
-import { SAVE_VERSION, type Save, awayReport, catchUpSteps, census, loadWorld } from '../sim/save';
-import { ANT_STRIDE, type FromWorker, Look, type PieceView, type ToWorker } from './protocol';
+import { colonyCrop, deathsBy, type World } from '../sim/world';
+import { type KeeperCommand, applyCommand, createTank } from '../sim/keeper';
+import { catchUpSteps, census } from '../sim/save';
+import { type Colony, MAX_COLONIES, type TableSave, asTable, freeSlots, loadTable, nextSeed, stepColonies, tableReport, tableSave } from '../sim/colonies';
+import { ANT_STRIDE, type ColonyView, type FromWorker, Look, type PieceView, type TableShape, type ToWorker } from './protocol';
 import { edible } from '../sim/prey';
-import { type ShelfEntry, deleteTank, freeName, newId, readShelf, readTank, renameTank, setAside, writeTank } from './store';
+import { type Kept, type ShelfEntry, deleteTank, freeName, newId, readShelf, readTank, renameTank, setAside, writeTank } from './store';
 import { inspectAnt } from '../sim/inspect';
 import { type NestSetup, nestMaterialName } from '../sim/nest';
 import { Purpose, Rng } from '../sim/rng';
@@ -27,11 +28,16 @@ const SAVE_EVERY_MS = 15_000;
 /** Catching up runs in slices of this many steps, so the page sees progress and can say skip. */
 const CATCH_UP_SLICE = 2000;
 
+/** The colonies on the running table (DESIGN.md 3.6), in the order of their places. */
+let colonies: Colony[] = [];
+/** The colony the page shows and the keeper's tools act on. */
+let chosen: Colony | undefined;
+/** The world of the chosen colony. */
 let world: World | undefined;
-/** The running tank's place on the shelf: its id and name. */
+/** The running table's place on the shelf: its id and name. */
 let current: { id: string; name: string } | undefined;
-/** The keeper's actions on this tank since it was set up. */
-let log: LoggedCommand[] = [];
+/** True while the page shows the whole table, which then hears where every colony's ants are. */
+let overview = false;
 let speed = 1;
 let owed = 0;
 let intervals = 0;
@@ -40,7 +46,7 @@ const pending: KeeperCommand[] = [];
 /** While the tank catches up on the time it was closed. */
 /** The ant in the inspector, or -1. */
 let inspected = -1;
-let catching: { done: number; total: number; before: ReturnType<typeof census>; skip: boolean } | undefined;
+let catching: { done: number; total: number; before: ReturnType<typeof census>[]; skip: boolean } | undefined;
 
 function post(msg: FromWorker, transfer: Transferable[] = []): void {
   postMessage(msg, transfer);
@@ -51,8 +57,18 @@ function sendFarm(w: World): void {
   const material = w.farm.material.slice();
   const moisture = w.farm.moisture.slice();
   const loose = w.farm.loose.slice();
+  const table = tableShape(w);
+  post({ type: 'farm', width: w.farm.width, height: w.farm.height, material, moisture, loose, table }, [
+    material.buffer,
+    moisture.buffer,
+    loose.buffer,
+  ]);
+}
+
+/** What the page needs to draw a colony's table of nests besides its cells, or null for a sand farm. */
+function tableShape(w: World): TableShape | null {
   const t = w.farm.table;
-  const table = t
+  return t
     ? {
         modules: t.modules.map((n) => ({
           id: n.id,
@@ -75,11 +91,6 @@ function sendFarm(w: World): void {
         arena: { ...t.arena },
       }
     : null;
-  post({ type: 'farm', width: w.farm.width, height: w.farm.height, material, moisture, loose, table }, [
-    material.buffer,
-    moisture.buffer,
-    loose.buffer,
-  ]);
 }
 
 function sendAnts(w: World): void {
@@ -190,12 +201,13 @@ function sendHeat(w: World): void {
   );
 }
 
-/** Keeper actions are applied between steps, in the order they arrived, and logged. */
-function applyPending(w: World): boolean {
+/** Keeper actions are applied to the chosen colony between steps, in the order they arrived, and logged with it. */
+function applyPending(c: Colony): boolean {
+  const w = c.world;
   const any = pending.length > 0;
   for (const command of pending.splice(0)) {
     const ok = applyCommand(w, command);
-    log.push({ step: w.step, command });
+    c.log.push({ step: w.step, command });
     if (TABLE_COMMANDS.has(command.type)) post({ type: 'result', command: command.type, ok });
   }
   return any;
@@ -240,51 +252,115 @@ function sendAll(w: World): void {
 }
 
 function save(): Promise<void> {
-  if (!world || !current || catching) return Promise.resolve();
-  const kept: Save = { version: SAVE_VERSION, seed: world.seed, name: current.name, savedAt: Date.now(), log, world };
+  if (colonies.length === 0 || !current || catching) return Promise.resolve();
+  const kept = tableSave(current.name, Date.now(), colonies);
   return writeTank(kept, entryFor(kept, current.id)).catch(() => undefined); // storage full or blocked: the tank runs on unkept
 }
 
-/** The shelf's line for a save. */
-function entryFor(save: Save, id: string): ShelfEntry {
-  return { id, name: save.name ?? `Tank ${save.seed}`, savedAt: save.savedAt, ...summary(save) };
+/** The shelf's line for a kept table. */
+function entryFor(kept: TableSave, id: string): ShelfEntry {
+  return { id, name: kept.name, savedAt: kept.savedAt, ...summary(kept) };
 }
 
-/** What the tank list shows of a save's world. */
-function summary(save: Save): Omit<ShelfEntry, 'id' | 'name' | 'savedAt'> {
-  const c = census(save.world);
-  return { seed: save.seed, step: save.world.step, workers: c.workers, queen: c.queen };
+/** What the tank list shows of a kept table: its age, and its workers and queens all together. */
+function summary(kept: Kept): Omit<ShelfEntry, 'id' | 'name' | 'savedAt'> {
+  const table = asTable(kept);
+  let workers = 0;
+  let queen = false;
+  for (const c of table.colonies) {
+    const n = census(c.world);
+    workers += n.workers;
+    queen ||= n.queen;
+  }
+  return {
+    seed: Math.max(...table.colonies.map((c) => c.seed)),
+    step: Math.max(...table.colonies.map((c) => c.world.step)),
+    workers,
+    queen,
+    colonies: table.colonies.length,
+  };
 }
 
-function begin(w: World, savedLog: LoggedCommand[], resumed: boolean, note?: string): void {
-  world = w;
+/** The colonies on the table, for the page's chips and the whole table's picture. */
+function sendColonies(): void {
+  post({ type: 'colonies', chosen: chosen?.slot ?? -1, colonies: colonies.map((c) => ({ name: c.name, slot: c.slot })), free: freeSlots(colonies) });
+}
+
+/** Where every colony's setup and ants are, for the picture of the whole table. */
+function sendOverview(): void {
+  const views: ColonyView[] = colonies.map((c) => {
+    const w = c.world;
+    const dots: number[] = [];
+    let workers = 0;
+    let queen = false;
+    for (let i = 0; i < w.ants.count; i++) {
+      const place = w.ants.place[i]!;
+      if (place === Place.gone || w.ants.state[i] === AntState.dead) continue;
+      if (w.ants.caste[i] === Caste.queen) queen = true;
+      else workers++;
+      if (place === Place.arena || place === Place.farm) dots.push(w.ants.x[i]!, w.ants.y[i]!, place);
+    }
+    return {
+      name: c.name,
+      slot: c.slot,
+      workers,
+      queen,
+      nestWidth: w.farm.width,
+      nestHeight: w.farm.height,
+      table: tableShape(w),
+      arenaWidth: w.arena.width,
+      arenaHeight: w.arena.height,
+      ants: Float32Array.from(dots),
+    };
+  });
+  post({ type: 'overview', colonies: views }, views.map((v) => v.ants.buffer));
+}
+
+/** Shows colony `c`: the page draws it, and the keeper's tools act on it. */
+function choose(c: Colony): void {
+  if (chosen && chosen !== c) applyPending(chosen);
+  chosen = c;
+  world = c.world;
   inspected = -1;
-  log = savedLog;
+  farmVersion = -1;
+  sendColonies();
+  sendAll(c.world);
+}
+
+function begin(table: Colony[], resumed: boolean, note?: string): void {
+  colonies = table;
   owed = 0;
-  post({ type: 'tank', id: current!.id, name: current!.name, seed: w.seed, resumed, ...(note ? { note } : {}) });
-  sendAll(w);
+  overview = false;
+  post({ type: 'tank', id: current!.id, name: current!.name, seed: table[0]!.seed, resumed, ...(note ? { note } : {}) });
+  choose(table[0]!);
 }
 
 /** Real seconds a tank must have been closed before the page says what happened while it was (a quick look at the tank list is not being away). */
 const REPORT_AFTER = 10 * 60;
 
-/** Lets the tank live through `total` steps as fast as it can, in slices, then, if `report`, says how far it has got and what happened. */
-function catchUp(w: World, total: number, report: boolean): void {
-  const c = { done: 0, total, before: census(w), skip: false };
+/**
+ * Lets every colony on the table live through `total` steps as fast as it
+ * can, in slices, then, if `report`, says how far it has got and what
+ * happened to each colony.
+ */
+function catchUp(table: Colony[], total: number, report: boolean): void {
+  const c = { done: 0, total, before: table.map((k) => census(k.world)), skip: false };
   catching = c;
+  // A slice does about the same work however many colonies there are, so the page stays as quick to answer.
+  const per = Math.max(1, Math.ceil(CATCH_UP_SLICE / table.length));
   const slice = () => {
     if (catching !== c) return; // the tank was closed
-    const n = Math.min(CATCH_UP_SLICE, c.total - c.done);
-    for (let i = 0; i < n; i++) step(w);
+    const n = Math.min(per, c.total - c.done);
+    stepColonies(table, n);
     c.done += n;
     if (report) post({ type: 'catchUp', done: c.done, total: c.total });
-    sendAll(w);
+    if (world) sendAll(world);
     if (c.done < c.total && !c.skip) {
       setTimeout(slice, 0);
       return;
     }
     catching = undefined;
-    if (report) post({ type: 'away', lines: awayReport(c.before, census(w), w.params.daySeconds) });
+    if (report) post({ type: 'away', lines: tableReport(table, c.before) });
     void save();
   };
   setTimeout(slice, 0);
@@ -302,17 +378,23 @@ async function open(id: string): Promise<void> {
     await list();
     return;
   }
-  current = { id, name: kept.name ?? `Tank ${kept.seed}` };
-  const w = loadWorld(kept);
-  if (w) {
-    begin(w, kept.log ?? [], true);
-    const seconds = (Date.now() - kept.savedAt) / 1000;
-    const away = catchUpSteps(w, seconds);
-    if (away > 0) catchUp(w, away, seconds >= REPORT_AFTER);
+  const table = asTable(kept);
+  current = { id, name: table.name };
+  const loaded = loadTable(table);
+  if (loaded) {
+    begin(loaded, true);
+    const seconds = (Date.now() - table.savedAt) / 1000;
+    const away = catchUpSteps(loaded[0]!.world, seconds);
+    if (away > 0) catchUp(loaded, away, seconds >= REPORT_AFTER);
     return;
   }
   await setAside(kept).catch(() => undefined);
-  begin(createTank(kept.seed, null), [], false, 'This tank was saved by an older version that cannot be carried over, so it starts again with a new colony. The old save is set aside in the browser.');
+  const seed = table.colonies[0]?.seed ?? 1;
+  begin(
+    [{ name: table.name, slot: 0, seed, log: [], world: createTank(seed, null) }],
+    false,
+    'This tank was saved by an older version that cannot be carried over, so it starts again with a new colony. The old save is set aside in the browser.',
+  );
   await save();
 }
 
@@ -320,21 +402,53 @@ async function open(id: string): Promise<void> {
 async function create(name: string, nest: NestSetup): Promise<void> {
   await close();
   const shelf = await readShelf(summary);
-  const seed = Math.max(0, ...shelf.map((e) => e.seed)) + 1;
+  const seed = nextSeed(shelf.map((e) => e.seed));
   current = { id: newId(shelf), name: freeName(name, shelf) };
-  begin(createTank(seed, nest), [], false);
+  begin([{ name: 'Colony 1', slot: 0, seed, log: [], world: createTank(seed, nest) }], false);
+  await save();
+}
+
+/**
+ * Sets up a new colony in free place `slot` of the running table (T3): a
+ * colony as keepers buy one, in a test tube joined to its own new arena,
+ * or moved straight into a bought nest. Its seed is one no other colony
+ * on the shelf or the table has.
+ */
+async function addColony(name: string, slot: number, nest: NestSetup): Promise<void> {
+  if (!current || catching || colonies.length >= MAX_COLONIES || !freeSlots(colonies).includes(slot)) return;
+  const shelf = await readShelf(summary);
+  const seed = nextSeed([...shelf.map((e) => e.seed), ...colonies.map((c) => c.seed)]);
+  const taken = colonies.map((c) => c.name);
+  let free = name;
+  for (let n = 2; taken.includes(free); n++) free = `${name} (${n})`;
+  const c: Colony = { name: free, slot, seed, log: [], world: createTank(seed, nest) };
+  colonies = [...colonies, c].sort((a, b) => a.slot - b.slot);
+  choose(c);
+  await save();
+}
+
+/** Gives colony `slot` away: it leaves the table (T4). A table keeps at least one colony. */
+async function removeColony(slot: number): Promise<void> {
+  const c = colonies.find((k) => k.slot === slot);
+  if (!c || colonies.length <= 1 || catching) return;
+  colonies = colonies.filter((k) => k !== c);
+  if (chosen === c) {
+    pending.length = 0;
+    chosen = undefined;
+    choose(colonies[0]!);
+  } else sendColonies();
   await save();
 }
 
 /** Keeps a tank read from a file as a new tank, and opens it. */
-async function importTank(file: Save, name: string): Promise<void> {
-  if (!loadWorld(structuredClone(file))) {
+async function importTank(file: Kept, name: string): Promise<void> {
+  if (!loadTable(structuredClone(asTable(file)))) {
     post({ type: 'importFailed' });
     return;
   }
   const shelf = await readShelf(summary);
   const id = newId(shelf);
-  const kept: Save = { ...file, name: freeName(name, shelf) };
+  const kept: TableSave = { ...asTable(file), name: freeName(name, shelf) };
   await writeTank(kept, entryFor(kept, id));
   await open(id);
 }
@@ -344,8 +458,11 @@ async function close(): Promise<void> {
   if (catching) catching.skip = true;
   catching = undefined;
   await save();
+  colonies = [];
+  chosen = undefined;
   world = undefined;
   current = undefined;
+  overview = false;
   pending.length = 0;
 }
 
@@ -361,7 +478,15 @@ onmessage = (e: MessageEvent<ToWorker>) => {
     void renameTank(msg.id, msg.name).then(list);
   } else if (msg.type === 'delete') void deleteTank(msg.id).then(list);
   else if (msg.type === 'export') {
-    if (world && current) post({ type: 'exported', name: current.name, save: { version: SAVE_VERSION, seed: world.seed, name: current.name, savedAt: Date.now(), log, world } });
+    if (colonies.length > 0 && current) post({ type: 'exported', name: current.name, save: tableSave(current.name, Date.now(), colonies) });
+  } else if (msg.type === 'choose') {
+    const c = colonies.find((k) => k.slot === msg.slot);
+    if (c) choose(c);
+  } else if (msg.type === 'addColony') void addColony(msg.name, msg.slot, msg.nest);
+  else if (msg.type === 'removeColony') void removeColony(msg.slot);
+  else if (msg.type === 'overview') {
+    overview = msg.on;
+    if (overview && colonies.length > 0) sendOverview();
   } else if (msg.type === 'speed') speed = msg.value;
   else if (msg.type === 'command') pending.push(msg.command);
   else if (msg.type === 'skip') {
@@ -376,15 +501,15 @@ onmessage = (e: MessageEvent<ToWorker>) => {
 };
 
 setInterval(() => {
-  if (!world || catching) return;
-  const keeperActed = applyPending(world);
+  if (!world || !chosen || catching) return;
+  const keeperActed = applyPending(chosen);
   if (speed > 0) {
+    // Every colony on the table lives at the same speed; the most work in one interval is shared among them.
     owed += (speed * STEPS_PER_SECOND * INTERVAL_MS) / 1000;
-    owed = Math.min(owed, MAX_STEPS_PER_INTERVAL);
-    while (owed >= 1) {
-      step(world);
-      owed -= 1;
-    }
+    owed = Math.min(owed, Math.max(1, Math.floor(MAX_STEPS_PER_INTERVAL / colonies.length)));
+    const n = Math.floor(owed);
+    stepColonies(colonies, n);
+    owed -= n;
   }
   sendAnts(world);
   if (++intervals % ARENA_EVERY === 0 || keeperActed) {
@@ -392,6 +517,7 @@ setInterval(() => {
     sendHeat(world);
     sendInspected(world);
     if (world.farm.version !== farmVersion) sendFarm(world);
+    if (overview) sendOverview();
   }
 }, INTERVAL_MS);
 

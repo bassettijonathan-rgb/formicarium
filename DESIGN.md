@@ -462,6 +462,53 @@ dug nest the tunnels themselves keep the colony together.
   new tank starts a colony in a test tube (Marco, 2026-10-14).
 - Validation: section 9, tests 17 and 18.
 
+### 3.6 Several colonies on one table (Marco, 2026-10-14)
+
+Asked by Marco on 2026-10-14: "I want to be able on the same table to setup
+different colonies (with separated nest and arenas)". Approved the same day
+with the second species (plan T1 to T6 and S1 to S9; clickable mockup at
+https://claude.ai/artifact/6qXG4T7whpghPT8A4yuaB7). This section is step 1;
+the second species (Crematogaster scutellaris) is step 2.
+
+- **T1 A colony is a whole setup.** A kept tank is a table in the keeper's
+  room holding colonies, each a whole setup of its own: queen and workers,
+  test tube or bought nests, tubes, arena, heat mat, food and objects. Each
+  is its own `World` (`src/sim/colonies.ts`), stepped side by side at the
+  same speed; nothing passes between them (no ant, smell, warmth or damp),
+  so each colony runs exactly as it would alone (section 9, test 19). The
+  room and the window are shared. Colonies that meet (the parked M7 plan)
+  would need one shared world instead.
+- **T2 Up to four colonies.** Every colony costs computing time: the most
+  steps the page runs in one interval are shared among the colonies, so top
+  speed drops as colonies are added, and catching up after closing (7.10)
+  takes about as long again for each colony.
+- **T3 A new colony.** Colony tab → New colony: a name, and whether it
+  starts in a test tube (the default, as keepers buy one) or moved straight
+  into a bought nest; then the whole table opens and the keeper taps a free
+  place. It gets its own new 40 × 30 cm arena, laid out from its own seed
+  (one past every seed kept), and becomes the colony shown.
+- **T4 Giving one away.** Colony tab → Give it away (asked once) takes the
+  colony shown off the table. A table keeps at least one colony.
+- **T5 Tanks already kept** load as a table with their one colony in the
+  first place, named as the tank was; colonies can be added beside them,
+  bought-nest colonies beside an old sand farm too, since they never touch.
+  A file saved before tables loads the same way.
+- **T6 What the page shows.** One colony at a time fills the room view as
+  before, and every tab acts on it; the inspector, graphs, timelapse and
+  counts are its own. With more than one colony a chip for each sits in the
+  top bar, with Whole table: the table seen flat from above, every colony's
+  nests, tubes and arena in its place with its ants as dots, and the free
+  places dashed. Tapping a colony there shows it. (The plan called the
+  kept thing a table instead of a tank; the list keeps saying "tanks", the
+  word the page already uses.)
+- **Saves.** A kept table is its name, when it was kept, and its colonies,
+  each with its name, place (0 to 3), seed, keeper's log and world
+  (`TableSave`). The tank list shows the colonies, their workers together
+  and the table's age. After a close, every colony lives through the time
+  away, and the report says what happened to each, under its name.
+
+---
+
 ---
 
 ## 4. One ant
@@ -1084,7 +1131,8 @@ What M6a builds (`src/sim/keeper.ts`, `src/sim/save.ts`, `src/worker/store.ts`):
    (Marco, 2026-10-14; it was 3). It runs as fast as it can, about 20
    seconds a tank day for a new tank, so about 3 minutes for the full 10
    days, longer for a big colony; the page shows the progress and can
-   skip the rest. It lives through it
+   skip the rest; every colony on a table catches up, each adding its own
+   time (3.6). It lives through it
    even if it was paused, since a real tank does not pause. A tank closed
    for less than 10 minutes (a look at another tank, say) catches up
    without a word.
@@ -1248,6 +1296,9 @@ one was not.
 - **U6 One arena entrance.** The arena keeps one entrance. Joining a nest
   to the arena moves the arena's tube there from wherever it was; two
   entrances would mean redoing the foraging checks (section 9.1).
+- **U7 Several colonies** (3.6): chips in the top bar pick the colony shown,
+  Whole table shows them all from above, and the Colony tab has New colony
+  and Give it away.
 
 ---
 
@@ -1311,6 +1362,10 @@ project. If one fails, we fix the model, not the test.
    do to make a colony move, and stays in a covered tube that has room.
    (The plan's check said "once the tube is crowded"; with the ants' local
    rules a crowded tube only spills workers into the new nest, 9.16.)
+19. **Colonies apart** (step 1 of the colonies plan): two colonies on one
+   table run exactly as each would alone, state for state (same state hash
+   after the same steps), so nothing leaks between setups
+   (`tests/colonies.test.ts`).
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
