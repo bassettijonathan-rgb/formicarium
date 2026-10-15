@@ -25,7 +25,7 @@ import {
   wrapAngle,
 } from './ants';
 import { BroodStage, addBrood, broodLike, broodNear, larvaHungry, larvaStarved } from './brood';
-import { drawLifespan, dropCorpse, tryPickUpCorpse } from './corpses';
+import { drawLifespan, dropCorpse, isLiveWorker, tryPickUpCorpse } from './corpses';
 import { holdsSeed, mayPutDownPiece, mayStoreSeed, sipPiece, tendStores, tryPickUpRefuse } from './prey';
 import { addToField, cellSolid, isBlockedFarm, isSoil, openAbove, sampleField, type Farm } from './farm';
 import { speedAt, temperatureAt } from './heat';
@@ -34,6 +34,8 @@ import { lightAt } from './nest';
 import { humidityAt } from './water';
 import type { AntParams } from './params';
 import { placeGrain, removeGrain } from './soil';
+import { Purpose, Rng } from './rng';
+import { drawSize } from './sizes';
 import { STEPS_PER_SECOND } from './time';
 
 /** Size of a bucket in the contact grid, mm; must be at least the contact radius. */
@@ -451,8 +453,17 @@ function eclose(ctx: AntContext, k: number): void {
   // A new worker comes out of its cocoon with a full fat body, built from what it was fed as a larva.
   ants.fat[i] = 1;
   ants.lifespan[i] = drawLifespan(ctx.seed, i, 0, params);
+  // Its size, as a colony of this many workers makes them (from its own stream, so other species are untouched).
+  if (params.polymorph) ants.size[i] = drawSize(new Rng(ctx.seed, Purpose.traits, 2, i), workers(ants));
   ants.born[i] = 1;
   brood.stage[k] = BroodStage.none;
+}
+
+/** The colony's live workers (counted only when one ecloses). */
+function workers(ants: AntContext['ants']): number {
+  let n = 0;
+  for (let i = 0; i < ants.count; i++) if (isLiveWorker(ants, i)) n++;
+  return n;
 }
 
 /** Resting and wandering ants can stop to exchange food; ants busy carrying, travelling or sharing can't. */

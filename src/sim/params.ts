@@ -702,7 +702,11 @@ export interface AntParams {
    * harvesters lay in stores. 0 for species that do not.
    */
   seedHoard: number;
-  /** The heaviest seed one worker carries home, mg (rough: a media of 4-6 mg; heavier seeds wait for a bigger worker). */
+  /**
+   * The heaviest seed one media worker carries home, mg (rough: a 7 mm worker of a few mg). A worker carries up to this
+   * times the cube of its length relative to a media's (its mass and strength): a minor of 4 mm about 3 mg, a major of
+   * 11 mm about 60 mg. Heavier seeds wait for a bigger worker.
+   */
   seedCarryMax: number;
   /** How strongly a worker lays trail home from a seed it took where more seeds lie, on the scale of a full crop of the best sugar (rough). */
   seedTrail: number;
@@ -716,6 +720,10 @@ export interface AntParams {
   seedDropRate: number;
   /** Each seed lying within `broodSenseRadius` makes a carrier that many times more likely to put its own down there (rough, as for corpses and spoil). */
   seedPileGain: number;
+  /** True: workers come in different sizes (Messor; `sizes.ts`), which decide the seeds they carry and how fast they crack them. */
+  polymorph: boolean;
+  /** The power of a worker's length (relative to a media's) its seed load goes with: 3 (mass and strength). 0 gives every worker a media's load (the size-matching control). */
+  seedSizeExponent: number;
   /** Fraction of a seed's content that feeds the larvae as protein; the rest is starch and oil (rough: seeds are 10-25% protein, more counting oil-rich seeds' fat). */
   seedProtein: number;
 }
@@ -952,4 +960,6 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   seedDropRate: 0.2,
   seedPileGain: 1,
   seedProtein: 0.5,
+  polymorph: false,
+  seedSizeExponent: 3,
 };

@@ -114,6 +114,7 @@ function sendAnts(w: World): void {
     alarmed[i] = ants.alarm[i]! > w.params.alarmShow ? 1 : 0;
   }
   const caste = ants.caste.slice();
+  const size = ants.size.slice();
   const { brood } = w;
   const items: number[] = [];
   for (let k = 0; k < brood.count; k++) {
@@ -141,10 +142,11 @@ function sendAnts(w: World): void {
     if (p.carriedBy >= 0) carried.push({ ant: p.carriedBy, piece: view });
     else prey.push(view);
   }
-  post({ type: 'ants', step: w.step, ants: data, full, caste, callow, alarmed, species: w.species, brood: broodData, prey, carried }, [
+  post({ type: 'ants', step: w.step, ants: data, full, caste, callow, alarmed, species: w.species, brood: broodData, prey, carried, size }, [
     data.buffer,
     full.buffer,
     caste.buffer,
+    size.buffer,
     callow.buffer,
     alarmed.buffer,
     broodData.buffer,

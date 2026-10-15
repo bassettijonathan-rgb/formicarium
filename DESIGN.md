@@ -732,9 +732,9 @@ C. scutellaris, the Mediterranean acrobat ant, as built:
 **Messor barbarus**, the harvester ant (Marco, 2026-10-15: "can you
 introduce Messor Barbarus (and a seed dispenser) without resetting the two
 ongoing colonies?"; plan M1-M10 approved with "Ok. Make the arena bigger
-for them"). Step 1 is built: the species, seeds and the seed dispenser
-(3.4), all workers medias. Step 2 (worker sizes: minors, medias and majors,
-size matching and majors cracking, M2, M4, M7) is next. Lasius niger and
+for them"). Both steps are built: the species, seeds and the seed
+dispenser (3.4); then worker sizes (minors, medias and majors, size
+matching and majors cracking, M2, M4, M7). Lasius niger and
 Crematogaster scutellaris colonies run exactly as before (same ants and
 insects in the same places after 25 minutes with food, an insect, a
 dispenser and a cover lifted, in a ytong nest, a test tube and the sand
@@ -749,12 +749,30 @@ plan), and kept tanks load as they were.
   their first sugar drop.
 - **Looks (M1).** Big and glossy black, the head a little browner, broad
   and square, with strong mandibles; two waist nodes and an oval gaster.
-  Drawn as a 7 mm media and the queen 14.5 mm (keepers: workers 3-12 mm,
-  queen 14-15 mm). The simulation's bodies (spacing, contacts) are Lasius
-  niger's.
-- **Seeds (M3, M8).** A forager that comes on a seed it can carry
-  (`seedCarryMax` 15 mg, rough for a media) takes it home whole, whatever
-  it went out for; a heavier seed it passes by (in step 2, for a major).
+  Each worker is drawn at its own length (a worker of a tank kept before
+  sizes as a 7 mm media); a major (8 mm or more) with a red-brown head wider
+  than its body and heavier mandibles; the queen 14.5 mm (keepers: workers
+  3-12 mm, queen 14-15 mm). The simulation's bodies (spacing, contacts,
+  walking speed) are Lasius niger's, whatever the worker's size.
+- **Worker sizes (M2; `sizes.ts`).** Each worker gets a length when it
+  comes out of its cocoon (saved per ant, `Ants.size`, tenths of a mm),
+  from a share of classes that grows with the colony's live workers
+  (rough: no growth curve was measured): minors (3-5 mm) only, until 50
+  workers; medias (5-8 mm) rising to 35% of new workers by 150; majors
+  (8-12 mm) rising to 15% between 150 and 400 (keepers see majors in a
+  colony's second year; three size classes, Heredia & Detrain 2000). The
+  keeper's first workers get sizes the same way, so a new tank starts with
+  minors. Lengths are even within a class. A Messor worker of a tank kept
+  before sizes stays a media. The card of a worker names its class and
+  length.
+- **Seeds (M3, M8).** A forager that comes on a seed it can carry takes it
+  home whole, whatever it went out for; a heavier seed it passes by, for a
+  bigger nestmate. What it can carry goes with the cube of its length
+  (its mass and strength; `seedSizeExponent` 3): 15 mg for a 7 mm media
+  (`seedCarryMax`, rough), 1.2 mg for a 3 mm minor, about 60 mg for an
+  11 mm major. So the smallest minors pass by the bigger of the small
+  seeds, and young colonies do best on small seeds (M10). This is the
+  size matching of M4 (test 26).
   If it notices more seeds within 8 mm of the one it took
   (`seedPatchRange`), it lays trail home as from good food (`seedTrail`
   0.6) and remembers the spot, going back to it whatever the colony wants
@@ -780,9 +798,12 @@ plan), and kept tanks load as they were.
 - **Cracking and eating (M7).** About once a second a worker resting or
   about the nest looks at the seed or husk it touches: a husk or a mouldy
   seed it may carry out to the midden, as a corpse; a whole seed it bites
-  at for as many seconds as it, or the brood it smells, is hungry; a seed
-  cracks after 40 s of biting per square root of its mass in mg (rough:
-  40 s for a 1 mg seed, 3.5 min for a 30 mg one). From a cracked seed
+  at for as many seconds as it, or the brood it smells, is hungry, times
+  the square of its length relative to a media's (the jaw muscles'
+  cross-section: a 4 mm minor bites a third as fast, an 11 mm major two
+  and a half times); a seed cracks after 40 s of a media's biting per
+  square root of its mass in mg (rough: 40 s for a 1 mg seed, 3.5 min for
+  a 30 mg one). From a cracked seed
   workers eat as from a piece of insect, filling their crop; half of it
   counts as protein for the larvae and the queen (`seedProtein`, rough:
   seeds are starch and oil with 10-25% protein). What is left is the husk.
@@ -1528,13 +1549,23 @@ project. If one fails, we fix the model, not the test.
    of 40 small seeds at least 1.5 times as fast (seeds per minute until
    the last is taken) as the same seeds scattered over a disc 20 cm across
    round the same spot, 25 cm out; scattered seeds are found sooner; with
-   no trail laid the pile is cleared at under two thirds the rate.
+   no trail laid the pile is cleared at under two thirds the rate. The lab
+   colonies of tests 24-26 have a grown colony's sizes (as the field
+   colonies of the papers), however few workers are taken.
 25. **Lasting trails** (Messor plan, test 5; qualitative, field trunk
    trails, Detrain et al. 2000): an hour after a harvest's last seed was
    taken, its trail keeps at least 40% of its strength and is still
    followed four hours on; a trail fading as Lasius niger's keeps under a
    tenth and is given up within those four hours.
-   (Test 4 of the plan, size matching, comes with step 2.)
+26. **Size matching** (Messor plan, test 4; Reyes-López & Fernández-Haeger
+   2001): a lab colony of 400 workers of all sizes given a pile of 30
+   mixed and 30 big seeds (1-30 mg) 25 cm out takes at least 80% of them
+   within an hour; the workers that picked up the heavier half are at
+   least 1.5 mm longer than those that picked up the lighter half, the
+   correlation of worker length and seed mass is above 0.3, and the mean
+   seed taken grows from minors to medias to majors. With every worker a
+   media's load (`seedSizeExponent` 0), the two halves' carriers differ by
+   under 1 mm.
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -2167,6 +2198,39 @@ that even fading as Lasius niger's it lasts nearly two hours, so the test
 asks for the difference instead (half against a sixteenth at an hour; hours
 against under two).
 
+### 9.19 Results so far (Messor barbarus, step 2: worker sizes)
+
+`npm run experiment -- sizes [--no-matching]` runs test 26. Lasius niger
+and C. scutellaris still run exactly as before (plan test 1, as in 9.18).
+
+**Size matching (test 26).** 400 workers (200-214 minors, 131-142 medias,
+50-58 majors), 30 mixed and 30 big seeds, one hour, 3 colonies:
+
+| | Taken | Mean seed: minors / medias / majors | Carriers of the lighter / heavier half | r (length, mass) |
+|---|---|---|---|---|
+| Load with the cube of length | 60 of 60 | 1.9-2.1 / 7.7-8.6 / 17.2-20.1 mg | 4.6-4.9 / 8.2-8.5 mm | 0.77-0.84 |
+| Every worker a media's load | 48-50 of 60 | 5.1-5.7 / 4.1-5.4 / 3.7-6.7 mg | 5.1-6.0 / 5.2-6.2 mm | 0.01-0.16 |
+
+Reyes-López & Fernández-Haeger (2001) found M. barbarus workers little
+choosy at the seeds, and the match growing along the trail as loads are
+passed from worker to worker, to r = 0.64 between ant mass and load mass
+at the nest end; matching was weaker the faster nestmates were recruited.
+Here the match is made at the pile, by the load limit alone, and is
+tighter than theirs: no load is passed on the way, and no worker drags a
+seed too heavy for it (both left out). So the test asks only that big
+workers carry the big seeds.
+
+**With sizes, tests 23-25 still pass.** Granary (a new tank's minors, 60
+seeds): 50-52 seeds in the nest, 100% of them in dry air (13-27% at the
+start), none among the brood, 57% humid at the seeds against 99-100% at
+the brood. Clumped against scattered (40 workers of a grown colony's
+sizes, 6 colonies): the pile found after 2.5-13.3 min (mean 7.1) and
+cleared at 2.1-5.9 seeds/min (mean 3.6); scattered found after 0.5-2.6
+min (mean 1.7), 1.7-2.9 seeds/min (mean 2.4); the pile with no trail
+0.8-2.0 (mean 1.3). The pile is cleared 1.5 times as fast as scattered
+seeds (1.9 with all medias in step 1; 2.8 in the field). Trails as in
+9.18.
+
 ---
 
 ## 10. Architecture
@@ -2249,6 +2313,7 @@ parameters, I stop and report before changing the model.
 - Quque et al. 2023. Both age and social environment shape the phenotype of ant workers. Sci. Rep. 13, 186.
 - Rasse & Deneubourg 2001. Dynamics of nest excavation and nest size regulation of *Lasius niger*. J. Insect Behav.
 - Robinson, Feinerman & Franks 2009. Flexible task allocation and the organization of work in ants. Proc. R. Soc. B 276, 4373-4380.
+- Reyes-López & Fernández-Haeger 2001. Some factors determining size-matching in the harvester ant *Messor barbarus*: food type, transfer activity, recruitment rate and size-range. Insectes Soc. 48, 118-124.
 - Roces & Núñez 1989. Brood translocation and circadian variation of temperature preference in the ant *Camponotus mus*. Oecologia 81.
 - Roces & Núñez 1995. Thermal sensitivity during brood care in workers of two Camponotus ant species: circadian variation and its ecological correlates. J. Insect Physiol. 41, 659-669.
 - Theraulaz, Bonabeau & Deneubourg 1998. Response threshold reinforcement and division of labour in insect societies. Proc. R. Soc. B 265, 327-332.

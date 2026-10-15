@@ -21,6 +21,7 @@
  *   npm run experiment -- moving [--hours 6] [--ants 250] [--lit]
  *   npm run experiment -- nest-dark [--hours 2] [--no-light] [--gradient] [--material ytong|plaster|acrylic|wood] [--layout ...]
  *   npm run experiment -- harvest [--scattered] [--minutes 60] | trail-life [--after 60] | granary [--minutes 120]   (Messor barbarus)
+ *   npm run experiment -- sizes [--ants 400] [--minutes 60] [--no-matching]   (Messor workers' sizes against the seeds they carry)
  *   growth takes --mortal: adults die of hunger, drying out and heat (M5c)
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
  */
@@ -28,6 +29,7 @@ import { Cause } from '../src/sim/ants';
 import type { AntParams } from '../src/sim/params';
 import {
   runBroodSorting,
+  runSizeMatching,
   runBroodDamp,
   runHygiene,
   runStarvation,
@@ -111,6 +113,7 @@ for (let i = 0; i < rest.length; i++) {
   else if (rest[i] === '--corpses') corpses = Number(rest[++i]);
   else if (rest[i] === '--no-piles') params.corpseClustering = false;
   else if (rest[i] === '--no-thermo') params.thermotaxis = false;
+  else if (rest[i] === '--no-matching') params.seedSizeExponent = 0;
   else if (rest[i] === '--soil-water') params.waterFlow = true;
   else if (rest[i] === '--no-hygro') params.hygrotaxis = false;
   else if (rest[i] === '--no-removal') params.corpsePickRate = 0;
@@ -318,9 +321,17 @@ for (let seed = first; seed < first + runs; seed++) {
       `seed ${seed}: ${r.stored} seeds in the nest, ${pct(r.dryShare)} in dry air (${pct(r.dryAtStart)} at the start), ${pct(r.amongBrood)} among the brood; ` +
         `humidity at the seeds ${pct(r.seedHumidity)}, at the brood ${pct(r.broodHumidity)}`,
     );
+  } else if (name === 'sizes') {
+    const r = runSizeMatching({ seed, minutes: minutesSet ? minutes : 60, ...(ants ? { ants } : {}), params });
+    const c = (k: 'minor' | 'media' | 'major') => `${r.byClass[k].seeds} by ${k}s (${r.byClass[k].mass.toFixed(1)} mg)`;
+    console.log(
+      `seed ${seed}${params.seedSizeExponent === 0 ? ' (every worker a media\'s load)' : ''}: ${r.classes.minor}/${r.classes.media}/${r.classes.major} minors/medias/majors; ` +
+        `${r.taken} of ${r.seeds} seeds taken; ${c('minor')}, ${c('media')}, ${c('major')}; lighter half carried by ${r.lightCarriers.toFixed(1)} mm workers, ` +
+        `heavier half by ${r.heavyCarriers.toFixed(1)} mm; r = ${r.r.toFixed(2)}`,
+    );
   } else {
     throw new Error(
-      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation, prey, nest-damp, nest-room, nest-spread, moving, nest-dark, harvest, trail-life or granary',
+      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation, prey, nest-damp, nest-room, nest-spread, moving, nest-dark, harvest, trail-life, granary or sizes',
     );
   }
 }

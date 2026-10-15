@@ -61,6 +61,8 @@ export interface AntsSnapshot {
   full: Uint8Array;
   /** Each ant's `Caste`. */
   caste: Uint8Array;
+  /** Each worker's length in tenths of a mm, for a species whose workers differ in size; 0 for the species' standard worker (`Ants.size`). */
+  size: Uint8Array;
   /** 1 for a callow: a worker in its first days out of the cocoon, still pale. */
   callow: Uint8Array;
   /** 1 for a worker alarmed enough to show it (its gaster raised, in Crematogaster; DESIGN.md 4.4). */

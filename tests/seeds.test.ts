@@ -168,6 +168,7 @@ describe('seeds (DESIGN.md 4.4)', () => {
       world.ants.y[i] = dry.y;
       const p = seedInNest(world, dry.x, dry.y);
       world.ants.crop[i] = hungry ? 0 : world.params.cropLoad;
+      world.ants.size[i] = 0; // a media
       world.ants.broodNeed[i] = 0;
       const ctx = ctxOf(world);
       for (let s = 0; s < 10 * p.skin * STEPS_PER_SECOND && p.cuts === 0; s++) tendStores(ctx, i);
