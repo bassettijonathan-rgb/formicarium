@@ -81,6 +81,9 @@ const MESSOR: Partial<AntParams> = {
  */
 const PHEIDOLE: Partial<AntParams> = {
   dimorphic: true,
+  // Disturbed workers take alarm and pass it on, as Crematogaster's do; majors are roused only by strong alarm and stay
+  // roused longer (Detrain & Pasteels 1992; `majorAlarm`).
+  alarm: true,
   // Seeds taken from the arena when the brood wants protein, and cracked by the majors (keepers); not hoarded.
   seeds: true,
   seedHoard: 0,

@@ -821,10 +821,10 @@ plan), and kept tanks load as they were.
 **Pheidole pallidula**, with minors and big-headed majors (Marco,
 2026-10-15: "what other species would be cool to add? ... I want the
 existing colonies to keep running"; he picked Pheidole pallidula, and
-approved the plan P1-P9 with "ok"). Step 1 is built: the species, its
-looks, the two castes at a fixed share, recruitment, the majors' higher
-threshold, cutting big prey on the spot, and seeds. Step 2 (majors made by
-feeding and held back by majors, P3, and defence, P7) is next. Lasius
+approved the plan P1-P9 with "ok"). Step 1 built the species, its
+looks, the two castes, recruitment, the majors' higher threshold, cutting
+big prey on the spot, and seeds; step 2 majors made by feeding and held
+back by majors (P3), and defence (P7). Lasius
 niger, Crematogaster scutellaris and Messor barbarus colonies run exactly
 as before (same ants and insects in the same places after 25 minutes with
 food, an insect, a dispenser and a cover lifted, in a ytong nest, a test
@@ -838,9 +838,28 @@ kept tanks load as they were.
   Detrain 1989); the queen 7.5 mm. Two waist nodes, two short spines.
 - **Two castes (P2; `dimorphic`, `sizes.ts`).** Each worker is a minor or a
   major, nothing between, its length saved in `Ants.size` as for Messor.
-  For now one new worker in ten comes out a major (`majorShare`; field
-  colonies 10-12%, Sempo & Detrain 2010; Passera 1977), the keeper's first
-  workers too. The card of a worker says minor or major.
+  The keeper's first workers are one in ten majors (`majorShare`; field
+  colonies 10-12%, Sempo & Detrain 2010; Passera 1977), as is a worker
+  from a pupa whose end of growth went unrecorded (the keeper's first
+  brood, or brood in a tank kept before step 2). The card of a worker
+  says minor or major.
+- **What makes a major (P3).** A larva's caste is settled by how it is fed
+  at the end of its growth and by the majors about it then (Wheeler &
+  Nijhout 1984, in *Pheidole bicarinata*: a larva becomes a soldier if it
+  is well fed late in its last stage, and adult soldiers raise the size it
+  must reach, so a colony short of soldiers makes more). Over the last
+  `majorWindow` (0.3) of its larval stage a larva records the share of time
+  it grew at full speed (`fed`: it had food in it), and, every step, the
+  workers touching it and the majors among them (the share `m`; a
+  touch stands in for the soldiers' inhibiting smell, rough). When it comes
+  out of its cocoon it is a major with chance `majorMax` × fed² / (1 +
+  (m / `majorInhibit`)²) (`majorMax` 0.3, `majorInhibit` 0.07; rough,
+  tuned so a well-fed colony with one major in ten makes about one in ten
+  majors). So a colony fed plenty of insects settles near a tenth majors,
+  one fed little protein makes few, and one that lost its majors makes
+  more. Majors cost the larva nothing more to make: larvae of both castes
+  eat the same (`larvaFood`; rough, a major is about three times a
+  minor's mass).
 - **Recruitment (P4).** Minors forage, lay trail and recruit as Lasius
   niger workers do (trails fade as Lasius niger's, rough). Majors never lay
   trail and excite no one (Sempo & Detrain 2010). Scouts follow trails, as
@@ -866,6 +885,17 @@ kept tanks load as they were.
   off leaves it lying and cuts on, and the minors carry the parts home
   (Detrain & Deneubourg 1997: majors cut the sclerites, workers fed and
   carried). A minor still carries home what it can, a fruit fly whole.
+- **Defence (P7).** Pheidole takes alarm as Crematogaster does (the alarm
+  above; S4), minors first: a major takes alarm only from a nestmate
+  alarmed at least `majorAlarm` (0.5), so weak alarm at the edge of a
+  disturbance leaves it, but once roused it holds its alarm with a
+  half-life of 3 minutes (`majorAlarmHalfLife`) against a minor's 45
+  seconds, running and turning towards alarmed nestmates. Detrain &
+  Pasteels (1992) found majors recruited to a disturbance in greater
+  numbers than to food, through the same trail recruitment with a
+  stronger signal; with no enemies on the table this shows as majors out
+  and about, alarmed, after the minors have calmed (rough; the numbers
+  are not the paper's).
 - **Seeds (P8).** Pheidole takes seeds it can carry (by the cube of its
   length, as Messor: under a milligram for a minor, about 2 mg for a
   major) only when it wants protein (`seedHoard` 0: no hoarding), and
@@ -1640,6 +1670,27 @@ project. If one fails, we fix the model, not the test.
    a mealworm, whose skin is far harder, is half eaten at least 5% sooner
    with majors than with minors alone. (The plan asked this of the
    cricket too; it does not hold there, see 9.20.)
+29. **Caste ratio** (Pheidole plan, test 2; field colonies 10-12% majors,
+   Sempo & Detrain 2010): 30 workers, 3 of them majors, in a small ytong
+   nest raise 30 larvae from just short of the last `majorWindow` of their
+   growth, the workers given protein every 10 minutes. Fed three times
+   what the larvae need, at least 24 pupate within 1.5 times the time
+   full speed would take, they grow at full speed over 90% of that
+   time and their chances of coming out majors add up to 5-20%, and at
+   least one does; fed 0.4 times, under 85% and the chances under 0.6
+   times as much.
+30. **Majors made where missing** (Pheidole plan, test 3; Wheeler &
+   Nijhout 1984, qualitative): the same, well fed, with no majors: the
+   chances add up to over 1.4 times as much, and more majors come out.
+31. **Defence draws majors** (Pheidole plan, test 6; Detrain & Pasteels
+   1992, qualitative): a keeper's colony of 60 workers, 6 of them majors,
+   settled 20 minutes in a medium ytong nest, has half its cover lifted.
+   At 15 seconds over 80% of the workers are alarmed, all the majors among
+   them; at 4 minutes all six majors are still alarmed and are over 12% of
+   the alarmed workers (against 10% of the colony, none at sugar and
+   their share at a cricket, test 27). If majors take alarm as minors do
+   (`majorAlarm` 0, `majorAlarmHalfLife` 45 s), they are under 12% of the
+   alarmed at 15 seconds and none is alarmed at 4 minutes.
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -2343,6 +2394,50 @@ majors' jaws are what limits the work.
 in): minors find and cut it over the next 40 minutes, and once they come
 home from it the majors come out, 2-5 at a time, and stay at it.
 
+### 9.21 Results so far (Pheidole pallidula, step 2: castes that respond)
+
+`npm run experiment -- caste-making [--protein 3] [--no-majors]` runs
+tests 29 and 30, `defence [--same-alarm]` test 31. Lasius niger, C.
+scutellaris and Messor barbarus still run exactly as before (the same
+check as in 9.20, against the code before Pheidole).
+
+**Majors made by feeding (tests 29, 30).** 30 workers raising 30 larvae
+through the end of their growth, 2 colonies each:
+
+| Protein given (× need) | Majors in colony | Pupated | Grew at full speed | Majors touching them | Chances add up to | Came out majors |
+|---|---|---|---|---|---|---|
+| 3 | 3 of 30 | 26, 29 | 98-100% | 7-8% | 14-15% | 4, 3 |
+| 0.4 | 3 of 30 | 24, 24 | 72-76% | 12-14% | 5% | 2, 3 |
+| 3 | none | 30, 30 | 99-100% | 1-3% (the new majors) | 24-28% | 9, 10 |
+
+So a well-fed colony with a tenth majors makes about a tenth majors (the
+field's 10-12%), one fed little protein a third as many, and one with no
+majors nearly twice as many. A young test-tube colony (20 workers, one a
+major) fed a cricket and sugar every day: its larvae grew at full speed
+throughout, and with so few majors about, the chances of the first 72 to
+pupate in 25 days added up to 13% at first and 25% by the end (one major
+among ever more minors; those pupae had not yet come out). As majors come
+out the chance falls: at 10% majors a well-fed larva's chance is 10%, so
+the colony settles there.
+
+**Defence (test 31).** 60 workers, 6 of them majors, half the cover lifted
+after 20 minutes, 3 colonies; workers alarmed (majors among them):
+
+| | 15 s | 1 min | 2 min | 4 min |
+|---|---|---|---|---|
+| Majors' threshold and hold | 56-58 (6) | 57-58 (6) | 53-56 (6) | 21-41 (6) |
+| Majors alarmed as minors | 56-58 (6) | 57-58 (6) | 0 | 0 |
+
+The alarm scent reaches nearly the whole colony within seconds, majors in
+their share. Four minutes on the minors are calming (a third to two thirds
+still alarmed) and all six majors are still out, running towards the
+alarm: 15-29% of the alarmed, against 10% of the colony, none at sugar
+and their share at a cricket (9.20). The majors' threshold of 0.5 does not
+keep them out in this small nest, where the alarm is strong everywhere;
+it is their hold that tells. Detrain & Pasteels (1992) give the castes'
+numbers at a real intruder, which the tank does not have, so this check
+is qualitative.
+
 ---
 
 ## 10. Architecture
@@ -2381,7 +2476,7 @@ Each milestone is one or a few small PRs, merged by Marco, with a link to play.
 | A | The arena (asked by Marco 2026-10-13, section 3.4): Arena 1 climbing; Arena 2 dishes, feeders and placing objects; Arena 3 feeder insects |
 | N | Bought nests (asked by Marco 2026-10-13, section 3.5): Nests 1 one ytong nest, in three sizes and three layouts; Nests 2 plaster, acrylic and wood, covers and light; Nests 3a keeping together (settling beside resting nestmates); Nests 3 modules, tubes and cotton plugs, the test-tube start and moving house |
 | C | Colonies and species (asked by Marco 2026-10-14, sections 3.6 and 4.4): step 1 up to four colonies on one table; step 2 Crematogaster scutellaris |
-| P | Pheidole pallidula (asked by Marco 2026-10-15, section 4.4): step 1 minors and majors, recruitment and cutting; step 2 majors made by feeding, and defence |
+| P | Pheidole pallidula (asked by Marco 2026-10-15, section 4.4): step 1 minors and majors, recruitment and cutting; step 2 majors made by feeding, and defence (both built) |
 
 If a validation test in M1 or M2 cannot be made to pass with plausible
 parameters, I stop and report before changing the model.

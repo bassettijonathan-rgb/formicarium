@@ -420,6 +420,8 @@ export function stepAnts(ctx: AntContext): void {
   const burn = ctx.nestMode === 'farm' ? (params.burnRate / params.daySeconds) * DT : 0;
   const days = DT / params.daySeconds;
   const alarmKeep = params.alarm ? Math.pow(0.5, DT / params.alarmHalfLife) : 1;
+  // A Pheidole major, once roused, stays roused longer (DESIGN.md 4.4, P7).
+  const majorAlarmKeep = params.alarm && params.dimorphic ? Math.pow(0.5, DT / params.majorAlarmHalfLife) : 1;
   if (params.seeds) {
     ctx.arenaPieces = ctx.prey.filter((p) => p.place === Place.arena && p.carriedBy < 0);
     ctx.farmPieces = ctx.prey.filter((p) => p.place === Place.farm && p.carriedBy < 0);
@@ -441,7 +443,10 @@ export function stepAnts(ctx: AntContext): void {
       ants.crop[i] = Math.max(0, ants.crop[i]! - burn);
       if (ants.cropProtein[i]! > ants.crop[i]!) ants.cropProtein[i] = ants.crop[i]!;
     }
-    if (ants.alarm[i]! > 0) ants.alarm[i] = ants.alarm[i]! * alarmKeep < 0.01 ? 0 : ants.alarm[i]! * alarmKeep;
+    if (ants.alarm[i]! > 0) {
+      const keep = params.dimorphic && isMajor(ants, params, i) ? majorAlarmKeep : alarmKeep;
+      ants.alarm[i] = ants.alarm[i]! * keep < 0.01 ? 0 : ants.alarm[i]! * keep;
+    }
     const state = ants.state[i]!;
     tally(ants, i, place, state);
     if (place === Place.tube) walkTube(ctx, i);
