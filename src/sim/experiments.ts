@@ -6,7 +6,7 @@
 import { AntState, Caste, Place } from './ants';
 import { BroodStage, addBrood, broodCounts } from './brood';
 import { isLiveWorker } from './corpses';
-import { FIELD_CELL, excavatedArea } from './farm';
+import { FIELD_CELL, cellSolid, excavatedArea } from './farm';
 import { temperatureAt } from './heat';
 import { humidityAt } from './water';
 import { Material } from './materials';
@@ -14,9 +14,11 @@ import { Purpose, Rng } from './rng';
 import { doubleBridge, foodChoice, Tally } from './lab';
 import type { AntParams } from './params';
 import { STEPS_PER_SECOND } from './time';
-import { addCorpse, colonyCrop, createWorld, deathsBy, killAnt, setCover, setHeatMat, placeInsect, placeProtein, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
-import { createArena } from './arena';
-import type { Cut, Insect } from './prey';
+import { addCorpse, colonyCrop, createWorld, deathsBy, killAnt, setCover, setHeatMat, placeInsect, placeProtein, placeSeeds, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
+import { createArena, sampleTrail } from './arena';
+import { createTank } from './keeper';
+import { Species, arenaFor, speciesParams } from './species';
+import { type Cut, type Insect, makeSeeds } from './prey';
 import { type NestLayout, type NestMaterial, type NestSize, TEST_TUBE, TEST_TUBE_SETUP, moduleAt } from './nest';
 import { addModule, connect, connectArena } from './table';
 import { TANK_ARENA } from './tank';
@@ -1315,4 +1317,196 @@ export function runMovingHouse(opts: RunOptions & { hours: number; brood?: numbe
     result.nestRestingByHour.push(m);
   }
   return result;
+}
+
+export interface HarvestResult {
+  /** Seeds put out, and those carried into the nest by the end. */
+  seeds: number;
+  taken: number;
+  /** Minutes until the first seed was picked up, and until the last was taken home (-1 if some were left). */
+  found: number;
+  cleared: number;
+  /** Seeds taken home per minute until the last was taken: El Boukhrissi et al.'s foraging rate (0 if some were left). */
+  rate: number;
+  /** Minutes until half the seeds were taken home, or -1 if fewer were. */
+  half: number;
+  /** The most foragers out at once. */
+  mostOut: number;
+}
+
+/** A Messor barbarus lab colony behind the entrance of a bare 60 x 40 cm arena (DESIGN.md 4.4). */
+function harvesters(seed: number, ants: number, params: Partial<AntParams>): World {
+  const world = createWorld(seed, { ants, nest: 'lab', species: Species.messor, params });
+  const size = arenaFor(Species.messor);
+  world.arena = createArena(size.width, size.height);
+  return world;
+}
+
+/** Where the seeds go in the harvesting experiments: 25 cm out from the entrance. */
+const SEED_SPOT = 250;
+
+/**
+ * Clumped against scattered seeds (El Boukhrissi et al. 2023): a Messor
+ * barbarus lab colony is given `count` small seeds 25 cm from its entrance,
+ * all in a pile 1 cm across (`clumped`) or scattered over a disc 20 cm
+ * across round the same spot. In the field, scattered seeds were found a
+ * little sooner, but a pile was cleared at more seeds per minute (seeds
+ * over the minutes to take the last): a forager that finds seeds lying
+ * round the one it takes lays trail and brings nestmates; one that finds a
+ * lone seed does not.
+ */
+export function runHarvest(opts: RunOptions & { clumped: boolean; count?: number; minutes: number }): HarvestResult {
+  const world = harvesters(opts.seed, opts.ants ?? 40, opts.params ?? {});
+  const count = opts.count ?? 40;
+  const x = world.arena.entranceX + SEED_SPOT;
+  const y = world.arena.entranceY;
+  if (opts.clumped) placeSeeds(world, 'small', count, x, y, 5);
+  else {
+    // One seed at a time, each at its own random spot in the disc.
+    const rng = new Rng(opts.seed, Purpose.test, 24);
+    for (let k = 0; k < count; k++) {
+      const r = 100 * Math.sqrt(rng.float());
+      const a = rng.range(-Math.PI, Math.PI);
+      placeSeeds(world, 'small', 1, x + r * Math.cos(a), y + r * Math.sin(a), 0);
+    }
+  }
+  let half = -1;
+  let found = -1;
+  let cleared = -1;
+  let mostOut = 0;
+  const steps = opts.minutes * 60 * STEPS_PER_SECOND;
+  for (let s = 1; s <= steps && cleared < 0; s++) {
+    step(world);
+    if (found < 0 && world.prey.some((p) => p.carriedBy >= 0)) found = s / STEPS_PER_SECOND / 60;
+    if (world.prey.length === 0) cleared = s / STEPS_PER_SECOND / 60;
+    if (s % STEPS_PER_SECOND !== 0) continue;
+    let out = 0;
+    for (let i = 0; i < world.ants.count; i++) if (world.ants.state[i] !== AntState.inNest) out++;
+    mostOut = Math.max(mostOut, out);
+    if (half < 0 && count - world.prey.length >= count / 2) half = s / STEPS_PER_SECOND / 60;
+  }
+  return { seeds: count, taken: count - world.prey.length, found, cleared, rate: cleared > 0 ? count / cleared : 0, half, mostOut };
+}
+
+export interface TrailLifeResult {
+  /** Minutes until the last seed was taken home, or -1 if some were left. */
+  cleared: number;
+  /** The trail an ant smells across its antennae halfway to where the seeds were: when the last seed was taken, and `after` minutes later. */
+  atClearing: number;
+  smelt: number;
+  /** Minutes after the last seed was taken until the trail smells too faint to follow (`trailThreshold`), or -1 if not within `upTo`. */
+  faded: number;
+  threshold: number;
+}
+
+/**
+ * Lasting trails (DESIGN.md 4.4): a Messor barbarus lab colony harvests a
+ * pile of 40 seeds 25 cm from its entrance; then how strongly the trail it
+ * laid smells halfway along the route (the most an ant walking along it,
+ * its antennae over the trail, smells: what decides whether it follows),
+ * when the last seed was taken, `after` minutes later, and how long until
+ * it is too faint to follow (up to `upTo` minutes). A Messor trail should
+ * still be strong an hour after the seeds ran out; one that fades as fast
+ * as Lasius niger's (`trailHalfLife` 15 minutes) not.
+ */
+export function runTrailLife(opts: RunOptions & { after: number; upTo?: number }): TrailLifeResult {
+  const world = harvesters(opts.seed, opts.ants ?? 40, opts.params ?? {});
+  const { arena, params } = world;
+  placeSeeds(world, 'small', 40, arena.entranceX + SEED_SPOT, arena.entranceY, 5);
+  // Halfway out, across a band 6 cm wide: where the trail runs, the ant walking along it with its antennae over it.
+  const x = arena.entranceX + SEED_SPOT / 2;
+  const ax = params.antennaReach * Math.cos(params.antennaAngle);
+  const ay = params.antennaReach * Math.sin(params.antennaAngle);
+  const smell = (): number => {
+    let most = 0;
+    for (let y = arena.entranceY - 30; y <= arena.entranceY + 30; y += 0.25) {
+      most = Math.max(most, sampleTrail(arena, x + ax, y - ay) + sampleTrail(arena, x + ax, y + ay));
+    }
+    return most;
+  };
+  let cleared = -1;
+  for (let s = 1; s <= 120 * 60 * STEPS_PER_SECOND && cleared < 0; s++) {
+    step(world);
+    if (world.prey.length === 0) cleared = s / STEPS_PER_SECOND / 60;
+  }
+  const atClearing = smell();
+  let smelt = atClearing;
+  let faded = -1;
+  const upTo = Math.max(opts.after, opts.upTo ?? opts.after);
+  for (let minute = 1; minute <= upTo && (faded < 0 || minute <= opts.after); minute++) {
+    for (let s = 0; s < 60 * STEPS_PER_SECOND; s++) step(world);
+    const now = smell();
+    if (minute === opts.after) smelt = now;
+    if (faded < 0 && now < params.trailThreshold) faded = minute;
+  }
+  return { cleared, atClearing, smelt, faded, threshold: params.trailThreshold };
+}
+
+export interface GranaryResult {
+  /** Seeds lying in the nest (not husks), and of those the share in air drier than Messor's `seedDryHumidity`, at the start and at the end, and the share lying among the brood. */
+  stored: number;
+  dryAtStart: number;
+  dryShare: number;
+  amongBrood: number;
+  /** Mean relative humidity where the seeds lie, and where the brood lies. */
+  seedHumidity: number;
+  broodHumidity: number;
+}
+
+/**
+ * The granary (DESIGN.md 4.4): a keeper's Messor barbarus colony in a ytong
+ * nest, wet at one end (as every bought nest is), with 60 small seeds
+ * strewn over the nest's whole floor, damp and dry, as if it had just moved
+ * in with its stores (its arena's own seeds taken away). After `minutes`,
+ * the seeds should lie where the air is dry, away from the brood, which
+ * nurses keep in the damp; without the workers' liking for dry air
+ * (`seedDryHumidity` over 1) they stay strewn.
+ */
+export function runGranary(opts: RunOptions & { minutes: number }): GranaryResult {
+  const world = createTank(opts.seed, undefined, Species.messor);
+  Object.assign(world.params, opts.params ?? {});
+  world.prey = [];
+  const rng = new Rng(opts.seed, Purpose.test, 23);
+  const { farm } = world;
+  for (let placed = 0; placed < 60; ) {
+    const x = rng.range(0, farm.width);
+    const y = rng.range(0, farm.height);
+    if (cellSolid(farm, Math.floor(x), Math.floor(y))) continue;
+    const [p] = makeSeeds(world.seed, 0, world.nextFoodId++, 'small', 1, x, y, 0);
+    p!.place = Place.farm;
+    world.prey.push(p!);
+    placed++;
+  }
+  const DRY = speciesParams(Species.messor).seedDryHumidity!;
+  const dryAtStart = world.prey.filter((p) => humidityAt(farm, p.x, p.y) < DRY).length / world.prey.length;
+  for (let s = 0; s < opts.minutes * 60 * STEPS_PER_SECOND; s++) step(world);
+  const { brood, params } = world;
+  const seeds = world.prey.filter((p) => p.place === Place.farm && p.carriedBy < 0 && p.insect === 'seed' && p.juice > 0);
+  const r2 = params.broodSenseRadius * params.broodSenseRadius;
+  let dry = 0;
+  let among = 0;
+  let seedRh = 0;
+  for (const p of seeds) {
+    const rh = humidityAt(farm, p.x, p.y);
+    seedRh += rh;
+    if (rh < DRY) dry++;
+    for (let k = 0; k < brood.count; k++) {
+      if (brood.stage[k] === BroodStage.none) continue;
+      const dx = brood.x[k]! - p.x;
+      const dy = brood.y[k]! - p.y;
+      if (dx * dx + dy * dy <= r2) {
+        among++;
+        break;
+      }
+    }
+  }
+  let broodRh = 0;
+  let items = 0;
+  for (let k = 0; k < brood.count; k++) {
+    if (brood.stage[k] === BroodStage.none) continue;
+    broodRh += humidityAt(farm, brood.x[k]!, brood.y[k]!);
+    items++;
+  }
+  const n = Math.max(1, seeds.length);
+  return { stored: seeds.length, dryAtStart, dryShare: dry / n, amongBrood: among / n, seedHumidity: seedRh / n, broodHumidity: broodRh / Math.max(1, items) };
 }

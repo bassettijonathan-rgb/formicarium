@@ -11,19 +11,24 @@
 import { isBlocked, reliefAt } from './arena';
 import { type Decoration, buildRelief, chuteOf, extent, inDish, isObstacle, middleOf, reliefOf, shifted, stampDecorations } from './decor';
 import { Place } from './ants';
-import { type Cut, type Insect, edible, makeInsect } from './prey';
+import { type Cut, type Insect, type SeedMix, edible, makeInsect, makeSeeds } from './prey';
 import { Purpose, Rng } from './rng';
 import type { World } from './world';
 
 /** What the keeper can put in the arena. */
-export type Item = 'dish' | 'feeder' | 'stone' | 'bark' | 'branch' | 'autoFeeder' | 'dispenser';
+export type Item = 'dish' | 'feeder' | 'stone' | 'bark' | 'branch' | 'autoFeeder' | 'dispenser' | 'seedDispenser';
 
 /** What a new liquid feeder is filled with (mol/L), and what an insect dispenser gives. */
 export interface ItemSetup {
   concentration: number;
   insect?: Insect | undefined;
   cut?: Cut | undefined;
+  /** What a seed dispenser gives. */
+  seeds?: SeedMix | undefined;
 }
+
+/** Seeds in a seed dispenser's scoop, and how far they scatter from its chute, mm (keepers give a pinch of a few dozen). */
+export const SEED_SCOOP = { count: 20, spread: 6 } as const;
 
 /** A liquid feeder holds 2 mL of sugar water when full (B5). */
 export const FEEDER_CAPACITY = 2000;
@@ -49,6 +54,9 @@ export function makeItem(world: World, item: Item, x: number, y: number, setup: 
     case 'dispenser':
       // A plastic box 4 cm wide, 3 cm deep and 3 cm high, its chute in front.
       return { kind: 'dispenser', x, y, width: 40, depth: 30, height: 30, insect: setup.insect ?? 'fly', cut: setup.cut ?? 'whole', dropped: [] };
+    case 'seedDispenser':
+      // The same box, filled with seeds (Marco, 2026-10-15).
+      return { kind: 'dispenser', x, y, width: 40, depth: 30, height: 30, insect: 'fly', cut: 'whole', dropped: [], seeds: setup.seeds ?? 'small' };
     case 'stone': {
       const radius = rng.range(11, 17);
       return { kind: 'stone', x, y, radius, height: radius * rng.range(0.55, 0.8), outline: Array.from({ length: 20 }, () => rng.range(0.84, 1.1)) };
@@ -126,7 +134,9 @@ export function putItem(world: World, item: Item, x: number, y: number, setup: I
  * one lies in the arena to be eaten. A husk does not count; a mouldy piece
  * does, so mouldy insects do not pile up: the next drops once Clean arena
  * has taken it out. A colony with no hungry brood leaves insects lying
- * (B7), so its dispenser waits.
+ * (B7), so its dispenser waits. A seed dispenser drops a new scoop once
+ * every seed of the last is gone; seeds no ant takes (a species that does
+ * not harvest them, or seeds too heavy) leave it waiting.
  */
 export function runDispensers(world: World): void {
   for (const d of world.decor) {
@@ -137,7 +147,9 @@ export function runDispensers(world: World): void {
     if (lying) continue;
     const c = chuteOf(d);
     if (!canPutFood(world, c.x, c.y)) continue;
-    const pieces = makeInsect(world.seed, world.step, world.nextFoodId, d.insect, d.cut, c.x, c.y);
+    const pieces = d.seeds
+      ? makeSeeds(world.seed, world.step, world.nextFoodId, d.seeds, SEED_SCOOP.count, c.x, c.y, SEED_SCOOP.spread)
+      : makeInsect(world.seed, world.step, world.nextFoodId, d.insect, d.cut, c.x, c.y);
     world.nextFoodId += pieces.length;
     world.prey.push(...pieces);
     d.dropped = pieces.map((p) => p.id);

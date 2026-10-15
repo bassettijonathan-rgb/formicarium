@@ -692,6 +692,32 @@ export interface AntParams {
   preyDropTime: number;
   /** How often a worker in the farm touching a piece of insect drinks from it, per second (rough). */
   pieceSipRate: number;
+
+  // --- Seeds (Messor barbarus, DESIGN.md 4.4) ---
+
+  /** True: the species harvests seeds (Messor). Other species pass seeds by, as they do in keepers' tanks. */
+  seeds: boolean;
+  /**
+   * How strongly foragers go out for seeds whatever the colony's hunger, on the scale of hunger (0-1):
+   * harvesters lay in stores. 0 for species that do not.
+   */
+  seedHoard: number;
+  /** The heaviest seed one worker carries home, mg (rough: a media of 4-6 mg; heavier seeds wait for a bigger worker). */
+  seedCarryMax: number;
+  /** How strongly a worker lays trail home from a seed it took where more seeds lie, on the scale of a full crop of the best sugar (rough). */
+  seedTrail: number;
+  /** How far round a seed it picks up a worker notices more seeds, mm (rough: what its antennae touch as it handles it). */
+  seedPatchRange: number;
+  /** Workers store seeds where the air is drier than this relative humidity (keepers: a dry corner for the seeds). */
+  seedDryHumidity: number;
+  /** Seeds lying in air at least this humid go mouldy, as an uneaten insect does; drier, they keep (rough). */
+  seedDampHumidity: number;
+  /** How readily a worker carrying a seed in dry air puts it down, per second, before counting seeds already there (rough). */
+  seedDropRate: number;
+  /** Each seed lying within `broodSenseRadius` makes a carrier that many times more likely to put its own down there (rough, as for corpses and spoil). */
+  seedPileGain: number;
+  /** Fraction of a seed's content that feeds the larvae as protein; the rest is starch and oil (rough: seeds are 10-25% protein, more counting oil-rich seeds' fat). */
+  seedProtein: number;
 }
 
 export const DEFAULT_ANT_PARAMS: AntParams = {
@@ -915,4 +941,15 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   preyDrinkTime: 300,
   preyDropTime: 300,
   pieceSipRate: 0.2,
+
+  seeds: false,
+  seedHoard: 0,
+  seedCarryMax: 15,
+  seedTrail: 0.6,
+  seedPatchRange: 8,
+  seedDryHumidity: 0.6,
+  seedDampHumidity: 0.85,
+  seedDropRate: 0.2,
+  seedPileGain: 1,
+  seedProtein: 0.5,
 };

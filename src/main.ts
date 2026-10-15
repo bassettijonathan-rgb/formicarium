@@ -11,7 +11,7 @@ import { ArenaLayer } from './render/arenaLayer';
 import { STEPS_PER_SECOND, formatAntTime } from './sim/time';
 import type { KeeperCommand } from './sim/keeper';
 import type { Item } from './sim/objects';
-import type { Cut, Insect } from './sim/prey';
+import type { Cut, Insect, SeedMix } from './sim/prey';
 import { type Decoration, decorationAt } from './sim/decor';
 import type { AntCard } from './sim/inspect';
 import { drawGraphs } from './ui/graphs';
@@ -178,7 +178,10 @@ async function start(): Promise<void> {
       view.setHeat(msg);
       coverLit = msg.lit ?? [];
     } else if (msg.type === 'arena') {
+      // A colony with an arena of another size (Messor's is bigger): frame the tank again.
+      const resized = msg.width !== view.arena.floorWidth || msg.height !== view.arena.floorHeight;
       view.arena.setArena(msg);
+      if (resized && framed) fit();
       if (fitCheck && view.arena.decorations !== fitCheck.before) fitCheck = null;
       else if (fitCheck && ++fitCheck.snapshots >= 3) {
         fitCheck = null;
@@ -427,7 +430,11 @@ async function start(): Promise<void> {
     name.value = `Colony ${n}`;
     let startIn: 'tube' | 'nest' = 'tube';
     let species: number = Species.lasiusNiger;
-    const kind = choices<number>([[Species.lasiusNiger, 'Lasius niger'], [Species.crematogaster, 'Crematogaster scutellaris']], () => species, (k) => (species = k));
+    const kind = choices<number>(
+      [[Species.lasiusNiger, 'Lasius niger'], [Species.crematogaster, 'Crematogaster scutellaris'], [Species.messor, 'Messor barbarus']],
+      () => species,
+      (k) => (species = k),
+    );
     const pick: Required<Pick<NestSetup, 'size' | 'layout' | 'material'>> = { ...newPick };
     const picker = nestPicker(pick);
     picker.hidden = true;
@@ -682,17 +689,18 @@ async function start(): Promise<void> {
     feeder: 'sugar feeder',
     autoFeeder: 'sugar dispenser',
     dispenser: 'insect dispenser',
+    seedDispenser: 'seed dispenser',
     branch: 'branch',
     twig: 'twig',
     leaf: 'leaf',
     moss: 'moss',
   };
   /** What a sugar dispenser is filled with and what an insect dispenser gives, chosen on its card before placing it. */
-  const dispense: { concentration: number; insect: Insect; cut: Cut } = { concentration: 1, insect: 'fly', cut: 'whole' };
+  const dispense: { concentration: number; insect: Insect; cut: Cut; seeds: SeedMix } = { concentration: 1, insect: 'fly', cut: 'whole', seeds: 'small' };
   const startPutting = (b: HTMLButtonElement, put: string) => {
     tool = put;
     b.setAttribute('aria-pressed', 'true');
-    const where = put === 'dispenser' ? ' Its insects drop just in front of it.' : '';
+    const where = put === 'dispenser' ? ' Its insects drop just in front of it.' : put === 'seedDispenser' ? ' Its seeds drop just in front of it.' : '';
     hint('arena', `Tap where the ${NAMES[put]} should go. It can't cover the tube's mouth or stand on something else.${where}`, 0);
   };
   for (const b of putButtons) {
@@ -732,6 +740,17 @@ async function start(): Promise<void> {
           }, true],
           ['Cancel', closeCard],
         ]);
+      } else if (put === 'seedDispenser') {
+        showCard('Seed dispenser', [
+          'It drops a scoop of about 20 seeds in front of it, and the next scoop once every seed of the last has been carried off. Only harvester ants (Messor barbarus) take seeds; young colonies do best on small ones.',
+          choices<SeedMix>([['small', 'Small (chia, poppy, millet)'], ['mixed', 'Mixed bird seed'], ['big', 'Big (canary, wheat, sunflower)']], () => dispense.seeds, (k) => (dispense.seeds = k)),
+        ], [
+          ['Place it', () => {
+            closeCard();
+            startPutting(b, put);
+          }, true],
+          ['Cancel', closeCard],
+        ]);
       } else startPutting(b, put);
     });
   }
@@ -748,10 +767,12 @@ async function start(): Promise<void> {
   };
   function decorationCard(k: number): void {
     const d = view.arena.decorations[k]!;
-    const name = d.kind === 'feeder' && d.auto !== undefined ? NAMES.autoFeeder! : (NAMES[d.kind] ?? d.kind);
+    const name = d.kind === 'feeder' && d.auto !== undefined ? NAMES.autoFeeder! : d.kind === 'dispenser' && d.seeds ? NAMES.seedDispenser! : (NAMES[d.kind] ?? d.kind);
     const about: string[] = [];
     if (d.kind === 'feeder' && d.auto !== undefined) about.push(`Kept full of ${d.auto >= 0.5 ? 'rich' : 'weak'} sugar water as the ants drink.`);
-    if (d.kind === 'dispenser') {
+    if (d.kind === 'dispenser' && d.seeds) {
+      about.push(`Drops a scoop of ${{ small: 'small seeds', mixed: 'mixed bird seed', big: 'big seeds' }[d.seeds]} each time the last scoop has been carried off.`);
+    } else if (d.kind === 'dispenser') {
       const given = d.insect === 'fly' ? 'a fruit fly' : `a ${d.insect}${{ whole: ', whole', halved: ', cut in two', pieces: ', in pieces' }[d.cut]}`;
       about.push(`Drops ${given} each time the last one is gone.`);
     }
@@ -1101,6 +1122,7 @@ async function start(): Promise<void> {
       fitCheck = { before: view.arena.decorations, snapshots: 0 };
       if (moving >= 0) command({ type: 'move', index: moving, x, y });
       else if (tool === 'dispenser') command({ type: 'put', item: 'dispenser', x, y, concentration: 1, insect: dispense.insect, cut: dispense.cut });
+      else if (tool === 'seedDispenser') command({ type: 'put', item: 'seedDispenser', x, y, concentration: 1, seeds: dispense.seeds });
       else command({ type: 'put', item: tool as Item, x, y, concentration: tool === 'autoFeeder' ? dispense.concentration : sugar() });
       cancelModes();
       hint('arena', '');

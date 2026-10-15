@@ -31,24 +31,35 @@
  * workers that touch it drink from it (and feed the protein on to the larvae,
  * farmAnts.ts); the husk is carried out to the midden like a corpse; and a
  * piece left uneaten goes mouldy (mould.ts).
+ *
+ * Seeds (Messor barbarus, DESIGN.md 4.4) are pieces too, of kind 'seed': a
+ * harvester that comes on one light enough carries it home whole, laying
+ * trail if more seeds lie there; in the nest it is stored where the air is
+ * dry, cracked by hungry workers, eaten, and its husk carried out. Species
+ * that do not harvest seeds pass them by.
  */
 import { type AntContext, AntState, DT, Place } from './ants';
 import { foodQuality } from './food';
 import { temperatureAt } from './heat';
+import { humidityAt } from './water';
 import type { AntParams } from './params';
 import { Purpose, Rng } from './rng';
 import { STEPS_PER_SECOND } from './time';
 
 /** The feeder insects a keeper buys (B6). */
 export type Insect = 'fly' | 'cricket' | 'mealworm';
+/** What a piece is a piece of: a feeder insect, or a seed (Messor barbarus, DESIGN.md 4.4). */
+export type Kind = Insect | 'seed';
+/** The seeds a seed dispenser gives (DESIGN.md 3.4): small (chia, poppy, millet), mixed bird seed, or big (canary, wheat, sunflower hearts). */
+export type SeedMix = 'small' | 'mixed' | 'big';
 /** How the keeper gives it: whole, cut in two, or cut into its parts (B6). */
 export type Cut = 'whole' | 'halved' | 'pieces';
-export type Part = 'fly' | 'head' | 'thorax' | 'abdomen' | 'hindLeg' | 'leg' | 'section';
+export type Part = 'fly' | 'head' | 'thorax' | 'abdomen' | 'hindLeg' | 'leg' | 'section' | 'seed';
 
 /** A piece of a feeder insect: plain data, in `World.prey`. */
 export interface Piece {
   id: number;
-  insect: Insect;
+  insect: Kind;
   part: Part;
   /** Where it is (`Place`): the arena, the farm, the tube while carried, or gone (eaten in a lab nest). */
   place: number;
@@ -69,7 +80,7 @@ export interface Piece {
   joint: number;
   /** Seconds of one ant biting to cut that joint. */
   toughness: number;
-  /** Seconds of one ant biting to open its skin. */
+  /** Seconds of one ant biting to open its skin (a seed's coat: to crack it). */
   skin: number;
   /** Seconds of biting it has had so far (at its joint while it could come off, else at its skin). */
   bitten: number;
@@ -193,6 +204,57 @@ export function makeInsect(seed: number, step: number, firstId: number, insect: 
   return pieces;
 }
 
+/** Each seed mix's range of fresh masses, mg (keepers' seed lists: chia and poppy about 0.5-1.5 mg, millet 2, bird seed up to 6, wheat 30-50, sunflower hearts 30-60, canary 6-8). */
+export const SEED_MASS: Record<SeedMix, [number, number]> = { small: [0.5, 2], mixed: [1, 6], big: [6, 30] };
+/** Fraction of a seed's mass that is its coat, left as the husk (rough). */
+const SEED_HUSK = 0.25;
+/** Seconds of one media's biting to crack a 1 mg seed; heavier seeds take longer, as the square root of their mass (rough). */
+const SEED_CRACK = 40;
+
+/** True for a seed. */
+export function isSeed(p: Piece): boolean {
+  return p.insect === 'seed';
+}
+
+/**
+ * `count` seeds of `mix` scattered on the arena floor within `spread` mm of
+ * (x, y), as a keeper tips out a scoop. Masses are log-uniform over the mix's
+ * range; a seed is an ellipsoid of density about 1.2 mg/mm³, two thirds as
+ * wide as long. Returns the new pieces.
+ */
+export function makeSeeds(seed: number, step: number, firstId: number, mix: SeedMix, count: number, x: number, y: number, spread: number): Piece[] {
+  const rng = new Rng(seed, Purpose.prey, step, firstId);
+  const [lo, hi] = SEED_MASS[mix];
+  return Array.from({ length: count }, (_, k): Piece => {
+    const mass = lo * Math.pow(hi / lo, rng.float());
+    const length = Math.cbrt(mass / (1.2 * (Math.PI / 6) * (2 / 3) ** 2));
+    const r = spread * Math.sqrt(rng.float());
+    const a = rng.range(-Math.PI, Math.PI);
+    return {
+      id: firstId + k,
+      insect: 'seed',
+      part: 'seed',
+      place: Place.arena,
+      x: x + r * Math.cos(a),
+      y: y + r * Math.sin(a),
+      angle: rng.range(-Math.PI, Math.PI),
+      length,
+      width: (length * 2) / 3,
+      mass,
+      juice: mass * (1 - SEED_HUSK),
+      cuts: 0,
+      joint: -1,
+      toughness: 0,
+      skin: SEED_CRACK * Math.sqrt(mass),
+      bitten: 0,
+      carriedBy: -1,
+      heldFor: 0,
+      age: 0,
+      mouldy: false,
+    };
+  });
+}
+
 /** Workers that can drink at once at each wound (rough). */
 export const AT_A_WOUND = 2;
 
@@ -237,12 +299,23 @@ export function carryable(prey: readonly Piece[], p: Piece, params: AntParams): 
   return p.joint < 0 && p.carriedBy < 0 && p.mass <= params.preyCarryMax && bare(prey, p);
 }
 
-/** The nearest edible piece lying in the arena within `range` mm of its edge, or undefined. */
-export function nearestPiece(ctx: AntContext, x: number, y: number, range: number): Piece | undefined {
+/** True if a worker of this species carries seed `p` home: it harvests seeds, and the seed is light enough. */
+export function seedWanted(p: Piece, params: AntParams): boolean {
+  return params.seeds && p.mass <= params.seedCarryMax;
+}
+
+/**
+ * The nearest edible piece lying in the arena within `range` mm of its edge,
+ * or undefined: a piece of insect if the ant takes `insects`, a seed if it
+ * would carry it home.
+ */
+export function nearestPiece(ctx: AntContext, x: number, y: number, range: number, insects = true): Piece | undefined {
+  const { params } = ctx;
   let best: Piece | undefined;
   let bestGap = range;
-  for (const p of ctx.prey) {
+  for (const p of ctx.arenaPieces ?? ctx.prey) {
     if (p.place !== Place.arena || p.carriedBy >= 0 || !edible(p)) continue;
+    if (isSeed(p) ? !seedWanted(p, params) : !insects) continue;
     const gap = Math.hypot(p.x - x, p.y - y) - pieceReach(p);
     if (gap <= bestGap) {
       best = p;
@@ -270,6 +343,12 @@ export function workAtPrey(ctx: AntContext, i: number): void {
     return;
   }
   const steps = ++ants.timer[i]!;
+  if (isSeed(p)) {
+    // A seed is taken home whole; one too heavy for this worker is left for a bigger one.
+    if (seedWanted(p, params)) pickUpPiece(ctx, i, p, seedsNear(ctx, p));
+    else leavePrey(ctx, i, false);
+    return;
+  }
   if (carryable(prey, p, params)) {
     pickUpPiece(ctx, i, p, remainsNear(ctx, p));
     return;
@@ -342,6 +421,17 @@ function remainsNear(ctx: AntContext, p: Piece): boolean {
   );
 }
 
+/** True if, round seed `p`, the ant notices more seeds it would take: a patch worth a trail. */
+function seedsNear(ctx: AntContext, p: Piece): boolean {
+  const { params } = ctx;
+  const r = params.seedPatchRange;
+  for (const q of ctx.arenaPieces ?? ctx.prey) {
+    if (q === p || q.place !== Place.arena || q.carriedBy >= 0 || !isSeed(q) || !edible(q) || !seedWanted(q, params)) continue;
+    if (Math.abs(q.x - p.x) <= r && Math.abs(q.y - p.y) <= r && Math.hypot(q.x - p.x, q.y - p.y) <= r) return true;
+  }
+  return false;
+}
+
 /** The ant fills its crop from the juice of an open insect and heads home with it, laying trail by how much it drank (as at a drop). */
 function drinkFrom(ctx: AntContext, i: number, body: Piece[]): void {
   const { ants, params } = ctx;
@@ -373,7 +463,7 @@ function leavePrey(ctx: AntContext, i: number, forHelp: boolean): void {
   goHome(ctx, i, true);
 }
 
-function goHome(ctx: AntContext, i: number, remember: boolean): void {
+function goHome(ctx: AntContext, i: number, remember: boolean, seed = false): void {
   const { ants } = ctx;
   ants.preyId[i] = -1;
   ants.foodId[i] = -1;
@@ -382,7 +472,8 @@ function goHome(ctx: AntContext, i: number, remember: boolean): void {
   if (remember) {
     ants.memX[i] = ants.piX[i]!;
     ants.memY[i] = ants.piY[i]!;
-    ants.memoryProtein[i] = 1;
+    // 2: a patch of seeds, worth going back to whatever the colony wants.
+    ants.memoryProtein[i] = seed ? 2 : 1;
   }
   ants.heading[i]! += Math.PI;
 }
@@ -393,8 +484,9 @@ function pickUpPiece(ctx: AntContext, i: number, p: Piece, more: boolean): void 
   p.carriedBy = i;
   p.heldFor = 0;
   ants.pieceHeld[i] = p.id;
-  ants.cropQuality[i] = more ? params.preyTrail : 0;
-  goHome(ctx, i, more);
+  const seed = isSeed(p);
+  ants.cropQuality[i] = more ? (seed ? params.seedTrail : params.preyTrail) : 0;
+  goHome(ctx, i, more, seed);
 }
 
 /** Where a carried piece is held, ahead of the carrier's centre, mm. */
@@ -443,7 +535,7 @@ export function deliverToLabNest(ctx: AntContext, i: number): void {
 /** The piece lying free in the farm that worker `i` touches, or undefined. */
 export function pieceTouched(ctx: AntContext, i: number, wanted: (p: Piece) => boolean): Piece | undefined {
   const { ants, params } = ctx;
-  for (const p of ctx.prey) {
+  for (const p of ctx.farmPieces ?? ctx.prey) {
     if (p.place !== Place.farm || p.carriedBy >= 0 || !wanted(p)) continue;
     if (Math.hypot(p.x - ants.x[i]!, p.y - ants.y[i]!) <= pieceReach(p) + params.contactRadius) return p;
   }
@@ -511,8 +603,111 @@ export function agePieces(ctx: Pick<AntContext, 'prey' | 'farm' | 'params'>, sec
   for (const p of ctx.prey) {
     // A husk is dry skin: nothing for mould. A mouldy piece goes on ageing, its mould thickening (mould.ts).
     if (p.carriedBy >= 0 || (!p.mouldy && !edible(p)) || (p.place !== Place.arena && p.place !== Place.farm)) continue;
+    // A seed keeps in dry air; only in damp air in the nest does it go mouldy (DESIGN.md 4.4).
+    if (isSeed(p) && (p.place !== Place.farm || humidityAt(ctx.farm, p.x, p.y) < params.seedDampHumidity)) continue;
     const celsius = p.place === Place.farm ? temperatureAt(ctx.farm, p.x, p.y) : params.roomTemperature;
     p.age += (seconds / params.daySeconds) * Math.pow(2, (celsius - 25) / params.mouldDoubling);
     if (p.age >= params.preyMouldDays) p.mouldy = true;
   }
+}
+
+/** How often a worker about the nest looks at the seeds and pieces it touches, per second: a cheaper check than every step. */
+const TEND_RATE = 1;
+
+/**
+ * A harvester worker resting or about the nest tends the stores it touches
+ * (DESIGN.md 4.4), about once a second: it carries out a husk or a mouldy
+ * seed as it would a corpse; a hungry one (or one that feels the brood's
+ * hunger) bites at a whole seed until it cracks; and it eats from a cracked
+ * seed as from a piece of insect, the content feeding the larvae too. A
+ * whole seed lying in damp air it picks up, now and then, to take to the
+ * dry (`mayStoreSeed`), as keepers see harvesters move their stores out of
+ * a chamber that has got wet. Returns true if it picked something up.
+ */
+export function tendStores(ctx: AntContext, i: number): boolean {
+  const { ants, farm, params, rng } = ctx;
+  if (!rng.chance(TEND_RATE * DT)) return false;
+  const p = pieceTouched(ctx, i, () => true);
+  if (!p) return false;
+  if (refuse(p)) {
+    if (!rng.chance(params.corpsePickRate / TEND_RATE)) return false;
+    p.carriedBy = i;
+    p.heldFor = 0;
+    ants.pieceHeld[i] = p.id;
+    ants.state[i] = AntState.carryingCorpse;
+    ants.timer[i] = 0;
+    ants.hasDigSite[i] = 0;
+    holdPiece(ctx, i);
+    return true;
+  }
+  if (isSeed(p) && p.cuts === 0 && humidityAt(farm, p.x, p.y) >= params.seedDryHumidity && rng.chance(params.corpsePickRate / TEND_RATE)) {
+    p.carriedBy = i;
+    p.heldFor = 0;
+    ants.pieceHeld[i] = p.id;
+    ants.state[i] = AntState.wandering;
+    ants.timer[i] = 0;
+    ants.hasDigSite[i] = 0;
+    holdPiece(ctx, i);
+    return true;
+  }
+  const hungry = Math.max(0, 1 - ants.crop[i]! / params.cropLoad);
+  if (isSeed(p) && p.cuts === 0) {
+    // Seconds of biting this second: as hungry as it or the brood is.
+    p.bitten += Math.max(hungry, ants.broodNeed[i]!) / TEND_RATE;
+    if (p.bitten >= p.skin) {
+      p.cuts = 1;
+      p.bitten = 0;
+    }
+    return false;
+  }
+  if (ants.crop[i]! >= params.cropLoad || !rng.chance(params.pieceSipRate / TEND_RATE)) return false;
+  const take = Math.min(params.cropLoad - ants.crop[i]!, p.juice);
+  p.juice -= take;
+  p.mass -= take;
+  p.cuts = Math.max(1, p.cuts);
+  ants.crop[i]! += take;
+  ants.cropProtein[i]! += take * (isSeed(p) ? params.seedProtein : 1);
+  return false;
+}
+
+/** True if worker `i` carries a seed. */
+export function holdsSeed(ctx: AntContext, i: number): boolean {
+  const id = ctx.ants.pieceHeld[i]!;
+  if (id < 0 || !ctx.params.seeds) return false;
+  const p = ctx.prey.find((q) => q.id === id);
+  return p !== undefined && isSeed(p);
+}
+
+/** Seeds lying in the farm within `r` mm of (x, y). */
+export function seedsAround(ctx: AntContext, x: number, y: number, r: number): number {
+  let n = 0;
+  for (const p of ctx.farmPieces ?? ctx.prey) {
+    if (p.place !== Place.farm || p.carriedBy >= 0 || !isSeed(p) || !edible(p)) continue;
+    const dx = p.x - x;
+    const dy = p.y - y;
+    if (dx * dx + dy * dy <= r * r) n++;
+  }
+  return n;
+}
+
+/**
+ * A worker carrying a seed in the nest puts it in store (DESIGN.md 4.4):
+ * only where the air is drier than `seedDryHumidity` and no brood lies
+ * (`byBrood`), and more readily where seeds already lie, so a granary grows
+ * in the driest part of the nest; after `preyDropTime` seconds it puts it
+ * down wherever it is. Returns true if it did.
+ */
+export function mayStoreSeed(ctx: AntContext, i: number, byBrood: boolean): boolean {
+  const { ants, farm, params, rng } = ctx;
+  const p = ctx.prey.find((q) => q.id === ants.pieceHeld[i]);
+  if (!p) return false;
+  const x = ants.x[i]!;
+  const y = ants.y[i]!;
+  if (p.heldFor < params.preyDropTime * STEPS_PER_SECOND) {
+    if (byBrood || humidityAt(farm, x, y) >= params.seedDryHumidity) return false;
+    const pile = seedsAround(ctx, x, y, params.broodSenseRadius);
+    if (!rng.chance(params.seedDropRate * (1 + params.seedPileGain * pile) * DT)) return false;
+  }
+  dropPiece(ctx, i);
+  return true;
 }

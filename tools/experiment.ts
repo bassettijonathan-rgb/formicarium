@@ -20,6 +20,7 @@
  *   npm run experiment -- nest-spread [--hours 3] [--ants 40]
  *   npm run experiment -- moving [--hours 6] [--ants 250] [--lit]
  *   npm run experiment -- nest-dark [--hours 2] [--no-light] [--gradient] [--material ytong|plaster|acrylic|wood] [--layout ...]
+ *   npm run experiment -- harvest [--scattered] [--minutes 60] | trail-life [--after 60] | granary [--minutes 120]   (Messor barbarus)
  *   growth takes --mortal: adults die of hunger, drying out and heat (M5c)
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
  */
@@ -46,6 +47,9 @@ import {
   runNestVolume,
   runPrey,
   runTrailDecay,
+  runHarvest,
+  runTrailLife,
+  runGranary,
 } from '../src/sim/experiments';
 import type { Cut, Insect } from '../src/sim/prey';
 import type { NestLayout, NestMaterial } from '../src/sim/nest';
@@ -71,6 +75,8 @@ let layout: NestLayout = 'classic';
 let material: NestMaterial = 'ytong';
 let gradient = false;
 let lit = false;
+let scattered = false;
+let afterSet = false;
 const params: Partial<AntParams> = {};
 for (let i = 0; i < rest.length; i++) {
   if (rest[i] === '--runs') runs = Number(rest[++i]);
@@ -81,6 +87,7 @@ for (let i = 0; i < rest.length; i++) {
   else if (rest[i] === '--material') material = rest[++i] as NestMaterial;
   else if (rest[i] === '--gradient') gradient = true;
   else if (rest[i] === '--lit') lit = true;
+  else if (rest[i] === '--scattered') scattered = true;
   else if (rest[i] === '--no-light') params.photophobia = false;
   else if (rest[i] === '--ants') ants = Number(rest[++i]);
   else if (rest[i] === '--hours') hours = Number(rest[++i]);
@@ -96,7 +103,10 @@ for (let i = 0; i < rest.length; i++) {
   else if (rest[i] === '--no-protein') protein = false;
   else if (rest[i] === '--mat') matX = Number(rest[++i]);
   else if (rest[i] === '--room') params.roomTemperature = Number(rest[++i]);
-  else if (rest[i] === '--after') after = Number(rest[++i]);
+  else if (rest[i] === '--after') {
+    after = Number(rest[++i]);
+    afterSet = true;
+  }
   else if (rest[i] === '--no-fat') params.fatDrift = false;
   else if (rest[i] === '--corpses') corpses = Number(rest[++i]);
   else if (rest[i] === '--no-piles') params.corpseClustering = false;
@@ -289,9 +299,28 @@ for (let seed = first; seed < first + runs; seed++) {
       `seed ${seed}${params.photophobia === false ? ' (no light)' : ''}: brood under the cover by hour ${r.darkByHour.map(pct).join(' ')}; ` +
         `resting workers under it ${r.restingDarkByHour.map(pct).join(' ')}`,
     );
+  } else if (name === 'harvest') {
+    const r = runHarvest({ seed, clumped: !scattered, minutes: minutesSet ? minutes : 60, ...(ants ? { ants } : {}), params });
+    const t = (m: number) => (m < 0 ? '-' : `${m.toFixed(1)} min`);
+    console.log(
+      `seed ${seed}, ${scattered ? 'scattered' : 'clumped'}: first seed picked up after ${t(r.found)}; ${r.taken} of ${r.seeds} taken home, half after ${t(r.half)}, ` +
+        `all after ${t(r.cleared)}: ${r.rate.toFixed(2)} seeds/min; most out at once ${r.mostOut}`,
+    );
+  } else if (name === 'trail-life') {
+    const r = runTrailLife({ seed, after: afterSet ? after : 60, upTo: 360, ...(ants ? { ants } : {}), params });
+    console.log(
+      `seed ${seed}: seeds all taken after ${r.cleared < 0 ? '-' : r.cleared.toFixed(1)} min; the trail smells ${r.atClearing.toFixed(2)} then, ` +
+        `${r.smelt.toFixed(2)} ${afterSet ? after : 60} min later (${pct(r.smelt / r.atClearing)}); too faint to follow (below ${r.threshold}) after ${r.faded < 0 ? 'over 6 h' : `${r.faded} min`}`,
+    );
+  } else if (name === 'granary') {
+    const r = runGranary({ seed, minutes: minutesSet ? minutes : 120, params });
+    console.log(
+      `seed ${seed}: ${r.stored} seeds in the nest, ${pct(r.dryShare)} in dry air (${pct(r.dryAtStart)} at the start), ${pct(r.amongBrood)} among the brood; ` +
+        `humidity at the seeds ${pct(r.seedHumidity)}, at the brood ${pct(r.broodHumidity)}`,
+    );
   } else {
     throw new Error(
-      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation, prey, nest-damp, nest-room, nest-spread, moving or nest-dark',
+      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation, prey, nest-damp, nest-room, nest-spread, moving, nest-dark, harvest, trail-life or granary',
     );
   }
 }

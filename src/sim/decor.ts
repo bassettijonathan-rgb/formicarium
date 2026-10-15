@@ -9,7 +9,7 @@
  * is the same shape the page draws, so an ant on a stone is drawn on it.
  */
 import type { Arena } from './arena';
-import type { Cut, Insect } from './prey';
+import type { Cut, Insect, SeedMix } from './prey';
 import { Purpose, Rng } from './rng';
 
 export type Decoration =
@@ -40,8 +40,10 @@ export type Decoration =
    * `depth` x `height` mm on the floor with its middle at (x, y). It drops
    * an `insect`, given `cut`, through a chute in front of it whenever the
    * last one it dropped (`dropped`, its pieces' ids) is gone from the arena.
+   * A seed dispenser (`seeds`, Marco 2026-10-15) is the same box giving a
+   * scoop of seeds of that mix instead, once the last scoop is all taken.
    */
-  | { kind: 'dispenser'; x: number; y: number; width: number; depth: number; height: number; insect: Insect; cut: Cut; dropped: number[] }
+  | { kind: 'dispenser'; x: number; y: number; width: number; depth: number; height: number; insect: Insect; cut: Cut; dropped: number[]; seeds?: SeedMix }
   /** A round branch lying on the floor (B3), from one end to the other, thick enough to climb along. */
   | { kind: 'branch'; x0: number; y0: number; x1: number; y1: number; radius: number };
 

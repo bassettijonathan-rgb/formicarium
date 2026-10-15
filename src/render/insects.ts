@@ -1,5 +1,6 @@
 /**
- * Feeder insects and their pieces (DESIGN.md 3.4, B6), drawn procedurally in
+ * Feeder insects and their pieces (DESIGN.md 3.4, B6), and seeds (Messor
+ * barbarus, DESIGN.md 4.4), drawn procedurally in
  * mm round their own middle, pointing along +x (toward the head). Callers set
  * the transform that puts a piece where it lies.
  */
@@ -13,8 +14,48 @@ const COLOURS: Record<Insect, { body: number; dark: number; light: number }> = {
   mealworm: { body: 0xd2a24a, dark: 0x7a5420, light: 0xeacb82 },
 };
 
+/**
+ * Seed colours by size (keepers' mixes): poppy and chia (slate), millet
+ * (cream), rape and grass seed (brown), canary seed (straw), wheat (gold).
+ */
+const SEEDS = [
+  { most: 1.6, colours: [0x4a4f58, 0x5b5148, 0xe0cf98] },
+  { most: 2.6, colours: [0xe0cf98, 0x7a5232, 0x4a4f58] },
+  { most: 3.6, colours: [0xcdb67a, 0x7a5232, 0xd8c08a] },
+  { most: Infinity, colours: [0xc79a4e, 0xd8c08a, 0xb8894a] },
+];
+
+/** A seed: a smooth, shiny ellipse; cracked open it shows its pale kernel; a husk is two split halves of coat. */
+function drawSeed(g: Graphics, p: PieceView): void {
+  const L = p.length / 2;
+  const W = p.width / 2;
+  const sizes = SEEDS.find((s) => p.length <= s.most)!;
+  // Which seed of the mix this is, from its size: the same seed always looks the same.
+  const colour = sizes.colours[Math.floor(p.length * 1000) % sizes.colours.length]!;
+  if (p.look === Look.husk) {
+    for (const s of [-1, 1]) g.ellipse(0, s * W * 0.55, L, W * 0.45).fill({ color: mix(colour, 0xe8dcc0, 0.4), alpha: 0.7 });
+    return;
+  }
+  g.ellipse(0, 0, L, W).fill(colour);
+  g.ellipse(L * 0.6, 0, L * 0.25, W * 0.3).fill({ color: mix(colour, 0x000000, 0.35), alpha: 0.6 });
+  g.ellipse(-L * 0.2, -W * 0.35, L * 0.45, W * 0.22).fill({ color: 0xffffff, alpha: 0.35 });
+  if (p.look === Look.open) {
+    // Cracked: the coat split along its length, the kernel showing.
+    g.ellipse(0, 0, L * 0.75, W * 0.45).fill(0xf2e8cc);
+    g.moveTo(-L, 0).lineTo(L, 0).stroke({ color: mix(colour, 0x000000, 0.5), width: Math.max(0.08, W * 0.12) });
+  }
+  if (p.look === Look.mouldy) {
+    g.ellipse(0, 0, L * 1.2, W * 1.4 + 0.2).fill({ color: 0xd6e2be, alpha: 0.55 });
+    for (let a = 0; a < 5; a++) g.circle(L * 0.8 * Math.cos(a * 2.1), (W + 0.1) * Math.sin(a * 1.7), Math.min(0.4, W * 0.4 + 0.1)).fill({ color: 0xeef3e2, alpha: 0.6 });
+  }
+}
+
 /** Draws `p` at the origin, its head end toward +x. */
 export function drawPiece(g: Graphics, p: PieceView): void {
+  if (p.insect === 'seed') {
+    drawSeed(g, p);
+    return;
+  }
   const c = COLOURS[p.insect];
   const husk = p.look === Look.husk;
   const body = husk ? mix(c.body, 0xe8dcc0, 0.55) : c.body;

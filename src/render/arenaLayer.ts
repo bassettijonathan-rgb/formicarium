@@ -20,6 +20,10 @@ import { type Projection, makeProjection } from './projection';
 
 /** Where the arena stands on the desk, in scene mm: its front edge's middle, and the scale there. */
 export const ARENA_VIEW = { frontX: 600, frontY: 390, scale: 1.05 } as const;
+/** Where a wider arena's front middle goes (Messor's 60 x 40 cm): its left wall, with the tube, stays where the 40 cm arena's is. */
+function frontX(width: number): number {
+  return ARENA_VIEW.frontX + ((width - TANK_ARENA.width) / 2) * ARENA_VIEW.scale;
+}
 /** Degrees above the desk the angled view looks down from (A3). */
 export const ANGLED_TILT = 40;
 /** Height above the floor of the middle of the tube's mouth in the left wall, mm. */
@@ -166,7 +170,7 @@ export class ArenaLayer {
   }
 
   private makeProjection(tilt: number): Projection {
-    return makeProjection({ tilt, width: this.width, height: this.height, ...ARENA_VIEW });
+    return makeProjection({ tilt, width: this.width, height: this.height, ...ARENA_VIEW, frontX: frontX(this.width) });
   }
 
   /** Re-places everything that depends on the projection. */
@@ -395,7 +399,7 @@ export class ArenaLayer {
     return g;
   }
 
-  /** An insect dispenser: a grey plastic box with a chute at the bottom of its front, and a window showing what it gives. */
+  /** An insect or seed dispenser: a grey plastic box with a chute at the bottom of its front, and a window showing what it gives. */
   private dispenser(d: Extract<Decoration, { kind: 'dispenser' }>): Graphics {
     const g = new Graphics();
     const p = this.projection;
@@ -420,9 +424,19 @@ export class ArenaLayer {
     face([[x0, y1 + 0.1, h - 2.5], [x1, y1 + 0.1, h - 2.5], [x1, y1 + 0.1, h], [x0, y1 + 0.1, h]], 0xaab0b6);
     // A window on the front showing what it gives.
     face([[d.x - 9, y1 + 0.1, 13], [d.x + 9, y1 + 0.1, 13], [d.x + 9, y1 + 0.1, 23], [d.x - 9, y1 + 0.1, 23]], 0xdfe7ea, 0.85);
-    const colour = d.insect === 'fly' ? 0x4a3a22 : d.insect === 'cricket' ? 0x8a6a3a : 0xc8963e;
-    const c = p.toScene(d.x, y1 + 0.2, 18);
-    g.ellipse(c.x, c.y, (d.insect === 'mealworm' ? 6 : d.insect === 'cricket' ? 4 : 1.8) * c.k, 1.4 * c.k).fill({ color: colour });
+    if (d.seeds) {
+      // Seeds heaped in the window: dark small seeds, mixed, or big pale ones.
+      const colours = d.seeds === 'small' ? [0x4a4f58, 0xe0cf98] : d.seeds === 'mixed' ? [0xe0cf98, 0x7a5232, 0xcdb67a] : [0xc79a4e, 0xd8c08a];
+      const r = d.seeds === 'big' ? 1.4 : d.seeds === 'mixed' ? 1 : 0.7;
+      for (let k = 0; k < 9; k++) {
+        const c = p.toScene(d.x - 7 + (k % 5) * 3.4 + (k > 4 ? 1.7 : 0), y1 + 0.2, k > 4 ? 16.5 : 14.5);
+        g.ellipse(c.x, c.y, r * 1.3 * c.k, r * c.k).fill(colours[k % colours.length]!);
+      }
+    } else {
+      const colour = d.insect === 'fly' ? 0x4a3a22 : d.insect === 'cricket' ? 0x8a6a3a : 0xc8963e;
+      const c = p.toScene(d.x, y1 + 0.2, 18);
+      g.ellipse(c.x, c.y, (d.insect === 'mealworm' ? 6 : d.insect === 'cricket' ? 4 : 1.8) * c.k, 1.4 * c.k).fill({ color: colour });
+    }
     g.zIndex = d.y;
     return g;
   }

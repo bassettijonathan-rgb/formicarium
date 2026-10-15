@@ -44,6 +44,7 @@ const PART_NAMES: Record<Part, string> = {
   hindLeg: 'hind leg',
   leg: 'leg',
   section: 'piece',
+  seed: 'seed',
 };
 
 /** What ant `i` is doing, in words. */
@@ -56,6 +57,7 @@ export function doing(world: World, i: number): string {
   const tube = place === Place.tube;
   const held = world.prey.find((p) => p.id === ants.pieceHeld[i]);
   if (held && state !== AntState.carryingCorpse) {
+    if (held.part === 'seed') return tube ? 'in the tube, carrying a seed home' : farm ? 'taking a seed to the stores' : 'carrying a seed home';
     const what = held.part === 'fly' ? 'a fruit fly' : `a ${PART_NAMES[held.part]} of a ${held.insect}`;
     return tube ? `in the tube, carrying ${what} home` : farm ? `taking ${what} to the brood` : `carrying ${what} home`;
   }
