@@ -255,6 +255,19 @@ they took them apart". He approved this plan as drafted
   first insect lying and gets no more. Keepers buy automatic sugar feeders;
   an automatic insect dispenser is Marco's invention. Tested: a test-tube
   colony with larvae carries off the flies one gives and gets more.
+- **Seed dispenser (Marco, 2026-10-15; M10 of the Messor plan).** The same
+  grey box, its window showing seeds: it drops a scoop of 20 seeds
+  scattered within 6 mm of its chute, and the next scoop once every seed of
+  the last is gone from the arena (carried into the nest). The keeper
+  chooses the mix when putting it in: *small* (chia, poppy, millet:
+  0.5-2 mg), *mixed* bird seed (1-6 mg) or *big* (canary, wheat, sunflower
+  hearts: 6-30 mg), masses log-uniform in the range (keepers' seed lists).
+  Seeds are pieces of kind `seed` (`makeSeeds` in `src/sim/prey.ts`), an
+  ellipsoid two thirds as wide as long at about 1.2 mg/mm³, a quarter of
+  their mass the coat (the husk). Only a species that harvests seeds
+  (Messor barbarus, 4.4) takes them; in a Lasius or Crematogaster arena the
+  first scoop lies there and the dispenser waits. Seeds never go mouldy in
+  the arena (dry air).
 
 ### 3.5 Bought nests (Marco, 2026-10-13)
 
@@ -660,7 +673,7 @@ where everyone was showed why, one cause after another:
 Each ant logs short events (born, first foraging trip, found food, died) so
 you can open any ant and read its life.
 
-### 4.4 Species: Lasius niger and Crematogaster scutellaris (Marco, 2026-10-14)
+### 4.4 Species: Lasius niger, Crematogaster scutellaris and Messor barbarus (Marco, 2026-10-14 and 15)
 
 Asked by Marco on 2026-10-14 ("I want you to implement another species,
 Crematogaster scutellaris") and approved with the colonies plan (S1 to S9;
@@ -715,6 +728,74 @@ C. scutellaris, the Mediterranean acrobat ant, as built:
   egg, larva and pupa times, the queen's laying, how much food brood needs,
   founding in a test tube with one queen, and food (sugar water, the
   feeders, insects taken home when larvae are hungry).
+
+**Messor barbarus**, the harvester ant (Marco, 2026-10-15: "can you
+introduce Messor Barbarus (and a seed dispenser) without resetting the two
+ongoing colonies?"; plan M1-M10 approved with "Ok. Make the arena bigger
+for them"). Step 1 is built: the species, seeds and the seed dispenser
+(3.4), all workers medias. Step 2 (worker sizes: minors, medias and majors,
+size matching and majors cracking, M2, M4, M7) is next. Lasius niger and
+Crematogaster scutellaris colonies run exactly as before (same ants and
+insects in the same places after 25 minutes with food, an insect, a
+dispenser and a cover lifted, in a ytong nest, a test tube and the sand
+farm, checked against the code before Messor; section 9, test 1 of the
+plan), and kept tanks load as they were.
+
+- **Arena (Marco).** A Messor colony gets a 60 x 40 cm arena
+  (`arenaFor`), fixed when it is set up; the others keep 40 x 30 cm. The
+  page keeps its left wall, with the tube, where the smaller arena's is,
+  and frames the tank again when a colony with the other size is shown. A
+  new Messor tank starts with a scoop of small seeds where other tanks get
+  their first sugar drop.
+- **Looks (M1).** Big and glossy black, the head a little browner, broad
+  and square, with strong mandibles; two waist nodes and an oval gaster.
+  Drawn as a 7 mm media and the queen 14.5 mm (keepers: workers 3-12 mm,
+  queen 14-15 mm). The simulation's bodies (spacing, contacts) are Lasius
+  niger's.
+- **Seeds (M3, M8).** A forager that comes on a seed it can carry
+  (`seedCarryMax` 15 mg, rough for a media) takes it home whole, whatever
+  it went out for; a heavier seed it passes by (in step 2, for a major).
+  If it notices more seeds within 8 mm of the one it took
+  (`seedPatchRange`), it lays trail home as from good food (`seedTrail`
+  0.6) and remembers the spot, going back to it whatever the colony wants
+  next. A lone seed brings no trail. So a pile draws a trail and a crowd
+  and scattered seeds are taken one by one (section 9, test 24).
+  Harvesters also take sugar water and insects, as Lasius niger does.
+  Foragers go out for seeds even when nobody is hungry (`seedHoard` 0.5:
+  half the drive of a starving colony), laying in stores. Their scouts
+  follow trails too (a Lasius scout out for protein does not).
+- **Granary (M6).** In the nest a worker carrying a seed does not take it
+  to the brood: it turns towards drier air while the air round it is at
+  least 60% humid (`seedDryHumidity`), and puts the seed down only in air
+  drier than that, not by brood, more readily the more seeds lie within
+  reach (each seed doubling the chance, as for corpses and spoil); after
+  5 minutes it puts it down anywhere. A worker about the nest that touches
+  a whole seed lying in damp air now and then picks it up and takes it to
+  the dry the same way (keepers see stores moved out of a chamber that got
+  wet). Every bought nest is wet at its water end and dry at the tube's, so
+  the stores pile up in the dry chambers by the entrance and the brood
+  stays in the damp (test 23). Seeds keep in air under 85%
+  (`seedDampHumidity`); in damper air they age like an uneaten insect and
+  go mouldy, feeding mould as it does.
+- **Cracking and eating (M7).** About once a second a worker resting or
+  about the nest looks at the seed or husk it touches: a husk or a mouldy
+  seed it may carry out to the midden, as a corpse; a whole seed it bites
+  at for as many seconds as it, or the brood it smells, is hungry; a seed
+  cracks after 40 s of biting per square root of its mass in mg (rough:
+  40 s for a 1 mg seed, 3.5 min for a 30 mg one). From a cracked seed
+  workers eat as from a piece of insect, filling their crop; half of it
+  counts as protein for the larvae and the queen (`seedProtein`, rough:
+  seeds are starch and oil with 10-25% protein). What is left is the husk.
+  So a well-fed colony keeps its seeds whole.
+- **Trails (M5).** `trailHalfLife` 1 hour (Lasius niger 15 minutes): rough,
+  for trunk trails that last (Detrain et al. 2000; laid from the Dufour
+  gland, Heredia & Detrain 2000). The trail of one harvest is followed for
+  hours after the seeds run out (test 25).
+- **Nest climate.** Nurses keep brood in air at least 70% humid
+  (`broodHumidity`) and it dries out below 45% (keepers: 40-70% with a
+  damper part). Brood temperature and everything else (M9: brood times,
+  the queen, food needs, founding in a test tube, no winter rest) are
+  Lasius niger's.
 
 ---
 
@@ -1435,6 +1516,25 @@ project. If one fails, we fix the model, not the test.
 22. **Drier brood** (qualitative, keepers): in the humidity gradient of test
    11, C. scutellaris brood ends in air at least 5 points drier than Lasius
    niger brood.
+23. **Granary** (Messor plan, its test 2; keepers): seeds strewn over the
+   floor of a Messor barbarus colony's ytong nest end, within an hour, in
+   air drier than 60% and not among the brood, which lies in air at least
+   25 points damper; without the workers' liking for dry air they stay
+   strewn.
+24. **Clumped seeds** (Messor plan, test 3; El Boukhrissi et al. 2023: one
+   pile of 300 seeds at 60 cm was harvested at about 2.8 times the rate of
+   the same seeds scattered, though scattered seeds were found sooner,
+   3.5 against 5.4 minutes): a lab colony of 40 harvesters clears a pile
+   of 40 small seeds at least 1.5 times as fast (seeds per minute until
+   the last is taken) as the same seeds scattered over a disc 20 cm across
+   round the same spot, 25 cm out; scattered seeds are found sooner; with
+   no trail laid the pile is cleared at under two thirds the rate.
+25. **Lasting trails** (Messor plan, test 5; qualitative, field trunk
+   trails, Detrain et al. 2000): an hour after a harvest's last seed was
+   taken, its trail keeps at least 40% of its strength and is still
+   followed four hours on; a trail fading as Lasius niger's keeps under a
+   tenth and is given up within those four hours.
+   (Test 4 of the plan, size matching, comes with step 2.)
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -2019,6 +2119,54 @@ saturated, brood strewn evenly, mean 0.80), after an hour the mean air
 round Lasius niger brood is 0.92-0.96 and round C. scutellaris brood
 0.72-0.79: its nurses only carry brood out of air drier than 65%.
 
+### 9.18 Results so far (Messor barbarus, step 1 of the Messor plan)
+
+`tests/science/seeds.test.ts` checks tests 23-25; `npm run experiment --
+granary | harvest [--scattered] | trail-life` runs them.
+
+**Old colonies unchanged (plan test 1).** Lasius niger and C. scutellaris
+tanks (a ytong nest, a test tube and the sand farm each) given a sugar
+drop, a cricket cut in two, an insect dispenser, a lifted cover and a
+cleaning over 25 minutes end with every ant and every piece of insect
+where the code before Messor puts them.
+
+**Granary (test 23).** A tank colony in a medium ytong nest, 60 small
+seeds strewn over its floor (13-27% of them in air drier than 60%), one
+hour:
+
+| Seed | In the nest | In dry air | Among brood | Humidity at seeds / brood | No liking for dry: in dry air, humidity at seeds |
+|---|---|---|---|---|---|
+| 1 | 50 | 100% | 0% | 57% / 99% | 14%, 91% |
+| 2 | 50 | 100% | 0% | 57% / 100% | 34%, 81% |
+| 3 | 51 | 100% | 6% | 56% / 93% | 13%, 87% |
+
+The rest were cracked and eaten. A colony given seeds in its arena stores
+them the same way: they go in at the dry end, by the tube, and stay there.
+
+**Clumped against scattered (test 24).** A lab colony of 40 harvesters, 40
+small seeds 25 cm out, 6 colonies each:
+
+| | First seed picked up | All taken | Rate, seeds/min |
+|---|---|---|---|
+| One pile 1 cm across | 2.5-13.3 min (mean 7.1) | 7.4-19.0 min | 2.1-5.4 (mean 3.5) |
+| Scattered over 20 cm | 0.5-2.6 min (mean 1.7) | 13.7-46.4 min | 0.9-2.9 (mean 1.9) |
+| Pile, no trail laid | as the pile | 19.1-37.2 min | 1.1-2.1 (mean 1.4) |
+
+The pile is cleared 1.9 times as fast as scattered seeds (2.8 in the
+field, at 60 cm with 300 seeds) and found later (5.4 against 3.5 min in
+the field), as El Boukhrissi et al. (2023) found for M. barbarus. All 40
+workers are out at once at the pile; the trail does it.
+
+**Lasting trails (test 25).** The same pile; halfway along the route the
+trail smells 6.0-7.2 (followed above 0.05) when the last seed is taken,
+50% of that an hour later, and is still followed 6 hours on. With Lasius
+niger's half-life it keeps 6% at an hour and is given up after 100-111
+minutes. The plan's check, "a Lasius trail is not followed an hour after",
+is too strong: a trail 40 harvesters laid over 10-20 minutes is so strong
+that even fading as Lasius niger's it lasts nearly two hours, so the test
+asks for the difference instead (half against a sixteenth at an hour; hours
+against under two).
+
 ---
 
 ## 10. Architecture
@@ -2076,15 +2224,18 @@ parameters, I stop and report before changing the model.
 - Charbonneau & Dornhaus 2015. When doing nothing is something. J. Bioecon.
 - Deneubourg, Goss, Franks, Sendova-Franks, Detrain & Chrétien 1991. The dynamics of collective sorting: robot-like ants and ant-like robots. In From Animals to Animats (SAB 1990). MIT Press.
 - Depickère, Fresneau & Deneubourg 2004. Dynamics of aggregation in *Lasius niger* (Formicidae): influence of polyethism. Insectes Soc. 51, 81-90.
+- Detrain, Tasse, Versaen & Pasteels 2000. A field assessment of optimal foraging in ants: trail patterns and seed retrieval by the European harvester ant *Messor barbarus*. Insectes Soc. 47, 56-62.
 - Diez, Deneubourg & Detrain 2012. Social prophylaxis through distant corpse removal in ants. Naturwissenschaften 99, 833-842.
 - Diez, Lejeune & Detrain 2014. Keep the nest clean: survival advantages of corpse removal in ants. Biol. Lett. 10, 20140306.
 - Dussutour, Poissonnier, Buhl & Simpson 2016. Resistance to nutritional stress in ants: when being fat is advantageous. J. Exp. Biol. 219, 824-833.
+- El Boukhrissi et al. 2023. Efficiency of foraging behaviour in the ant genus *Messor* (Hymenoptera: Formicidae: Myrmicinae) in response to food distribution. Eur. J. Entomol. 120, 357-365.
 - Dussutour & Simpson 2009. Communal nutrition in ants. Curr. Biol.
 - Dussutour & Simpson 2012. Ant workers die young and colonies collapse when fed a high-protein diet. Proc. R. Soc. B.
 - Franks & Sendova-Franks 1992. Brood sorting by ants. Behav. Ecol. Sociobiol.
 - Franks, Mallon, Bray, Hamilton & Mischler 2003. Strategies for choosing between alternatives with different attributes: exemplified by house-hunting ants. Anim. Behav. 65, 215-223.
 - Goss, Aron, Deneubourg & Pasteels 1989. Self-organized shortcuts in the Argentine ant. Naturwissenschaften.
 - Greenwald, Eckmann & Feinerman 2018. Individual crop loads provide local control for collective food intake in ant colonies. eLife.
+- Heredia & Detrain 2000. Worker size polymorphism and ethological role of sting associated glands in the harvester ant *Messor barbarus*. Insectes Soc. 47, 383-389.
 - Hurlbert, Ballantyne & Powell 2008. Shaking a leg and hot to trot: the effects of body size and temperature on running speed in ants. Ecol. Entomol.
 - Khuong et al. 2016. Stigmergic construction and topochemical information shape ant nest architecture. PNAS.
 - Mailleux, Deneubourg & Detrain 2000. How do ants assess food volume? Anim. Behav.

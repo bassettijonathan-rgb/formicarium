@@ -18,7 +18,7 @@ import { stepSoil } from './soil';
 import { type HeatMat, MAT_WIDTH, updateTemperature } from './heat';
 import { pourWater, updateHumidity, updateWater } from './water';
 import { agePrey, updateMould } from './mould';
-import { type Cut, type Insect, type Piece, agePieces, edible, makeInsect } from './prey';
+import { type Cut, type Insect, type Piece, type SeedMix, agePieces, edible, makeInsect, makeSeeds } from './prey';
 import { STEPS_PER_SECOND } from './time';
 import { runDispensers } from './objects';
 import { type History, createHistory, recordHistory } from './history';
@@ -413,6 +413,14 @@ export function placeInsect(world: World, insect: Insect, cut: Cut, x: number, y
   world.nextFoodId += pieces.length;
   world.prey.push(...pieces);
   return pieces.map((p) => p.id);
+}
+
+/** Scatters `count` seeds of `mix` in the arena within `spread` mm of (x, y) (DESIGN.md 4.4). Returns their ids. */
+export function placeSeeds(world: World, mix: SeedMix, count: number, x: number, y: number, spread: number): number[] {
+  const seeds = makeSeeds(world.seed, world.step, world.nextFoodId, mix, count, x, y, spread);
+  world.nextFoodId += seeds.length;
+  world.prey.push(...seeds);
+  return seeds.map((p) => p.id);
 }
 
 /** Takes a drop away (the keeper cleaning up, or an experiment removing food). */

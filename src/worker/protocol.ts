@@ -4,7 +4,7 @@ import type { Census } from '../sim/history';
 import type { AntCard } from '../sim/inspect';
 import type { KeeperCommand } from '../sim/keeper';
 import type { Decoration } from '../sim/decor';
-import type { Insect, Part } from '../sim/prey';
+import type { Kind, Part } from '../sim/prey';
 import type { NestLayout, NestMaterial, NestSetup, NestSize, TubeEnd } from '../sim/nest';
 import type { TableSave } from '../sim/colonies';
 import type { Kept, ShelfEntry } from './store';
@@ -213,7 +213,7 @@ export interface PieceView {
   y: number;
   angle: number;
   place: number;
-  insect: Insect;
+  insect: Kind;
   part: Part;
   length: number;
   width: number;

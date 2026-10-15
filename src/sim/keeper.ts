@@ -7,22 +7,22 @@
  */
 import { createArena } from './arena';
 import { type Decoration, layDecorations, stampDecorations } from './decor';
-import { type Item, canPutFood, emptyDishes, moveDecoration, putItem, refillFeeders, removeDecoration } from './objects';
-import { TANK_ARENA } from './tank';
+import { type Item, SEED_SCOOP, canPutFood, emptyDishes, moveDecoration, putItem, refillFeeders, removeDecoration } from './objects';
 import { MAT_WIDTH } from './heat';
 import { AntState, Caste, Place } from './ants';
 import { BroodStage, addBrood } from './brood';
 import { cellSolid } from './farm';
 import { Purpose, Rng } from './rng';
 import { DEFAULT_NEST, type NestSetup, type TubeEnd, lightAt } from './nest';
-import { Species } from './species';
+import { Species, arenaFor } from './species';
 import { addModule, connect, connectArena, moveModule, removeModule, removeTube, setPlug } from './table';
-import type { Cut, Insect } from './prey';
+import type { Cut, Insect, SeedMix } from './prey';
 import {
   cleanArena,
   createWorld,
   placeInsect,
   placeProtein,
+  placeSeeds,
   placeSugar,
   removeFood,
   setCover,
@@ -63,9 +63,9 @@ export type KeeperCommand =
   | { type: 'clean' }
   /**
    * An object put in the arena with its middle at (x, y); a liquid feeder comes full of sugar water of `concentration` mol/L
-   * (B3-B5), and an automatic one keeps it so; an insect dispenser gives `insect`, cut as `cut`.
+   * (B3-B5), and an automatic one keeps it so; an insect dispenser gives `insect`, cut as `cut`; a seed dispenser, `seeds`.
    */
-  | { type: 'put'; item: Item; x: number; y: number; concentration: number; insect?: Insect; cut?: Cut }
+  | { type: 'put'; item: Item; x: number; y: number; concentration: number; insect?: Insect; cut?: Cut; seeds?: SeedMix }
   /** The decoration at `index` in the tank's list moved so its middle is at (x, y), with any food in it (B3). */
   | { type: 'move'; index: number; x: number; y: number }
   /** The decoration at `index` taken out, with any food in it (B3). */
@@ -85,8 +85,13 @@ export interface LoggedCommand {
 export const TANK_ROOM = 22;
 export const TANK_MAT_X = 110;
 
-/** Where a new tank's first sugar drop goes: 10 cm in from the tube and 4.5 cm toward the back. */
-export const FIRST_DROP = { x: 100, y: TANK_ARENA.height / 2 - 45 } as const;
+/** Where a new tank's first food goes: 10 cm in from the tube and 4.5 cm toward the back, in an arena `height` mm deep. */
+export function firstDrop(height: number): { x: number; y: number } {
+  return { x: 100, y: height / 2 - 45 };
+}
+
+/** Where a new tank's first sugar drop goes in the 40 x 30 cm arena. */
+export const FIRST_DROP = firstDrop(arenaFor(Species.lasiusNiger).height);
 
 /**
  * The keeper's tank as the page sets it up: a queen and 60 workers in a room a
@@ -94,7 +99,8 @@ export const FIRST_DROP = { x: 100, y: TANK_ARENA.height / 2 - 45 } as const;
  * (`nest`, DESIGN.md 3.5; null for the sand farm of the first tanks), the heat
  * mat under the middle of it, a 40 x 30 cm arena with stones, bark, leaves and
  * moss laid out from the seed (DESIGN.md A1, A4), and a first sugar drop, so a
- * new tank has something to find. The nest waters itself (a sand farm stays as
+ * new tank has something to find (for Messor barbarus, 60 x 40 cm, and a
+ * scoop of small seeds instead). The nest waters itself (a sand farm stays as
  * damp as it was poured, DESIGN.md 7.7), what is left to rot goes mouldy, and
  * the colony can die.
  */
@@ -110,7 +116,9 @@ export function createTank(seed: number, nest: NestSetup | null = DEFAULT_NEST, 
   if (nest?.testTube) startBrood(world);
   setHeatMat(world, nest ? (world.farm.width - MAT_WIDTH) / 2 : TANK_MAT_X);
   furnishArena(world, []);
-  placeSugar(world, FIRST_DROP.x, FIRST_DROP.y, 40, 1);
+  const first = firstDrop(world.arena.height);
+  if (world.params.seeds) placeSeeds(world, 'small', SEED_SCOOP.count, first.x, first.y, SEED_SCOOP.spread);
+  else placeSugar(world, first.x, first.y, 40, 1);
   return world;
 }
 
@@ -141,13 +149,14 @@ function startBrood(world: World): void {
 }
 
 /**
- * Gives a tank the keeper's big arena and lays out its decorations, clear of
+ * Gives a tank the keeper's big arena (its species' size) and lays out its decorations, clear of
  * the tube's mouth, the first drop and any `keepClear` spots (things already
  * in the arena when an old tank moves into the new box).
  */
 export function furnishArena(world: World, keepClear: { x: number; y: number; radius: number }[]): void {
-  world.arena = createArena(TANK_ARENA.width, TANK_ARENA.height);
-  const clear = [{ x: world.arena.entranceX, y: world.arena.entranceY, radius: 45 }, { ...FIRST_DROP, radius: 30 }, ...keepClear];
+  const size = arenaFor(world.species);
+  world.arena = createArena(size.width, size.height);
+  const clear = [{ x: world.arena.entranceX, y: world.arena.entranceY, radius: 45 }, { ...firstDrop(size.height), radius: 30 }, ...keepClear];
   world.decor = layDecorations(world.seed, world.arena.width, world.arena.height, clear);
   stampDecorations(world.arena, world.decor);
 }
@@ -204,7 +213,7 @@ export function applyCommand(world: World, command: KeeperCommand): boolean {
       emptyDishes(world);
       break;
     case 'put':
-      putItem(world, command.item, command.x, command.y, { concentration: command.concentration, insect: command.insect, cut: command.cut });
+      putItem(world, command.item, command.x, command.y, { concentration: command.concentration, insect: command.insect, cut: command.cut, seeds: command.seeds });
       break;
     case 'move':
       moveDecoration(world, command.index, command.x, command.y);

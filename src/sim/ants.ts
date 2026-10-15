@@ -384,6 +384,12 @@ export interface AntContext {
   nestMode: NestMode;
   params: AntParams;
   rng: Rng;
+  /**
+   * For a species that stores seeds, the pieces lying free in the arena and in the farm as the step began
+   * (`stepAnts`): a granary holds hundreds of seeds, too many to look through for every ant.
+   */
+  arenaPieces?: Piece[];
+  farmPieces?: Piece[];
 }
 
 /** Advances every ant by one step, in id order. */
@@ -395,6 +401,10 @@ export function stepAnts(ctx: AntContext): void {
   const burn = ctx.nestMode === 'farm' ? (params.burnRate / params.daySeconds) * DT : 0;
   const days = DT / params.daySeconds;
   const alarmKeep = params.alarm ? Math.pow(0.5, DT / params.alarmHalfLife) : 1;
+  if (params.seeds) {
+    ctx.arenaPieces = ctx.prey.filter((p) => p.place === Place.arena && p.carriedBy < 0);
+    ctx.farmPieces = ctx.prey.filter((p) => p.place === Place.farm && p.carriedBy < 0);
+  }
   for (let i = 0; i < ants.count; i++) {
     const place = ants.place[i]!;
     if (place === Place.gone) continue;
@@ -613,7 +623,8 @@ function walk(ctx: AntContext, i: number): void {
   const trailR = sampleTrail(arena, rx, ry);
   const trailSum = trailL + trailR;
   // A scout out for protein with no insect in mind searches on its own: the trail leads to sugar as often as not.
-  const scouting = state === AntState.exploring && ants.seekProtein[i] === 1;
+  // A harvester's scouts follow trails all the same: they lead to seeds.
+  const scouting = state === AntState.exploring && ants.seekProtein[i] === 1 && !params.seeds;
   const undertaker = state === AntState.carryingCorpse;
   if (!scouting && !undertaker && trailSum > params.trailThreshold) turn += params.trailTurn * DT * ((trailR - trailL) / trailSum);
 
@@ -695,7 +706,7 @@ function walk(ctx: AntContext, i: number): void {
   } else {
     // A searching ant, or one giving up and going home empty, takes food of its kind that it walks into.
     const drop = nearestDrop(ctx, i, nx, ny, 1);
-    const piece = wantsProtein(ctx, i) ? nearestPiece(ctx, nx, ny, 1) : undefined;
+    const piece = wantsPiece(ctx, i) ? nearestPiece(ctx, nx, ny, 1, wantsProtein(ctx, i)) : undefined;
     if (piece && (!drop || Math.hypot(piece.x - nx, piece.y - ny) - pieceReach(piece) < Math.hypot(drop.x - nx, drop.y - ny) - foodReach(drop))) {
       startAtPrey(ctx, i, piece);
     } else if (drop) {
@@ -787,10 +798,15 @@ function wantsProtein(ctx: AntContext, i: number): boolean {
   return ctx.ants.seekProtein[i] === 1 || ctx.ants.broodNeed[i]! >= ctx.params.preyNeed;
 }
 
+/** True if the ant takes pieces lying in the arena: insects, if it wants protein; seeds, always, if it harvests them. */
+function wantsPiece(ctx: AntContext, i: number): boolean {
+  return ctx.params.seeds || wantsProtein(ctx, i);
+}
+
 /** The nearest food of the kind the ant is after, a drop or a piece of insect, within `range` mm: where it is. */
 function nearestFood(ctx: AntContext, i: number, x: number, y: number, range: number): { x: number; y: number } | undefined {
   const drop = nearestDrop(ctx, i, x, y, range);
-  const piece = ctx.prey.length > 0 && wantsProtein(ctx, i) ? nearestPiece(ctx, x, y, range) : undefined;
+  const piece = ctx.prey.length > 0 && wantsPiece(ctx, i) ? nearestPiece(ctx, x, y, range, wantsProtein(ctx, i)) : undefined;
   if (!piece) return drop;
   if (!drop) return piece;
   return Math.hypot(piece.x - x, piece.y - y) - pieceReach(piece) < Math.hypot(drop.x - x, drop.y - y) - foodReach(drop) ? piece : drop;

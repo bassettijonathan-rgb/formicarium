@@ -26,7 +26,7 @@ import {
 } from './ants';
 import { BroodStage, addBrood, broodLike, broodNear, larvaHungry, larvaStarved } from './brood';
 import { drawLifespan, dropCorpse, tryPickUpCorpse } from './corpses';
-import { mayPutDownPiece, sipPiece, tryPickUpRefuse } from './prey';
+import { holdsSeed, mayPutDownPiece, mayStoreSeed, sipPiece, tendStores, tryPickUpRefuse } from './prey';
 import { addToField, cellSolid, isBlockedFarm, isSoil, openAbove, sampleField, type Farm } from './farm';
 import { speedAt, temperatureAt } from './heat';
 import { mouldAt } from './mould';
@@ -551,8 +551,13 @@ export function stepFarmAnt(ctx: AntContext, i: number): void {
   // or a mouldy piece as it would a corpse (Arena 3, B8).
   const { ants } = ctx;
   if (ctx.prey.length > 0 && (state === AntState.resting || state === AntState.wandering) && ants.caste[i] === Caste.worker && ants.pieceHeld[i]! < 0) {
-    if (tryPickUpRefuse(ctx, i)) return;
-    sipPiece(ctx, i);
+    // A harvester tends its seed stores as well (DESIGN.md 4.4).
+    if (ctx.params.seeds) {
+      if (tendStores(ctx, i)) return;
+    } else {
+      if (tryPickUpRefuse(ctx, i)) return;
+      sipPiece(ctx, i);
+    }
   }
   if (state === AntState.resting) rest(ctx, i);
   else if (state === AntState.sharing) share(ctx, i);
@@ -622,14 +627,16 @@ function setOffToForage(ctx: AntContext, i: number): boolean {
   // An ant already carrying protein has some for the brood: it feels the need to fetch more less.
   const need = ants.broodNeed[i]! * Math.max(0, 1 - ants.cropProtein[i]! / params.cropLoad);
   const forProtein = need > hungry;
-  const remembers = ants.hasMemory[i] === 1 && ants.memoryProtein[i] === (forProtein ? 1 : 0);
+  // A harvester goes back to a patch of seeds whatever it set out for.
+  const remembers = ants.hasMemory[i] === 1 && (ants.memoryProtein[i] === (forProtein ? 1 : 0) || ants.memoryProtein[i] === 2);
   const own = remembers ? params.returnToFoodRate : params.forageRate;
   // How readily this worker forages at all (its threshold against the strongest stimulus, Bonabeau et
   // al. 1996), times how hungry it or the brood is: trips rise in step with hunger (Greenwald et al. 2018).
   // The threshold falls as the worker's fat runs down: lean workers forage (Robinson et al. 2009).
   const threshold = (ants.forageThreshold[i]! * ants.fat[i]!) / params.fatRef;
   const propensity = 1 / (1 + Math.pow(threshold, params.forageSteepness));
-  const response = propensity * (params.scoutShare + (1 - params.scoutShare) * Math.max(hungry, need));
+  // A harvester goes out for seeds to store even when no one is hungry (`seedHoard`, DESIGN.md 4.4).
+  const response = propensity * (params.scoutShare + (1 - params.scoutShare) * Math.max(hungry, need, params.seedHoard));
   const rate = (own + params.recruitRate * ants.excitement[i]!) * response;
   if (!rng.chance(rate * DT)) return false;
   ants.state[i] = remembers ? AntState.toFood : AntState.exploring;
@@ -684,7 +691,9 @@ function walkFarm(ctx: AntContext, i: number): void {
   // follows the brood scent only inside the soil; in the open she goes back in by the colony odour.
   let toBrood = false;
   const queen = ants.caste[i] === Caste.queen;
-  const carrier = !queen && (ants.cropProtein[i]! >= params.nurseLoad || ants.pieceHeld[i]! >= 0);
+  // A worker carrying a seed takes it to the stores, not to the brood (DESIGN.md 4.4).
+  const seed = ants.pieceHeld[i]! >= 0 && holdsSeed(ctx, i);
+  const carrier = !queen && (ants.cropProtein[i]! >= params.nurseLoad || (ants.pieceHeld[i]! >= 0 && !seed));
   if ((inbound || state === AntState.wandering) && (carrier || (queen && !outside))) {
     const bl = sampleField(farm, farm.broodScent, lx, ly);
     const br = sampleField(farm, farm.broodScent, rx, ry);
@@ -811,6 +820,12 @@ function walkFarm(ctx: AntContext, i: number): void {
     turn += params.thermoTurn * DT * Math.max(-1, Math.min(1, (lightLeft - lightRight) / params.lightSense));
   }
 
+  // A worker carrying a seed in the nest makes for drier air, where seeds keep (DESIGN.md 4.4).
+  if (seed && !outside && (inbound || state === AntState.wandering) && humidityAt(farm, x, y) >= params.seedDryHumidity) {
+    const across = humidityAt(farm, lx, ly) - humidityAt(farm, rx, ry);
+    turn += params.thermoTurn * DT * Math.max(-1, Math.min(1, across / params.hygroSense));
+  }
+
   // Ants walk faster where it is warm (Hurlbert et al. 2008).
   const walking = speedAt(params, temperatureAt(farm, x, y));
   const running = alarmed ? 1 + params.alarmSpeed * ants.alarm[i]! : 1;
@@ -837,7 +852,11 @@ function walkFarm(ctx: AntContext, i: number): void {
       if (near || ++ants.timer[i]! > params.digReturnTime * STEPS_PER_SECOND) ants.hasDigSite[i] = 0;
     }
     // A worker bringing in a piece of insect puts it down by the brood (B8).
-    if (ants.pieceHeld[i]! >= 0) mayPutDownPiece(ctx, i, broodAround(ctx, nx, ny, i) > 0);
+    // A seed goes into store, in the dry and away from the brood (DESIGN.md 4.4).
+    if (ants.pieceHeld[i]! >= 0) {
+      if (seed) mayStoreSeed(ctx, i, broodAround(ctx, nx, ny, i) > 0);
+      else mayPutDownPiece(ctx, i, broodAround(ctx, nx, ny, i) > 0);
+    }
     if (setOffToForage(ctx, i)) return;
     if (ants.caste[i] === Caste.worker && tryDig(ctx, i)) return;
     const enclosed = enclosure(ctx, nx, ny);

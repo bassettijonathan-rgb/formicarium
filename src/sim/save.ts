@@ -18,9 +18,9 @@ import { stampDecorations } from './decor';
 import { type LoggedCommand, createTank, furnishArena } from './keeper';
 import type { Farm } from './farm';
 import { type BoughtNest, TEST_TUBE_SETUP, nestMaterialName } from './nest';
-import { TANK_ARENA } from './tank';
+
 import { STEPS_PER_SECOND } from './time';
-import { Species } from './species';
+import { Species, arenaFor } from './species';
 import type { World } from './world';
 
 /**
@@ -114,7 +114,7 @@ function tableFromNest(farm: Farm, nest: BoughtNest, fresh: BoughtNest): void {
  */
 function moveIntoBigArena(world: World): void {
   const old = world.arena;
-  const offset = TANK_ARENA.height / 2 - old.entranceY;
+  const offset = arenaFor(world.species).height / 2 - old.entranceY;
   const inArena: number[] = [];
   for (let i = 0; i < world.ants.count; i++) if (world.ants.place[i] === Place.arena) inArena.push(i);
   furnishArena(world, [
