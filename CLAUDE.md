@@ -24,7 +24,7 @@ update DESIGN.md in the same pull request when a model changes.
 - `npm run experiment -- starvation --runs 3 [--days 30] [--fed]`: a colony fed 4 days, then its food stops; who starves first (M5c; about 10 min per run); `growth` takes `--mortal` (adults die of hunger, drying out and heat)
 - `npm run experiment -- nest-damp --runs 3 [--no-hygro] [--layout organic]`: brood in a bought ytong nest wet at one end (Nests 1; a few minutes per run); `nest-room --runs 2 --ants 80`: floor a colony covers in a big nest; `nest-dark --runs 3 [--no-light] [--gradient] [--material acrylic]`: brood under a half-lifted cover (Nests 2)
 - `npm run experiment -- nest-spread --ants 800`: a colony in two joined small nests (Nests 3); `moving --ants 250 [--lit]`: a test-tube colony joined to a nest, its tube covered or not (a few minutes per run)
-- `npm run experiment -- granary --runs 3 [--minutes 60]`: seeds strewn in a Messor nest end in its dry part; `harvest [--scattered] --runs 6 --minutes 120`: a pile of seeds against scattered ones; `trail-life --runs 3`: how long a Messor trail lasts (a minute or so per run)
+- `npm run experiment -- granary --runs 3 [--minutes 60]`: seeds strewn in a Messor nest end in its dry part; `harvest [--scattered] --runs 6 --minutes 120`: a pile of seeds against scattered ones; `trail-life --runs 3`: how long a Messor trail lasts (a minute or so per run); `sizes --runs 3 [--no-matching]`: which workers carry the big seeds (seconds per run)
 - `npm run farm -- --seed 1 --ants 60 --hours 3`: a farm colony headless, with a text picture of the nest
 - `npm run build`: production build (deployed to GitHub Pages from `main`)
 

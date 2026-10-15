@@ -44,6 +44,7 @@ import { temperatureAt } from './heat';
 import { humidityAt } from './water';
 import type { AntParams } from './params';
 import { Purpose, Rng } from './rng';
+import { crackSpeed, seedCapacity } from './sizes';
 import { STEPS_PER_SECOND } from './time';
 
 /** The feeder insects a keeper buys (B6). */
@@ -299,23 +300,23 @@ export function carryable(prey: readonly Piece[], p: Piece, params: AntParams): 
   return p.joint < 0 && p.carriedBy < 0 && p.mass <= params.preyCarryMax && bare(prey, p);
 }
 
-/** True if a worker of this species carries seed `p` home: it harvests seeds, and the seed is light enough. */
-export function seedWanted(p: Piece, params: AntParams): boolean {
-  return params.seeds && p.mass <= params.seedCarryMax;
+/** True if a worker of this species carries seed `p` home: it harvests seeds, and the seed is no heavier than `carry` mg (the worker's `seedCapacity`). */
+export function seedWanted(p: Piece, params: AntParams, carry = params.seedCarryMax): boolean {
+  return params.seeds && p.mass <= carry;
 }
 
 /**
  * The nearest edible piece lying in the arena within `range` mm of its edge,
  * or undefined: a piece of insect if the ant takes `insects`, a seed if it
- * would carry it home.
+ * would carry it home (no heavier than `carry` mg).
  */
-export function nearestPiece(ctx: AntContext, x: number, y: number, range: number, insects = true): Piece | undefined {
+export function nearestPiece(ctx: AntContext, x: number, y: number, range: number, insects = true, carry = ctx.params.seedCarryMax): Piece | undefined {
   const { params } = ctx;
   let best: Piece | undefined;
   let bestGap = range;
   for (const p of ctx.arenaPieces ?? ctx.prey) {
     if (p.place !== Place.arena || p.carriedBy >= 0 || !edible(p)) continue;
-    if (isSeed(p) ? !seedWanted(p, params) : !insects) continue;
+    if (isSeed(p) ? !seedWanted(p, params, carry) : !insects) continue;
     const gap = Math.hypot(p.x - x, p.y - y) - pieceReach(p);
     if (gap <= bestGap) {
       best = p;
@@ -345,7 +346,8 @@ export function workAtPrey(ctx: AntContext, i: number): void {
   const steps = ++ants.timer[i]!;
   if (isSeed(p)) {
     // A seed is taken home whole; one too heavy for this worker is left for a bigger one.
-    if (seedWanted(p, params)) pickUpPiece(ctx, i, p, seedsNear(ctx, p));
+    const carry = seedCapacity(ants, params, i);
+    if (seedWanted(p, params, carry)) pickUpPiece(ctx, i, p, seedsNear(ctx, p, carry));
     else leavePrey(ctx, i, false);
     return;
   }
@@ -421,12 +423,12 @@ function remainsNear(ctx: AntContext, p: Piece): boolean {
   );
 }
 
-/** True if, round seed `p`, the ant notices more seeds it would take: a patch worth a trail. */
-function seedsNear(ctx: AntContext, p: Piece): boolean {
+/** True if, round seed `p`, the ant notices more seeds it would take (no heavier than `carry` mg): a patch worth a trail. */
+function seedsNear(ctx: AntContext, p: Piece, carry: number): boolean {
   const { params } = ctx;
   const r = params.seedPatchRange;
   for (const q of ctx.arenaPieces ?? ctx.prey) {
-    if (q === p || q.place !== Place.arena || q.carriedBy >= 0 || !isSeed(q) || !edible(q) || !seedWanted(q, params)) continue;
+    if (q === p || q.place !== Place.arena || q.carriedBy >= 0 || !isSeed(q) || !edible(q) || !seedWanted(q, params, carry)) continue;
     if (Math.abs(q.x - p.x) <= r && Math.abs(q.y - p.y) <= r && Math.hypot(q.x - p.x, q.y - p.y) <= r) return true;
   }
   return false;
@@ -652,8 +654,8 @@ export function tendStores(ctx: AntContext, i: number): boolean {
   }
   const hungry = Math.max(0, 1 - ants.crop[i]! / params.cropLoad);
   if (isSeed(p) && p.cuts === 0) {
-    // Seconds of biting this second: as hungry as it or the brood is.
-    p.bitten += Math.max(hungry, ants.broodNeed[i]!) / TEND_RATE;
+    // Seconds of a media's biting this second: as hungry as it or the brood is, and faster the bigger its head.
+    p.bitten += (Math.max(hungry, ants.broodNeed[i]!) * crackSpeed(ants, i)) / TEND_RATE;
     if (p.bitten >= p.skin) {
       p.cuts = 1;
       p.bitten = 0;

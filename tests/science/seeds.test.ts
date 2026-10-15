@@ -2,10 +2,11 @@
  * Messor barbarus against what was seen of it (DESIGN.md section 9, tests
  * 23-25): seeds are stored in the dry, away from the brood (keepers); a
  * clump of seeds is harvested faster than the same seeds scattered (El
- * Boukhrissi et al. 2023); its trails last (Detrain et al. 2000).
+ * Boukhrissi et al. 2023); its trails last (Detrain et al. 2000); big
+ * workers carry the big seeds (Reyes-López & Fernández-Haeger 2001).
  */
 import { describe, expect, it } from 'vitest';
-import { runGranary, runHarvest, runTrailLife } from '../../src/sim/experiments';
+import { runGranary, runHarvest, runSizeMatching, runTrailLife } from '../../src/sim/experiments';
 
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 const SEEDS = [1, 2, 3];
@@ -45,6 +46,19 @@ describe('Messor barbarus (DESIGN.md 4.4)', () => {
       const lasius = runTrailLife({ seed, after: 60, upTo: 240, params: { trailHalfLife: 15 * 60 } });
       expect(lasius.smelt / lasius.atClearing).toBeLessThan(0.1);
       expect(lasius.faded).toBeGreaterThan(0);
+    }
+  }, 600_000);
+
+  it('test 26: in a colony of all sizes, the workers carrying the heavier seeds are the bigger ones; with every worker a media\'s load, not', () => {
+    for (const seed of SEEDS) {
+      const r = runSizeMatching({ seed, minutes: 60 });
+      expect(r.taken).toBeGreaterThan(0.8 * r.seeds);
+      expect(r.r).toBeGreaterThan(0.3);
+      expect(r.heavyCarriers).toBeGreaterThan(r.lightCarriers + 1.5);
+      expect(r.byClass.minor.mass).toBeLessThan(r.byClass.media.mass);
+      expect(r.byClass.media.mass).toBeLessThan(r.byClass.major.mass);
+      const flat = runSizeMatching({ seed, minutes: 60, params: { seedSizeExponent: 0 } });
+      expect(Math.abs(flat.heavyCarriers - flat.lightCarriers)).toBeLessThan(1);
     }
   }, 600_000);
 });

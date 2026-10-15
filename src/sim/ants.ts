@@ -17,6 +17,7 @@ import { computeContacts, stepFarmAnt } from './farmAnts';
 import { speedAt } from './heat';
 import { type FoodDrop, foodQuality, foodReach } from './food';
 import { type Piece, deliverToLabNest, holdPiece, nearestPiece, pieceReach, startAtPrey, workAtPrey } from './prey';
+import { seedCapacity } from './sizes';
 import type { AntParams } from './params';
 import type { Rng } from './rng';
 import { STEPS_PER_SECOND } from './time';
@@ -176,6 +177,8 @@ export interface Ants {
   forageThreshold: Float64Array;
   /** A `Caste`. */
   caste: Uint8Array;
+  /** Body length in tenths of a mm, for a species whose workers differ in size (Messor, `sizes.ts`); 0 for the species' standard worker. */
+  size: Uint8Array;
   /** The protein-rich part of the crop's contents, µL (the rest is sugar water). */
   cropProtein: Float64Array;
   /** Queens: protein held in the body for making eggs, µL. */
@@ -288,6 +291,7 @@ export function createAnts(count: number): Ants {
     partner: new Int32Array(count).fill(-1),
     forageThreshold: new Float64Array(count),
     caste: new Uint8Array(count),
+    size: new Uint8Array(count),
     cropProtein: new Float64Array(count),
     reserve: new Float64Array(count),
     age: new Float64Array(count),
@@ -706,7 +710,7 @@ function walk(ctx: AntContext, i: number): void {
   } else {
     // A searching ant, or one giving up and going home empty, takes food of its kind that it walks into.
     const drop = nearestDrop(ctx, i, nx, ny, 1);
-    const piece = wantsPiece(ctx, i) ? nearestPiece(ctx, nx, ny, 1, wantsProtein(ctx, i)) : undefined;
+    const piece = wantsPiece(ctx, i) ? nearestPiece(ctx, nx, ny, 1, wantsProtein(ctx, i), seedCapacity(ctx.ants, ctx.params, i)) : undefined;
     if (piece && (!drop || Math.hypot(piece.x - nx, piece.y - ny) - pieceReach(piece) < Math.hypot(drop.x - nx, drop.y - ny) - foodReach(drop))) {
       startAtPrey(ctx, i, piece);
     } else if (drop) {
@@ -806,7 +810,7 @@ function wantsPiece(ctx: AntContext, i: number): boolean {
 /** The nearest food of the kind the ant is after, a drop or a piece of insect, within `range` mm: where it is. */
 function nearestFood(ctx: AntContext, i: number, x: number, y: number, range: number): { x: number; y: number } | undefined {
   const drop = nearestDrop(ctx, i, x, y, range);
-  const piece = ctx.prey.length > 0 && wantsPiece(ctx, i) ? nearestPiece(ctx, x, y, range, wantsProtein(ctx, i)) : undefined;
+  const piece = ctx.prey.length > 0 && wantsPiece(ctx, i) ? nearestPiece(ctx, x, y, range, wantsProtein(ctx, i), seedCapacity(ctx.ants, ctx.params, i)) : undefined;
   if (!piece) return drop;
   if (!drop) return piece;
   return Math.hypot(piece.x - x, piece.y - y) - pieceReach(piece) < Math.hypot(drop.x - x, drop.y - y) - foodReach(drop) ? piece : drop;

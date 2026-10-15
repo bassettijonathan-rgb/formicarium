@@ -14,6 +14,7 @@ import { type NestSetup, createNest, moduleById } from './nest';
 import type { FoodDrop } from './food';
 import { type AntParams, DEFAULT_ANT_PARAMS } from './params';
 import { Purpose, Rng } from './rng';
+import { drawSize } from './sizes';
 import { stepSoil } from './soil';
 import { type HeatMat, MAT_WIDTH, updateTemperature } from './heat';
 import { pourWater, updateHumidity, updateWater } from './water';
@@ -121,7 +122,9 @@ const POUR_SPREAD = 15;
 /**
  * Each worker's own response threshold for foraging, log-uniform between the
  * two bounds, and its age. The keeper's workers start with the fat of a
- * settled nest worker; who becomes lean is up to what each one does.
+ * settled nest worker; who becomes lean is up to what each one does. A
+ * species whose workers differ in size gets them as a colony of that many
+ * workers makes them (`sizes.ts`).
  */
 function giveTraits(ants: Ants, params: AntParams, seed: number): void {
   const rng = new Rng(seed, Purpose.traits);
@@ -133,6 +136,10 @@ function giveTraits(ants: Ants, params: AntParams, seed: number): void {
     ants.fat[i] = params.fatRef;
     ants.lifespan[i] = drawLifespan(seed, i, ants.age[i]!, params);
   }
+  // Sizes from their own stream, so species of one size draw exactly what they did before sizes.
+  if (!params.polymorph) return;
+  const sizes = new Rng(seed, Purpose.traits, 1);
+  for (let i = 0; i < ants.count; i++) ants.size[i] = drawSize(sizes, ants.count);
 }
 
 /** The keeper tips the workers onto the soil surface, all at one spot in the middle. They come part-fed. */

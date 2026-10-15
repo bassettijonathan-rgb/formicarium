@@ -10,7 +10,7 @@ import { Container, Graphics, type Renderer, Sprite, type Texture } from 'pixi.j
 import { AntState, Caste } from '../sim/ants';
 import { ANT_STRIDE, type AntsSnapshot, type PieceView } from '../worker/protocol';
 import { drawPiece } from './insects';
-import { ANT_SCALE, CROP, GAIT_FRAMES, STRIDE, makeAntTextures, makeDeadTexture, speciesSize } from './antSprites';
+import { ANT_SCALE, CROP, GAIT_FRAMES, MAJOR_LENGTH, STRIDE, makeAntTextures, makeDeadTexture, speciesSize, workerLength } from './antSprites';
 import { grainColor } from './soilColors';
 
 /** Where a carried grain sits, ahead of the head, in mm. */
@@ -23,6 +23,8 @@ interface SpeciesTextures {
   normal: Texture[][];
   pale: Texture[][];
   raised: Texture[][];
+  /** A Messor major (its big head). */
+  major: Texture[][];
   dead: Texture;
 }
 
@@ -36,6 +38,7 @@ function texturesFor(renderer: Renderer, species: number): SpeciesTextures {
       normal: makeAntTextures(renderer, false, species),
       pale: makeAntTextures(renderer, true, species),
       raised: makeAntTextures(renderer, false, species, true),
+      major: makeAntTextures(renderer, false, species, false, true),
       dead: makeDeadTexture(renderer, species),
     };
     shared.set(species, t);
@@ -143,11 +146,14 @@ export class AntLayer {
       ant.body.rotation = prev.ants[o + 2]! + dh * k;
       const frame = Math.floor(((walked % STRIDE) / STRIDE) * GAIT_FRAMES) % GAIT_FRAMES;
       // An alarmed worker shows it (a Crematogaster raises its gaster); a callow is pale.
-      const textures = cur.alarmed[i] ? looks.raised : cur.callow[i] ? looks.pale : looks.normal;
+      // A Messor major has a big head.
+      const length = cur.size[i]! > 0 ? cur.size[i]! / 10 : 0;
+      const textures = cur.alarmed[i] ? looks.raised : cur.callow[i] ? looks.pale : length >= MAJOR_LENGTH ? looks.major : looks.normal;
       ant.sprite.texture = textures[cur.full[i]!]![frame]!;
-      // A queen is two to three times a worker's length, her gaster always swollen.
+      // A queen is two to three times a worker's length, her gaster always swollen; a worker of a species of many sizes is drawn at its own.
       const queen = cur.caste[i] === Caste.queen;
-      ant.sprite.scale.set((queen ? size.queen * size.worker : size.worker) * ANT_SCALE);
+      const scale = queen ? size.queen * size.worker : workerLength(cur.species, cur.size[i]!);
+      ant.sprite.scale.set(scale * ANT_SCALE);
       if (queen) ant.sprite.texture = looks.normal[1]![frame]!;
       if (cur.ants[o + 3] === AntState.dead) ant.sprite.texture = looks.dead;
       // What is at the mouth: a grain of soil (its material), a droplet being shared (-1), or nothing (0).
@@ -166,7 +172,8 @@ export class AntLayer {
         ant.piece.clear();
         if (piece) {
           drawPiece(ant.piece, piece);
-          ant.piece.position.set(PIECE_AHEAD + piece.length / 2, 0);
+          // Held at its mandibles: further ahead for a bigger worker.
+          ant.piece.position.set((PIECE_AHEAD * scale) / size.worker + piece.length / 2, 0);
         }
       }
     }

@@ -19,6 +19,7 @@ import { createArena, sampleTrail } from './arena';
 import { createTank } from './keeper';
 import { Species, arenaFor, speciesParams } from './species';
 import { type Cut, type Insect, makeSeeds } from './prey';
+import { type SizeClass, drawSize, lengthOf, sizeClass } from './sizes';
 import { type NestLayout, type NestMaterial, type NestSize, TEST_TUBE, TEST_TUBE_SETUP, moduleAt } from './nest';
 import { addModule, connect, connectArena } from './table';
 import { TANK_ARENA } from './tank';
@@ -1334,13 +1335,24 @@ export interface HarvestResult {
   mostOut: number;
 }
 
-/** A Messor barbarus lab colony behind the entrance of a bare 60 x 40 cm arena (DESIGN.md 4.4). */
+/**
+ * A Messor barbarus lab colony behind the entrance of a bare 60 x 40 cm
+ * arena (DESIGN.md 4.4). Its workers have the sizes of a grown colony's
+ * (`MATURE`, as the field colonies of the papers), however few are taken.
+ */
 function harvesters(seed: number, ants: number, params: Partial<AntParams>): World {
   const world = createWorld(seed, { ants, nest: 'lab', species: Species.messor, params });
+  if (world.params.polymorph) {
+    const rng = new Rng(seed, Purpose.test, 26);
+    for (let i = 0; i < world.ants.count; i++) world.ants.size[i] = drawSize(rng, MATURE);
+  }
   const size = arenaFor(Species.messor);
   world.arena = createArena(size.width, size.height);
   return world;
 }
+
+/** Workers in a grown Messor colony: enough for all three sizes at their full shares (`classShares`). */
+const MATURE = 1000;
 
 /** Where the seeds go in the harvesting experiments: 25 cm out from the entrance. */
 const SEED_SPOT = 250;
@@ -1509,4 +1521,78 @@ export function runGranary(opts: RunOptions & { minutes: number }): GranaryResul
   }
   const n = Math.max(1, seeds.length);
   return { stored: seeds.length, dryAtStart, dryShare: dry / n, amongBrood: among / n, seedHumidity: seedRh / n, broodHumidity: broodRh / Math.max(1, items) };
+}
+
+export interface SizeMatchingResult {
+  /** Seeds put out, and those taken home by the end. */
+  seeds: number;
+  taken: number;
+  /** The workers out of the nest at the start, by class. */
+  classes: Record<SizeClass, number>;
+  /** Pearson's correlation between a carrier's length and its seed's mass, over every seed picked up. */
+  r: number;
+  /** Mean length (mm) of the workers that picked up the lighter half of the seeds taken, and the heavier half. */
+  lightCarriers: number;
+  heavyCarriers: number;
+  /** Seeds picked up by each class, and the mean mass (mg) of those. */
+  byClass: Record<SizeClass, { seeds: number; mass: number }>;
+}
+
+/**
+ * Size matching (Reyes-López & Fernández-Haeger 2001): a Messor barbarus
+ * lab colony of `ants` workers of all sizes is given a pile of mixed and big seeds (1-30 mg)
+ * 25 cm from its entrance, and every seed picked up is noted with the
+ * length of the worker that took it. Bigger workers should carry the
+ * bigger seeds: here because a worker takes only seeds it can carry (its
+ * load going with the cube of its length), leaving heavier ones for a
+ * bigger nestmate.
+ */
+export function runSizeMatching(opts: RunOptions & { minutes: number; count?: number }): SizeMatchingResult {
+  const world = harvesters(opts.seed, opts.ants ?? 400, opts.params ?? {});
+  const { arena, ants } = world;
+  const count = opts.count ?? 30;
+  const x = arena.entranceX + SEED_SPOT;
+  const y = arena.entranceY;
+  placeSeeds(world, 'mixed', count, x, y, 8);
+  placeSeeds(world, 'big', count, x, y, 8);
+  const classes: Record<SizeClass, number> = { minor: 0, media: 0, major: 0 };
+  for (let i = 0; i < ants.count; i++) classes[sizeClass(lengthOf(ants, i))]++;
+  const picked: { length: number; mass: number }[] = [];
+  const seen = new Set<number>();
+  const steps = opts.minutes * 60 * STEPS_PER_SECOND;
+  for (let s = 1; s <= steps && world.prey.length > 0; s++) {
+    step(world);
+    for (const p of world.prey) {
+      if (p.carriedBy < 0 || p.place !== Place.arena || seen.has(p.id)) continue;
+      seen.add(p.id);
+      picked.push({ length: lengthOf(ants, p.carriedBy), mass: p.mass });
+    }
+  }
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+  const ml = mean(picked.map((q) => q.length));
+  const mm = mean(picked.map((q) => q.mass));
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (const q of picked) {
+    sxy += (q.length - ml) * (q.mass - mm);
+    sxx += (q.length - ml) ** 2;
+    syy += (q.mass - mm) ** 2;
+  }
+  const sorted = [...picked].sort((a, b) => a.mass - b.mass);
+  const halfway = Math.floor(sorted.length / 2);
+  const byClass = {} as Record<SizeClass, { seeds: number; mass: number }>;
+  for (const c of ['minor', 'media', 'major'] as const) {
+    const mine = picked.filter((q) => sizeClass(q.length) === c);
+    byClass[c] = { seeds: mine.length, mass: mean(mine.map((q) => q.mass)) };
+  }
+  return {
+    seeds: 2 * count,
+    taken: 2 * count - world.prey.length,
+    classes,
+    r: sxx > 0 && syy > 0 ? sxy / Math.sqrt(sxx * syy) : 0,
+    lightCarriers: mean(sorted.slice(0, halfway).map((q) => q.length)),
+    heavyCarriers: mean(sorted.slice(halfway).map((q) => q.length)),
+    byClass,
+  };
 }

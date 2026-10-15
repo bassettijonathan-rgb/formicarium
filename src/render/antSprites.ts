@@ -33,18 +33,28 @@ const CREMA_PALE = { body: 0x8a6448, leg: 0x9c7458, shine: 0xc9a88c, head: 0xc87
 /** Messor barbarus: glossy black, its head a little browner; callows pale grey-brown. */
 const MESSOR = { body: 0x141110, leg: 0x2c221e, shine: 0x7a6c66, head: 0x22140f };
 const MESSOR_PALE = { body: 0x7c6a5e, leg: 0x8c7a6c, shine: 0xc4b4a6, head: 0x806452 };
+/** A Messor major: the same black body under a big red-brown head (keepers' photos). */
+const MESSOR_MAJOR = { ...MESSOR, head: 0x4a1d10 };
 
 /**
  * How long the species' workers are drawn, relative to a Lasius niger worker (~4.4 mm), and its
  * queen relative to its worker. Crematogaster scutellaris workers are 3-5 mm, the queen 8-10 mm (keepers' care sheets; rough).
- * Messor barbarus workers are 3-12 mm and its queen 14-15 mm (AntsDavey care sheet); all are drawn as medias of about 7 mm
- * until the colony makes workers of different sizes.
+ * Messor barbarus workers are 3-12 mm and its queen 14-15 mm (AntsDavey care sheet): a worker is drawn at its own length
+ * (`workerLength`), one of a tank kept before sizes as a media of about 7 mm.
  */
 export function speciesSize(species: number): { worker: number; queen: number } {
   if (species === Species.messor) return { worker: 7 / 4.4, queen: 14.5 / 7 };
   return species === Species.crematogaster ? { worker: 0.85, queen: 2.4 } : { worker: 1, queen: 2 };
 }
 export const CROP = 0xd9a441;
+
+/** How long worker `size` (tenths of a mm, 0 for the species' standard worker; `Ants.size`) is drawn, relative to a Lasius niger worker. */
+export function workerLength(species: number, size: number): number {
+  return size > 0 ? size / 10 / 4.4 : speciesSize(species).worker;
+}
+
+/** Messor workers this long (mm) or longer are majors, drawn with a big head (sizes.ts). */
+export const MAJOR_LENGTH = 8;
 
 /** Leg attachment and resting foot positions (left side, y < 0); the right side mirrors them. */
 const LEGS: { base: [number, number]; knee: [number, number]; foot: [number, number] }[] = [
@@ -55,16 +65,16 @@ const LEGS: { base: [number, number]; knee: [number, number]; foot: [number, num
 
 /**
  * Textures indexed [crop full ? 1 : 0][gait frame]; `pale` draws a callow, `raised` a
- * Crematogaster worker with its gaster raised in alarm.
+ * Crematogaster worker with its gaster raised in alarm, `major` a Messor major.
  */
-export function makeAntTextures(renderer: Renderer, pale = false, species: number = Species.lasiusNiger, raised = false): Texture[][] {
+export function makeAntTextures(renderer: Renderer, pale = false, species: number = Species.lasiusNiger, raised = false, major = false): Texture[][] {
   const crema = species === Species.crematogaster;
   const messor = species === Species.messor;
-  const palette = crema ? (pale ? CREMA_PALE : CREMA) : messor ? (pale ? MESSOR_PALE : MESSOR) : pale ? PALE : DARK;
+  const palette = crema ? (pale ? CREMA_PALE : CREMA) : messor ? (pale ? MESSOR_PALE : major ? MESSOR_MAJOR : MESSOR) : pale ? PALE : DARK;
   return [0, 1].map((full) =>
     Array.from({ length: GAIT_FRAMES }, (_, f) => {
       const phase = (f / GAIT_FRAMES) * 2 * Math.PI;
-      const g = crema ? drawCrematogaster(phase, full === 1, palette, raised) : messor ? drawMessor(phase, full === 1, palette) : drawAnt(phase, full === 1, palette);
+      const g = crema ? drawCrematogaster(phase, full === 1, palette, raised) : messor ? drawMessor(phase, full === 1, palette, major) : drawAnt(phase, full === 1, palette);
       const texture = renderer.generateTexture({ target: g, frame: new Rectangle(-40, -26, 80, 52), resolution: 4 });
       g.destroy();
       return texture;
@@ -218,14 +228,16 @@ function drawCrematogaster(phase: number, full: boolean, { body: BODY, leg: LEG,
 
 /**
  * A Messor barbarus worker from above: a broad, square head with strong mandibles, a smooth mesosoma
- * without spines, two waist nodes and a glossy oval gaster.
+ * without spines, two waist nodes and a glossy oval gaster. A major's head is wider than its body,
+ * its mandibles heavier.
  */
-function drawMessor(phase: number, full: boolean, { body: BODY, leg: LEG, shine: SHINE, head: HEAD }: Palette): Graphics {
+function drawMessor(phase: number, full: boolean, { body: BODY, leg: LEG, shine: SHINE, head: HEAD }: Palette, major = false): Graphics {
   const g = new Graphics();
   limbs(g, phase, LEG);
   // Mandibles: two curved blades closed in front of the head.
-  for (const side of [-1, 1]) g.moveTo(22, 4 * side).quadraticCurveTo(27, 3.5 * side, 26, 0.6 * side);
-  g.stroke({ color: LEG, width: 1.4, cap: 'round' });
+  const jaw = major ? 1.3 : 1;
+  for (const side of [-1, 1]) g.moveTo(22, 4 * jaw * side).quadraticCurveTo(22 + 5 * jaw, 3.5 * jaw * side, 22 + 4 * jaw, 0.6 * side);
+  g.stroke({ color: LEG, width: 1.4 * jaw, cap: 'round' });
   g.ellipse(-3.5, 0, 2.2, 2).fill(BODY);
   g.ellipse(-7, 0, 2.5, 2.6).fill(BODY);
   if (full) {
@@ -233,11 +245,12 @@ function drawMessor(phase: number, full: boolean, { body: BODY, leg: LEG, shine:
     g.ellipse(-18, 0, 11, 8.5).fill({ color: BODY, alpha: 0.75 });
   } else g.ellipse(-17.5, 0, 10.5, 8).fill(BODY);
   g.ellipse(4, 0, 7.5, 3.8).fill(BODY);
-  g.roundRect(11, -6.5, 12, 13, 5).fill(HEAD ?? BODY);
+  if (major) g.roundRect(9.5, -9.5, 14.5, 19, 7).fill(HEAD ?? BODY);
+  else g.roundRect(11, -6.5, 12, 13, 5).fill(HEAD ?? BODY);
   // Gloss.
   g.ellipse(-19, -3, 5, 2.2).fill({ color: SHINE, alpha: 0.5 });
   g.ellipse(4, -1.2, 3.8, 1.1).fill({ color: SHINE, alpha: 0.4 });
-  g.ellipse(17, -2.4, 3, 1.6).fill({ color: SHINE, alpha: 0.4 });
+  g.ellipse(17, major ? -3.6 : -2.4, major ? 4 : 3, major ? 2.2 : 1.6).fill({ color: SHINE, alpha: 0.4 });
   return g;
 }
 

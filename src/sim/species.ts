@@ -59,6 +59,8 @@ const MESSOR: Partial<AntParams> = {
   // not the colony is hungry: harvesters forage on most days of the season, laying in stores.
   seeds: true,
   seedHoard: 0.5,
+  // Minors, medias and majors (Heredia & Detrain 2000), sized at eclosion (sizes.ts).
+  polymorph: true,
   // Stores kept in air drier than this; the default, written here so experiments can read Messor's own (rough).
   seedDryHumidity: 0.6,
   // Kept drier than Lasius niger (keepers: nest 40-70% humid, with a damper part for the brood). Rough.
