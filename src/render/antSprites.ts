@@ -14,6 +14,10 @@
  * Messor barbarus (DESIGN.md 4.4) too: a big, glossy black harvester with a
  * broad square head and strong mandibles, two waist nodes and an oval
  * gaster; drawn bigger.
+ *
+ * And Pheidole pallidula (DESIGN.md 4.4): small and pale yellow-brown, its
+ * minors with a small round head, its majors with a huge square head,
+ * notched at the back, and heavy mandibles.
  */
 import { type Renderer, Graphics, Rectangle, type Texture } from 'pixi.js';
 import { Species } from '../sim/species';
@@ -35,6 +39,10 @@ const MESSOR = { body: 0x141110, leg: 0x2c221e, shine: 0x7a6c66, head: 0x22140f 
 const MESSOR_PALE = { body: 0x7c6a5e, leg: 0x8c7a6c, shine: 0xc4b4a6, head: 0x806452 };
 /** A Messor major: the same black body under a big red-brown head (keepers' photos). */
 const MESSOR_MAJOR = { ...MESSOR, head: 0x4a1d10 };
+/** Pheidole pallidula: pale yellow-brown to brown (AntWiki), a major's head a little redder; callows pale straw. */
+const PHEIDOLE = { body: 0x8a5a30, leg: 0x9a6c42, shine: 0xd2ab82, head: 0x8a5a30 };
+const PHEIDOLE_MAJOR = { ...PHEIDOLE, head: 0x93512a };
+const PHEIDOLE_PALE = { body: 0xc9a77c, leg: 0xcfb08a, shine: 0xeedcc4, head: 0xc9a77c };
 
 /**
  * How long the species' workers are drawn, relative to a Lasius niger worker (~4.4 mm), and its
@@ -44,6 +52,8 @@ const MESSOR_MAJOR = { ...MESSOR, head: 0x4a1d10 };
  */
 export function speciesSize(species: number): { worker: number; queen: number } {
   if (species === Species.messor) return { worker: 7 / 4.4, queen: 14.5 / 7 };
+  // Pheidole pallidula minors about 2.5 mm, the queen 7-9 mm (keepers; rough).
+  if (species === Species.pheidole) return { worker: 2.5 / 4.4, queen: 7.5 / 2.5 };
   return species === Species.crematogaster ? { worker: 0.85, queen: 2.4 } : { worker: 1, queen: 2 };
 }
 export const CROP = 0xd9a441;
@@ -53,8 +63,11 @@ export function workerLength(species: number, size: number): number {
   return size > 0 ? size / 10 / 4.4 : speciesSize(species).worker;
 }
 
-/** Messor workers this long (mm) or longer are majors, drawn with a big head (sizes.ts). */
-export const MAJOR_LENGTH = 8;
+/** True if a worker of `species` this long (`Ants.size`, tenths of a mm) is drawn as a major, with a big head: Messor from 8 mm, Pheidole from 3.4 mm (sizes.ts). */
+export function drawnMajor(species: number, size: number): boolean {
+  if (species === Species.messor) return size >= 80;
+  return species === Species.pheidole && size >= 34;
+}
 
 /** Leg attachment and resting foot positions (left side, y < 0); the right side mirrors them. */
 const LEGS: { base: [number, number]; knee: [number, number]; foot: [number, number] }[] = [
@@ -65,16 +78,29 @@ const LEGS: { base: [number, number]; knee: [number, number]; foot: [number, num
 
 /**
  * Textures indexed [crop full ? 1 : 0][gait frame]; `pale` draws a callow, `raised` a
- * Crematogaster worker with its gaster raised in alarm, `major` a Messor major.
+ * Crematogaster worker with its gaster raised in alarm, `major` a Messor or Pheidole major.
  */
 export function makeAntTextures(renderer: Renderer, pale = false, species: number = Species.lasiusNiger, raised = false, major = false): Texture[][] {
   const crema = species === Species.crematogaster;
   const messor = species === Species.messor;
-  const palette = crema ? (pale ? CREMA_PALE : CREMA) : messor ? (pale ? MESSOR_PALE : major ? MESSOR_MAJOR : MESSOR) : pale ? PALE : DARK;
+  const pheidole = species === Species.pheidole;
+  const palette = crema
+    ? pale ? CREMA_PALE : CREMA
+    : messor
+      ? pale ? MESSOR_PALE : major ? MESSOR_MAJOR : MESSOR
+      : pheidole
+        ? pale ? PHEIDOLE_PALE : major ? PHEIDOLE_MAJOR : PHEIDOLE
+        : pale ? PALE : DARK;
   return [0, 1].map((full) =>
     Array.from({ length: GAIT_FRAMES }, (_, f) => {
       const phase = (f / GAIT_FRAMES) * 2 * Math.PI;
-      const g = crema ? drawCrematogaster(phase, full === 1, palette, raised) : messor ? drawMessor(phase, full === 1, palette, major) : drawAnt(phase, full === 1, palette);
+      const g = crema
+        ? drawCrematogaster(phase, full === 1, palette, raised)
+        : messor
+          ? drawMessor(phase, full === 1, palette, major)
+          : pheidole
+            ? drawPheidole(phase, full === 1, palette, major)
+            : drawAnt(phase, full === 1, palette);
       const texture = renderer.generateTexture({ target: g, frame: new Rectangle(-40, -26, 80, 52), resolution: 4 });
       g.destroy();
       return texture;
@@ -89,6 +115,8 @@ export function makeAntTextures(renderer: Renderer, pale = false, species: numbe
 export function makeDeadTexture(renderer: Renderer, species: number = Species.lasiusNiger): Texture {
   const crema = species === Species.crematogaster;
   const messor = species === Species.messor;
+  const pheidole = species === Species.pheidole;
+  const body = pheidole ? PHEIDOLE.body : DARK.body;
   const g = new Graphics();
   for (const side of [-1, 1]) {
     LEGS.forEach((leg) => {
@@ -99,13 +127,13 @@ export function makeDeadTexture(renderer: Renderer, species: number = Species.la
     });
     g.moveTo(21, 2.5 * side).lineTo(24, 6 * side).lineTo(20, 7 * side);
   }
-  g.stroke({ color: DARK.leg, width: 1.3, cap: 'round', join: 'round' });
+  g.stroke({ color: pheidole ? PHEIDOLE.leg : DARK.leg, width: 1.3, cap: 'round', join: 'round' });
   if (crema) heart(g, -9, 17, 9).fill(CREMA.body);
-  else g.ellipse(-17, 0, 11, 8).fill(DARK.body);
-  g.ellipse(-5, 0, 2.6, 2.6).fill(DARK.body);
-  g.ellipse(4, 0, 8, 3.8).fill(DARK.body);
+  else g.ellipse(-17, 0, 11, 8).fill(body);
+  g.ellipse(-5, 0, 2.6, 2.6).fill(body);
+  g.ellipse(4, 0, 8, 3.8).fill(body);
   if (messor) g.roundRect(11, -6.5, 12, 13, 5).fill(MESSOR.head);
-  else g.ellipse(16, 0, 6, 5.5).fill(crema ? CREMA.head : DARK.body);
+  else g.ellipse(16, 0, 6, 5.5).fill(crema ? CREMA.head : body);
   g.ellipse(-18, -2, 5, 2).fill({ color: DARK.shine, alpha: 0.15 });
   const texture = renderer.generateTexture({ target: g, frame: new Rectangle(-40, -26, 80, 52), resolution: 4 });
   g.destroy();
@@ -251,6 +279,46 @@ function drawMessor(phase: number, full: boolean, { body: BODY, leg: LEG, shine:
   g.ellipse(-19, -3, 5, 2.2).fill({ color: SHINE, alpha: 0.5 });
   g.ellipse(4, -1.2, 3.8, 1.1).fill({ color: SHINE, alpha: 0.4 });
   g.ellipse(17, major ? -3.6 : -2.4, major ? 4 : 3, major ? 2.2 : 1.6).fill({ color: SHINE, alpha: 0.4 });
+  return g;
+}
+
+/**
+ * A Pheidole pallidula worker from above: a slender body, two waist nodes, an oval gaster and two short
+ * spines on the thorax. A minor's head is small and rounded; a major's is huge, square and notched at
+ * the back, wider than its gaster, with heavy mandibles (head width over twice a minor's, Detrain 1989).
+ */
+function drawPheidole(phase: number, full: boolean, { body: BODY, leg: LEG, shine: SHINE, head: HEAD }: Palette, major = false): Graphics {
+  const g = new Graphics();
+  limbs(g, phase, LEG);
+  g.ellipse(-5, 0, 2.4, 2.4).fill(BODY);
+  g.ellipse(-8.5, 0, 2.6, 2.8).fill(BODY);
+  if (full) {
+    g.ellipse(-19, 0, 12.5, 9.5).fill(CROP);
+    g.ellipse(-19, 0, 11.5, 8.5).fill({ color: BODY, alpha: 0.75 });
+  } else g.ellipse(-18, 0, 11, 8.5).fill(BODY);
+  g.ellipse(4, 0, 8, 3.8).fill(BODY);
+  for (const side of [-1, 1]) g.moveTo(-1, 1.6 * side).lineTo(-3.5, 3.4 * side);
+  g.stroke({ color: BODY, width: 1, cap: 'round' });
+  if (major) {
+    // Heavy mandibles, then the head: two lobes with a notch between them at the back.
+    for (const side of [-1, 1]) g.moveTo(31, 3 * side).quadraticCurveTo(37, 4 * side, 36, 0.5 * side);
+    g.stroke({ color: 0x4a2a14, width: 2.2, cap: 'round' });
+    g.moveTo(12, -1)
+      .bezierCurveTo(12, -11, 18, -14, 26, -12)
+      .bezierCurveTo(31, -11, 33, -6, 32, -2)
+      .lineTo(30, 0)
+      .lineTo(32, 2)
+      .bezierCurveTo(33, 6, 31, 11, 26, 12)
+      .bezierCurveTo(18, 14, 12, 11, 12, 1)
+      .closePath()
+      .fill(HEAD ?? BODY);
+    g.ellipse(23, -5, 4, 2.2).fill({ color: SHINE, alpha: 0.35 });
+  } else {
+    g.ellipse(17, 0, 6, 5).fill(HEAD ?? BODY);
+    g.ellipse(18, -1.8, 2.4, 1.4).fill({ color: SHINE, alpha: 0.4 });
+  }
+  g.ellipse(-20, -3, 4.5, 2).fill({ color: SHINE, alpha: 0.45 });
+  g.ellipse(4, -1.2, 3.8, 1.1).fill({ color: SHINE, alpha: 0.4 });
   return g;
 }
 

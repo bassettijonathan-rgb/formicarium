@@ -5,6 +5,7 @@ import { inspectAnt } from '../src/sim/inspect';
 import { createTank } from '../src/sim/keeper';
 import { TEST_TUBE_SETUP } from '../src/sim/nest';
 import { makeSeeds, startAtPrey, tendStores, workAtPrey } from '../src/sim/prey';
+import { DEFAULT_ANT_PARAMS } from '../src/sim/params';
 import { Rng } from '../src/sim/rng';
 import { SAVE_VERSION, type Save, loadWorld } from '../src/sim/save';
 import { SIZE_CLASSES, classShares, crackSpeed, drawSize, seedCapacity, sizeClass } from '../src/sim/sizes';
@@ -106,7 +107,7 @@ describe('Messor worker sizes (DESIGN.md 4.4)', () => {
       for (; s < 1e6 && p!.cuts === 0; s++) tendStores(ctx, i);
       took.push(s);
     }
-    expect(crackSpeed({ size: Uint8Array.of(110) } as never, 0)).toBeCloseTo((11 / 7) ** 2, 9);
+    expect(crackSpeed({ size: Uint8Array.of(110) } as never, DEFAULT_ANT_PARAMS, 0)).toBeCloseTo((11 / 7) ** 2, 9);
     expect(took[1]!).toBeLessThan(took[0]! / 3);
   });
 

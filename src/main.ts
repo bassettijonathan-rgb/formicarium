@@ -431,7 +431,7 @@ async function start(): Promise<void> {
     let startIn: 'tube' | 'nest' = 'tube';
     let species: number = Species.lasiusNiger;
     const kind = choices<number>(
-      [[Species.lasiusNiger, 'Lasius niger'], [Species.crematogaster, 'Crematogaster scutellaris'], [Species.messor, 'Messor barbarus']],
+      [[Species.lasiusNiger, 'Lasius niger'], [Species.crematogaster, 'Crematogaster scutellaris'], [Species.messor, 'Messor barbarus'], [Species.pheidole, 'Pheidole pallidula']],
       () => species,
       (k) => (species = k),
     );
@@ -742,7 +742,7 @@ async function start(): Promise<void> {
         ]);
       } else if (put === 'seedDispenser') {
         showCard('Seed dispenser', [
-          'It drops a scoop of about 20 seeds in front of it, and the next scoop once every seed of the last has been carried off. Only harvester ants (Messor barbarus) take seeds; young colonies do best on small ones.',
+          'It drops a scoop of about 20 seeds in front of it, and the next scoop once every seed of the last has been carried off. Harvester ants (Messor barbarus) take seeds and store them; Pheidole pallidula takes small ones when its larvae want food. Young colonies do best on small seeds.',
           choices<SeedMix>([['small', 'Small (chia, poppy, millet)'], ['mixed', 'Mixed bird seed'], ['big', 'Big (canary, wheat, sunflower)']], () => dispense.seeds, (k) => (dispense.seeds = k)),
         ], [
           ['Place it', () => {

@@ -5,7 +5,7 @@
  */
 import type { Part } from './prey';
 import { AntState, Caste, Cause, Place } from './ants';
-import { sizeClass } from './sizes';
+import { isMajor, sizeClass } from './sizes';
 import { BroodStage } from './brood';
 import { MATERIAL_NAMES } from './materials';
 import type { World } from './world';
@@ -148,7 +148,9 @@ export function inspectAnt(world: World, i: number): AntCard {
   const queen = ants.caste[i] === Caste.queen;
   // A worker of a species of many sizes is named by its class (sizes.ts).
   const length = ants.size[i]!;
-  const title = queen ? 'The queen' : length > 0 ? `Worker ${i}, a ${sizeClass(length / 10)} of ${(length / 10).toFixed(1)} mm` : `Worker ${i}`;
+  // A Pheidole worker is a minor or a major, nothing between.
+  const kind = params.dimorphic ? (isMajor(ants, params, i) ? 'major' : 'minor') : sizeClass(length / 10);
+  const title = queen ? 'The queen' : length > 0 ? `Worker ${i}, a ${kind} of ${(length / 10).toFixed(1)} mm` : `Worker ${i}`;
   const lines: string[] = [];
   const dead = ants.state[i] === AntState.dead;
   if (dead) {

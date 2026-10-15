@@ -10,7 +10,7 @@ import { Container, Graphics, type Renderer, Sprite, type Texture } from 'pixi.j
 import { AntState, Caste } from '../sim/ants';
 import { ANT_STRIDE, type AntsSnapshot, type PieceView } from '../worker/protocol';
 import { drawPiece } from './insects';
-import { ANT_SCALE, CROP, GAIT_FRAMES, MAJOR_LENGTH, STRIDE, makeAntTextures, makeDeadTexture, speciesSize, workerLength } from './antSprites';
+import { ANT_SCALE, CROP, GAIT_FRAMES, STRIDE, drawnMajor, makeAntTextures, makeDeadTexture, speciesSize, workerLength } from './antSprites';
 import { grainColor } from './soilColors';
 
 /** Where a carried grain sits, ahead of the head, in mm. */
@@ -23,7 +23,7 @@ interface SpeciesTextures {
   normal: Texture[][];
   pale: Texture[][];
   raised: Texture[][];
-  /** A Messor major (its big head). */
+  /** A Messor or Pheidole major (its big head). */
   major: Texture[][];
   dead: Texture;
 }
@@ -146,9 +146,8 @@ export class AntLayer {
       ant.body.rotation = prev.ants[o + 2]! + dh * k;
       const frame = Math.floor(((walked % STRIDE) / STRIDE) * GAIT_FRAMES) % GAIT_FRAMES;
       // An alarmed worker shows it (a Crematogaster raises its gaster); a callow is pale.
-      // A Messor major has a big head.
-      const length = cur.size[i]! > 0 ? cur.size[i]! / 10 : 0;
-      const textures = cur.alarmed[i] ? looks.raised : cur.callow[i] ? looks.pale : length >= MAJOR_LENGTH ? looks.major : looks.normal;
+      // A Messor or Pheidole major has a big head.
+      const textures = cur.alarmed[i] ? looks.raised : cur.callow[i] ? looks.pale : drawnMajor(cur.species, cur.size[i]!) ? looks.major : looks.normal;
       ant.sprite.texture = textures[cur.full[i]!]![frame]!;
       // A queen is two to three times a worker's length, her gaster always swollen; a worker of a species of many sizes is drawn at its own.
       const queen = cur.caste[i] === Caste.queen;

@@ -35,7 +35,7 @@ import { humidityAt } from './water';
 import type { AntParams } from './params';
 import { placeGrain, removeGrain } from './soil';
 import { Purpose, Rng } from './rng';
-import { drawSize } from './sizes';
+import { drawCaste, drawSize, isMajor, laysTrail, majorResponse } from './sizes';
 import { STEPS_PER_SECOND } from './time';
 
 /** Size of a bucket in the contact grid, mm; must be at least the contact radius. */
@@ -108,17 +108,23 @@ export function computeContacts(ctx: AntContext): void {
 
   const memory = Math.exp(-DT / params.encounterMemory);
   const excitementKeep = Math.pow(0.5, DT / params.excitementHalfLife);
+  const calledKeep = Math.pow(0.5, DT / params.calledHalfLife);
   const needKeep = Math.pow(0.5, DT / params.needHalfLife);
   const r2 = params.contactRadius * params.contactRadius;
   for (let i = 0; i < ants.count; i++) {
     if (ants.recruiting[i]! > 0) ants.recruiting[i]!--;
     ants.excitement[i]! *= excitementKeep;
+    if (params.dimorphic) {
+      if (ants.invite[i]! > 0) ants.invite[i]!--;
+      ants.called[i]! *= calledKeep;
+    }
     const b = bucketOf[i]!;
     if (b < 0) continue;
     const bx = b % bw;
     const by = (b - bx) / bw;
     let touching = 0;
     let recruiters = 0;
+    let inviters = 0;
     let need = 0;
     let alarmed = 0;
     for (let y = Math.max(0, by - 1); y <= Math.min(bh - 1, by + 1); y++) {
@@ -132,6 +138,7 @@ export function computeContacts(ctx: AntContext): void {
           if (dx * dx + dy * dy > r2) continue;
           touching++;
           if (ants.recruiting[j]! > 0) recruiters++;
+          if (ants.invite[j]! > 0) inviters++;
           if (ants.broodNeed[j]! > need) need = ants.broodNeed[j]!;
           // An alarmed nestmate's alarm pheromone, smelt by a worker touching it (Crematogaster: Leuthold & Schlunegger 1973).
           if (ants.alarm[j]! > params.alarmShow) {
@@ -148,6 +155,8 @@ export function computeContacts(ctx: AntContext): void {
     }
     ants.encounters[i] = ants.encounters[i]! * memory + touching * (1 - memory);
     ants.excitement[i]! += params.recruitPerContact * recruiters * DT;
+    // Pheidole majors are moved by minors back from prey too big to take home (Detrain & Pasteels 1991).
+    if (inviters > 0) ants.called[i]! += params.recruitPerContact * inviters * DT;
     // The brood's hunger, smelt here or passed on by touch, fading when nobody renews it.
     ants.broodNeed[i] = Math.max(ants.broodNeed[i]! * needKeep, smellBroodNeed(ctx, i), params.needRelay * need);
     // Alarm spreads from worker to worker, weaker at each one, so it reaches only a few bodies' lengths (DESIGN.md 4.4).
@@ -455,6 +464,8 @@ function eclose(ctx: AntContext, k: number): void {
   ants.lifespan[i] = drawLifespan(ctx.seed, i, 0, params);
   // Its size, as a colony of this many workers makes them (from its own stream, so other species are untouched).
   if (params.polymorph) ants.size[i] = drawSize(new Rng(ctx.seed, Purpose.traits, 2, i), workers(ants));
+  // A Pheidole worker comes out a minor or a major (DESIGN.md 4.4).
+  if (params.dimorphic) ants.size[i] = drawCaste(new Rng(ctx.seed, Purpose.traits, 2, i), params);
   ants.born[i] = 1;
   brood.stage[k] = BroodStage.none;
 }
@@ -633,13 +644,16 @@ function setOffToForage(ctx: AntContext, i: number): boolean {
   if (ants.age[i]! < params.callowDays) return false; // nor does a callow, newly out of its cocoon
   // A worker carrying protein for the brood takes it there before it goes out again; without this a
   // lean forager, keen to go out, carries the insect back and forth and the larvae starve.
-  if (ants.cropProtein[i]! >= params.nurseLoad || ants.pieceHeld[i]! >= 0) return false;
+  // A Pheidole major is the exception: majors keep food in their crops (Lachaud et al. 1992) and still answer a call.
+  const major = params.majorCall > 0 && isMajor(ants, params, i);
+  if ((ants.cropProtein[i]! >= params.nurseLoad && !major) || ants.pieceHeld[i]! >= 0) return false;
   const hungry = hunger(ctx, i);
   // An ant already carrying protein has some for the brood: it feels the need to fetch more less.
   const need = ants.broodNeed[i]! * Math.max(0, 1 - ants.cropProtein[i]! / params.cropLoad);
   const forProtein = need > hungry;
-  // A harvester goes back to a patch of seeds whatever it set out for.
-  const remembers = ants.hasMemory[i] === 1 && (ants.memoryProtein[i] === (forProtein ? 1 : 0) || ants.memoryProtein[i] === 2);
+  // A harvester goes back to a patch of seeds whatever it set out for; a species that does not hoard them, only for protein.
+  const seeds = ants.memoryProtein[i] === 2 && (params.seedHoard > 0 || forProtein);
+  const remembers = ants.hasMemory[i] === 1 && (ants.memoryProtein[i] === (forProtein ? 1 : 0) || seeds);
   const own = remembers ? params.returnToFoodRate : params.forageRate;
   // How readily this worker forages at all (its threshold against the strongest stimulus, Bonabeau et
   // al. 1996), times how hungry it or the brood is: trips rise in step with hunger (Greenwald et al. 2018).
@@ -648,10 +662,12 @@ function setOffToForage(ctx: AntContext, i: number): boolean {
   const propensity = 1 / (1 + Math.pow(threshold, params.forageSteepness));
   // A harvester goes out for seeds to store even when no one is hungry (`seedHoard`, DESIGN.md 4.4).
   const response = propensity * (params.scoutShare + (1 - params.scoutShare) * Math.max(hungry, need, params.seedHoard));
-  const rate = (own + params.recruitRate * ants.excitement[i]!) * response;
+  // A Pheidole major goes out only when invited, and readily only when strongly (`majorResponse`); then for protein.
+  const rate = major ? params.recruitRate * majorResponse(ants.called[i]!, params) : (own + params.recruitRate * ants.excitement[i]!) * response;
   if (!rng.chance(rate * DT)) return false;
   ants.state[i] = remembers ? AntState.toFood : AntState.exploring;
-  ants.seekProtein[i] = forProtein ? 1 : 0;
+  ants.seekProtein[i] = forProtein || major ? 1 : 0;
+  if (params.dimorphic) ants.invite[i] = 0;
   ants.timer[i] = 0;
   ants.hasDigSite[i] = 0;
   return true;
@@ -955,7 +971,7 @@ function walkFarm(ctx: AntContext, i: number): void {
     } else if (++ants.timer[i]! > params.corpseCarryMax * STEPS_PER_SECOND) dropCorpse(ctx, i); // lost: it gives up
   } else if (inbound) {
     if (state === AntState.returning && params.trailLaying) {
-      depositTrail(farm, nx, ny, params.trailDeposit * params.speed * DT * ants.cropQuality[i]!);
+      depositTrail(farm, nx, ny, params.trailDeposit * params.speed * DT * ants.cropQuality[i]! * laysTrail(ants, params, i));
     }
     const inSeconds = ++ants.timer[i]! / STEPS_PER_SECOND;
     // Home is where the colony smells strong or nestmates rest; with no nest yet, anywhere well inside the farm.
@@ -1224,7 +1240,9 @@ function digOut(ctx: AntContext, i: number): boolean {
 function arriveHome(ctx: AntContext, i: number): void {
   const { ants, params } = ctx;
   if (ants.state[i] === AntState.returning) {
-    ants.recruiting[i] = Math.round(params.recruitTime * STEPS_PER_SECOND * Math.min(1, ants.cropQuality[i]! * 2));
+    ants.recruiting[i] = Math.round(params.recruitTime * STEPS_PER_SECOND * Math.min(1, ants.cropQuality[i]! * 2) * laysTrail(ants, params, i));
+    // A minor back from prey too big to take home invites the majors it meets as well (Detrain & Pasteels 1991).
+    if (ants.invite[i]! < 0) ants.invite[i] = Math.round(params.inviteTime * STEPS_PER_SECOND);
   }
   ants.state[i] = AntState.wandering;
   ants.timer[i] = 0;

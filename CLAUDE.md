@@ -1,7 +1,7 @@
 # formicarium: conventions for Claude Code
 
 A living ant farm in the browser: a test tube or bought nests (ytong, plaster, acrylic or wood) on a
-table, joined by tubes to each other and to an arena (old tanks keep a side-view sand farm), with Lasius niger, Crematogaster scutellaris or Messor barbarus colonies (up to four separate setups on one table; Messor harvests seeds) whose behaviour emerges only from each ant's local rules.
+table, joined by tubes to each other and to an arena (old tanks keep a side-view sand farm), with Lasius niger, Crematogaster scutellaris, Messor barbarus or Pheidole pallidula colonies (up to four separate setups on one table; Messor harvests seeds; Pheidole has minors and big-headed majors) whose behaviour emerges only from each ant's local rules.
 **DESIGN.md is the approved design**; read the relevant section before changing a model, and
 update DESIGN.md in the same pull request when a model changes.
 
@@ -25,6 +25,7 @@ update DESIGN.md in the same pull request when a model changes.
 - `npm run experiment -- nest-damp --runs 3 [--no-hygro] [--layout organic]`: brood in a bought ytong nest wet at one end (Nests 1; a few minutes per run); `nest-room --runs 2 --ants 80`: floor a colony covers in a big nest; `nest-dark --runs 3 [--no-light] [--gradient] [--material acrylic]`: brood under a half-lifted cover (Nests 2)
 - `npm run experiment -- nest-spread --ants 800`: a colony in two joined small nests (Nests 3); `moving --ants 250 [--lit]`: a test-tube colony joined to a nest, its tube covered or not (a few minutes per run)
 - `npm run experiment -- granary --runs 3 [--minutes 60]`: seeds strewn in a Messor nest end in its dry part; `harvest [--scattered] --runs 6 --minutes 120`: a pile of seeds against scattered ones; `trail-life --runs 3`: how long a Messor trail lasts (a minute or so per run); `sizes --runs 3 [--no-matching]`: which workers carry the big seeds (seconds per run)
+- `npm run experiment -- castes [--food sugar|fly|cricket|mealworm] [--same-threshold] [--no-majors]`: Pheidole minors and majors at food (a minute or so per run)
 - `npm run farm -- --seed 1 --ants 60 --hours 3`: a farm colony headless, with a text picture of the nest
 - `npm run build`: production build (deployed to GitHub Pages from `main`)
 
