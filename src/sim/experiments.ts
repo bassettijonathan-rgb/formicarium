@@ -12,14 +12,14 @@ import { humidityAt } from './water';
 import { Material } from './materials';
 import { Purpose, Rng } from './rng';
 import { doubleBridge, foodChoice, Tally } from './lab';
-import type { AntParams } from './params';
+import { type AntParams, DEFAULT_ANT_PARAMS } from './params';
 import { STEPS_PER_SECOND } from './time';
 import { addCorpse, colonyCrop, createWorld, deathsBy, killAnt, setCover, setHeatMat, placeInsect, placeProtein, placeSeeds, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
 import { createArena, sampleTrail } from './arena';
-import { createTank } from './keeper';
+import { applyCommand, createTank } from './keeper';
 import { Species, arenaFor, speciesParams } from './species';
 import { type Cut, type Insect, makeSeeds } from './prey';
-import { type SizeClass, drawSize, isMajor, lengthOf, sizeClass } from './sizes';
+import { type SizeClass, casteLength, drawSize, isMajor, lengthOf, majorChance, sizeClass } from './sizes';
 import { type NestLayout, type NestMaterial, type NestSize, TEST_TUBE, TEST_TUBE_SETUP, moduleAt } from './nest';
 import { addModule, connect, connectArena } from './table';
 import { TANK_ARENA } from './tank';
@@ -1690,4 +1690,150 @@ export function runCastes(opts: RunOptions & { food: CasteFood; minutes: number;
     carriedByMinors,
     carriedByMajors,
   };
+}
+
+export interface CasteMakingResult {
+  /** Larvae that pupated, and the workers that came out of them. */
+  pupated: number;
+  emerged: number;
+  /** Majors among the new workers, and the share of majors the larvae's chances add up to (without the luck of the draw). */
+  majors: number;
+  expectedShare: number;
+  /** Mean share of the end of their growth the larvae grew at full speed, and of majors among the workers touching them then. */
+  fed: number;
+  majorsNear: number;
+}
+
+/**
+ * Majors by feeding and inhibition (P3; Wheeler & Nijhout 1984, in Pheidole
+ * bicarinata): a Pheidole colony of `ants` workers, `majors` of them majors,
+ * in a small ytong nest, with `larvae` larvae just short of the end of their
+ * growth. The keeper's stand-in for foraging: every 10 minutes of ant time
+ * workers get protein in their crops, `protein` times what the larvae need to
+ * grow at full speed. Once a larva pupates its pupa is ready to come out, so
+ * the workers it becomes are drawn at once. Well-fed larvae should become
+ * majors more often, and more often where there are few majors.
+ */
+export function runCasteMaking(opts: RunOptions & { protein: number; majors?: number; larvae?: number }): CasteMakingResult {
+  const world = boughtNestColony({
+    ...opts,
+    ants: opts.ants ?? 30,
+    size: 'S',
+    layout: 'classic',
+    params: { burnRate: 0, developmentZero: DEFAULT_ANT_PARAMS.developmentZero, larvaStarveDays: 1e9, ...speciesParams(Species.pheidole), ...opts.params },
+  });
+  const { ants, brood, params } = world;
+  const share = opts.majors ?? params.majorShare;
+  const rng = new Rng(opts.seed, Purpose.test, 28);
+  for (let i = 0; i < ants.count; i++) ants.size[i] = casteLength(rng, params, Math.floor((i + 1) * share) > Math.floor(i * share));
+  const larvae = opts.larvae ?? 30;
+  const open: [number, number][] = [];
+  for (let c = 0; c < world.farm.material.length; c++) if (world.farm.material[c] === Material.air) open.push([c % world.farm.width, Math.floor(c / world.farm.width)]);
+  for (let n = 0; n < larvae; n++) {
+    const [x, y] = open[rng.int(open.length)]!;
+    const k = addBrood(brood, BroodStage.larva, x + 0.5, y + 0.5);
+    brood.progress[k] = 1 - params.majorWindow - 0.01;
+  }
+  const first = ants.count;
+  // What the growing larvae eat a day at full speed, µL, at the nest's temperature (25 °C: one larval stage in `larvaDays`).
+  const need = (larvae * params.larvaFood) / params.larvaDays;
+  const every = 600 * STEPS_PER_SECOND;
+  let pupated = 0;
+  let expected = 0;
+  let fed = 0;
+  let near = 0;
+  const done = new Uint8Array(brood.stage.length);
+  // Until every larva has pupated, or for 1.5 times as long as that takes at full speed on the protein given.
+  const steps = Math.round(((1.5 * params.majorWindow * params.larvaDays) / Math.min(1, opts.protein)) * params.daySeconds * STEPS_PER_SECOND);
+  for (let s = 1; s <= steps && pupated < larvae; s++) {
+    if (s % every === 1) {
+      // Each round's protein goes to workers in turn, a nurse's load at a time.
+      let give = (opts.protein * need * 600) / params.daySeconds;
+      for (let i = s % ants.count; give > 0 && i < ants.count; i++) {
+        if (ants.caste[i] !== Caste.worker) continue;
+        const add = Math.min(give, params.nurseLoad * 3);
+        ants.cropProtein[i]! += add;
+        ants.crop[i]! += add;
+        give -= add;
+      }
+    }
+    step(world);
+    for (let k = 0; k < brood.count; k++) {
+      if (brood.stage[k] !== BroodStage.pupa || done[k]) continue;
+      done[k] = 1;
+      pupated++;
+      const f = brood.late[k]! > 0 ? 1 - brood.short[k]! / brood.late[k]! : 0;
+      const m = brood.workerTouch[k]! > 0 ? brood.majorTouch[k]! / brood.workerTouch[k]! : 0;
+      fed += f;
+      near += m;
+      expected += majorChance(f, m, params);
+      brood.progress[k] = 1; // ready to come out
+    }
+  }
+  let majors = 0;
+  for (let i = first; i < ants.count; i++) if (isMajor(ants, params, i)) majors++;
+  return {
+    pupated,
+    emerged: ants.count - first,
+    majors,
+    expectedShare: pupated > 0 ? expected / pupated : 0,
+    fed: pupated > 0 ? fed / pupated : 0,
+    majorsNear: pupated > 0 ? near / pupated : 0,
+  };
+}
+
+export interface DefenceResult {
+  /** Workers, and majors among them. */
+  workers: number;
+  majors: number;
+  /** At each `atSeconds` after the cover was lifted: workers showing alarm, and majors among them. */
+  atSeconds: number[];
+  alarmed: number[];
+  alarmedMajors: number[];
+}
+
+/**
+ * Defence (P7; Detrain & Pasteels 1992): a keeper's Pheidole colony of 60
+ * workers, one in ten a major, settled for 20 minutes in a medium ytong nest,
+ * has half its cover lifted. The workers the light falls on take alarm and
+ * pass it on. Majors are roused only by strong alarm but stay roused longer,
+ * so a few minutes on the workers still alarmed should be majors far beyond
+ * their share of the colony (none come to sugar, and only their share to a
+ * cricket, test 27). With `majorAlarm` 0 and `majorAlarmHalfLife` equal to
+ * `alarmHalfLife` (the control) they are alarmed in their share.
+ */
+export function runDefence(opts: RunOptions & { majors?: number }): DefenceResult {
+  const world = createTank(opts.seed, { size: 'M', layout: 'classic', material: 'ytong' }, Species.pheidole);
+  Object.assign(world.params, opts.params ?? {});
+  const { ants, params } = world;
+  const share = opts.majors ?? params.majorShare;
+  const rng = new Rng(opts.seed, Purpose.test, 29);
+  let workers = 0;
+  let majors = 0;
+  for (let i = 0; i < ants.count; i++) {
+    if (ants.caste[i] !== Caste.worker) continue;
+    const major = Math.floor((workers + 1) * share) > Math.floor(workers * share);
+    ants.size[i] = casteLength(rng, params, major);
+    workers++;
+    if (major) majors++;
+  }
+  for (let s = 0; s < 20 * 60 * STEPS_PER_SECOND; s++) step(world);
+  applyCommand(world, { type: 'cover', from: 0, to: world.farm.table!.modules[0]!.width / 2 });
+  const atSeconds = [15, 60, 120, 240];
+  const alarmed: number[] = [];
+  const alarmedMajors: number[] = [];
+  for (let s = 1; s <= atSeconds[atSeconds.length - 1]! * STEPS_PER_SECOND; s++) {
+    step(world);
+    if (!atSeconds.includes(s / STEPS_PER_SECOND)) continue;
+    let a = 0;
+    let m = 0;
+    for (let i = 0; i < ants.count; i++) {
+      if (ants.caste[i] !== Caste.worker || ants.state[i] === AntState.dead || ants.alarm[i]! <= params.alarmShow) continue;
+      a++;
+      if (isMajor(ants, params, i)) m++;
+    }
+    alarmed.push(a);
+    alarmedMajors.push(m);
+  }
+  return { workers, majors, atSeconds, alarmed, alarmedMajors };
 }

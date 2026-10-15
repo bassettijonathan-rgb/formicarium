@@ -118,8 +118,23 @@ export function majorResponse(called: number, params: AntParams): number {
   return (called * c2) / (c2 + params.majorCall * params.majorCall);
 }
 
+/**
+ * The chance a Pheidole larva becomes a major (P3): `fed` is the share of the
+ * end of its growth it grew at full speed, `majors` the share of majors among
+ * the workers that touched it then.
+ */
+export function majorChance(fed: number, majors: number, params: AntParams): number {
+  const inhibit = majors / params.majorInhibit;
+  return (params.majorMax * fed * fed) / (1 + inhibit * inhibit);
+}
+
+/** A worker's length, tenths of a mm, drawn evenly from its caste's range. */
+export function casteLength(rng: Rng, params: AntParams, major: boolean): number {
+  const [lo, hi] = major ? params.majorLength : params.minorLength;
+  return Math.round(10 * (lo + (hi - lo) * rng.float()));
+}
+
 /** A new Pheidole worker's length, tenths of a mm: a major with chance `majorShare`, else a minor. */
 export function drawCaste(rng: Rng, params: AntParams): number {
-  const [lo, hi] = rng.float() < params.majorShare ? params.majorLength : params.minorLength;
-  return Math.round(10 * (lo + (hi - lo) * rng.float()));
+  return casteLength(rng, params, rng.float() < params.majorShare);
 }

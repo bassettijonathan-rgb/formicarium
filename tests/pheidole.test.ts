@@ -8,7 +8,8 @@ import { DEFAULT_ANT_PARAMS } from '../src/sim/params';
 import { startAtPrey, workAtPrey } from '../src/sim/prey';
 import { Rng } from '../src/sim/rng';
 import { SAVE_VERSION, type Save, loadWorld } from '../src/sim/save';
-import { crackSpeed, cutSpeed, drawCaste, isMajor, laysTrail, majorResponse } from '../src/sim/sizes';
+import { crackSpeed, cutSpeed, drawCaste, isMajor, laysTrail, majorChance, majorResponse } from '../src/sim/sizes';
+import { BroodStage, addBrood, createBrood, stepBrood } from '../src/sim/brood';
 import { SPECIES_NAMES, Species, speciesParams } from '../src/sim/species';
 import { STEPS_PER_SECOND } from '../src/sim/time';
 import { TANK_ARENA } from '../src/sim/tank';
@@ -17,6 +18,19 @@ import { type World, createWorld, placeInsect, step } from '../src/sim/world';
 const ctxOf = (world: World): AntContext => ({ ...world, prey: world.prey, rng: Rng.over(world.rng) });
 const MINOR = 25;
 const MAJOR = 36;
+
+/** A Pheidole farm colony of `ants` workers lying still together at the first worker's place. */
+function farm(seed: number, ants: number): World {
+  const world = createWorld(seed, { ants, species: Species.pheidole });
+  for (let i = 0; i < ants; i++) {
+    world.ants.size[i] = MINOR;
+    world.ants.state[i] = AntState.resting;
+    world.ants.timer[i] = 1e9;
+    world.ants.x[i] = world.ants.x[0]!;
+    world.ants.y[i] = world.ants.y[0]!;
+  }
+  return world;
+}
 
 /** A Pheidole lab colony of `ants` minors in the keeper's bare arena, all resting in the nest. */
 function lab(seed: number, ants = 2): World {
@@ -195,5 +209,115 @@ describe('Pheidole pallidula (DESIGN.md 4.4)', () => {
     expect(loaded.ants.invite.length).toBe(world.ants.count);
     expect(loaded.ants.called.every((c) => c === 0)).toBe(true);
     expect(loaded.nest.call).toBe(0);
+  });
+});
+
+describe('Pheidole castes that respond (DESIGN.md 4.4, P3 and P7)', () => {
+  const params = { ...DEFAULT_ANT_PARAMS, ...speciesParams(Species.pheidole) };
+
+  it('a larva well fed at the end of its growth may become a major, less often the more majors were about; an unfed one never', () => {
+    expect(majorChance(0, 0, params)).toBe(0);
+    expect(majorChance(1, 0, params)).toBeCloseTo(params.majorMax, 12);
+    expect(majorChance(0.5, 0, params)).toBeCloseTo(params.majorMax / 4, 12);
+    expect(majorChance(1, params.majorInhibit, params)).toBeCloseTo(params.majorMax / 2, 12);
+    expect(majorChance(1, 0.3, params)).toBeLessThan(0.02);
+  });
+
+  it('a Pheidole larva records how well it is fed over the end of its growth; earlier, or in another species, nothing', () => {
+    const world = farm(1, 1);
+    const { brood } = world;
+    const early = addBrood(brood, BroodStage.larva, 10, 10);
+    const fed = addBrood(brood, BroodStage.larva, 10, 10);
+    const starved = addBrood(brood, BroodStage.larva, 10, 10);
+    brood.progress[early] = 0.2;
+    brood.progress[fed] = brood.progress[starved] = 1 - params.majorWindow + 0.01;
+    brood.food[early] = brood.food[fed] = params.larvaFood;
+    stepBrood(brood, world.farm, world.params, 600);
+    expect(brood.late[early]).toBe(0);
+    expect(brood.late[fed]).toBe(600);
+    expect(brood.short[fed]).toBe(0);
+    expect(brood.late[starved]).toBe(600);
+    expect(brood.short[starved]).toBe(600);
+    const lasius = createBrood();
+    const k = addBrood(lasius, BroodStage.larva, 10, 10);
+    lasius.progress[k] = 0.9;
+    stepBrood(lasius, world.farm, DEFAULT_ANT_PARAMS, 600);
+    expect(lasius.late[k]).toBe(0);
+  });
+
+  it('a larva at the end of its growth counts the workers touching it, and the majors among them', () => {
+    const world = farm(2, 3);
+    world.ants.size[2] = MAJOR;
+    const k = addBrood(world.brood, BroodStage.larva, world.ants.x[0]!, world.ants.y[0]!);
+    world.brood.progress[k] = 0.95;
+    world.brood.food[k] = world.params.larvaFood;
+    world.params.broodPickRate = 0; // nobody carries it off
+    for (let s = 0; s < STEPS_PER_SECOND; s++) step(world);
+    expect(world.brood.workerTouch[k]).toBeCloseTo(3, 6);
+    expect(world.brood.majorTouch[k]).toBeCloseTo(1, 6);
+  });
+
+  it('a worker comes out a major only if it was fed as a larva; one with no record comes out at the fixed share', () => {
+    const sizes = (late: number, short: number, majorMax: number): number[] => {
+      const out: number[] = [];
+      for (let seed = 1; seed <= 12; seed++) {
+        const world = farm(seed, 1);
+        world.params.majorMax = majorMax;
+        const k = addBrood(world.brood, BroodStage.pupa, world.ants.x[0]!, world.ants.y[0]!);
+        world.brood.progress[k] = 1;
+        world.brood.late[k] = late;
+        world.brood.short[k] = short;
+        for (let s = 0; s < 60 * STEPS_PER_SECOND && world.ants.count === 1; s++) step(world);
+        expect(world.ants.count).toBe(2);
+        out.push(world.ants.size[1]!);
+      }
+      return out;
+    };
+    expect(sizes(1000, 0, 10).every((s) => s >= 10 * params.majorLength[0])).toBe(true);
+    expect(sizes(1000, 1000, 10).every((s) => s > 0 && s <= 10 * params.minorLength[1])).toBe(true);
+    expect(sizes(0, 0, 10).every((s) => s > 0)).toBe(true);
+  });
+
+  it('a brood slot used again starts with no record', () => {
+    const brood = createBrood();
+    const k = addBrood(brood, BroodStage.larva, 1, 1);
+    brood.late[k] = brood.short[k] = brood.workerTouch[k] = brood.majorTouch[k] = 5;
+    brood.stage[k] = BroodStage.none;
+    expect(addBrood(brood, BroodStage.egg, 2, 2)).toBe(k);
+    expect([brood.late[k], brood.short[k], brood.workerTouch[k], brood.majorTouch[k]]).toEqual([0, 0, 0, 0]);
+  });
+
+  it('a tank kept before castes responded loads with its brood unrecorded', () => {
+    const world = createTank(6, TEST_TUBE_SETUP, Species.pheidole);
+    const kept = structuredClone(world) as unknown as Record<string, unknown> & { brood: Record<string, unknown> };
+    for (const key of ['late', 'short', 'workerTouch', 'majorTouch']) delete kept.brood[key];
+    const save: Save = { version: SAVE_VERSION, seed: world.seed, savedAt: 0, log: [], world: kept as unknown as World };
+    const loaded = loadWorld(save)!;
+    expect(loaded.brood.late.length).toBe(world.brood.stage.length);
+    expect(loaded.brood.majorTouch.every((t) => t === 0)).toBe(true);
+    for (let s = 0; s < 10 * STEPS_PER_SECOND; s++) step(loaded);
+  });
+
+  it('Pheidole takes alarm; a major only from a strongly alarmed nestmate, and it holds it longer', () => {
+    expect(params.alarm).toBe(true);
+    const world = farm(3, 3);
+    const { ants } = world;
+    ants.size[1] = MAJOR;
+    ants.alarm[0] = 0.4; // alarmed, but below `majorAlarm`
+    step(world);
+    expect(ants.alarm[1]).toBe(0);
+    expect(ants.alarm[2]).toBeGreaterThan(world.params.alarmShow);
+    const strong = farm(3, 3);
+    strong.ants.size[1] = MAJOR;
+    strong.ants.alarm[0] = 1;
+    step(strong);
+    expect(strong.ants.alarm[1]).toBeCloseTo(strong.ants.alarm[2]!, 2);
+    // Apart, a major's alarm halves in `majorAlarmHalfLife`, a minor's in `alarmHalfLife`.
+    strong.ants.x[2] = strong.ants.x[2]! + 50;
+    strong.ants.alarm.fill(0);
+    strong.ants.alarm[1] = strong.ants.alarm[2] = 1;
+    for (let s = 0; s < 45 * STEPS_PER_SECOND; s++) step(strong);
+    expect(strong.ants.alarm[2]).toBeCloseTo(0.5, 2);
+    expect(strong.ants.alarm[1]).toBeCloseTo(Math.pow(0.5, 45 / strong.params.majorAlarmHalfLife), 2);
   });
 });

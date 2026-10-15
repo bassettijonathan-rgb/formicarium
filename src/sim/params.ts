@@ -748,6 +748,24 @@ export interface AntParams {
    * times its invitation times invitation² / (invitation² + this²), a high threshold (Detrain & Pasteels 1991).
    */
   majorCall: number;
+  /**
+   * Caste by feeding and inhibition (P3; Wheeler & Nijhout 1984 in Pheidole bicarinata: a larva well fed at
+   * the end of its growth becomes a soldier, unless adult soldiers hold it back). A larva becomes a major with
+   * chance `majorMax` times how well it was fed over the last `majorWindow` of its stage (the share of that
+   * time it grew at full speed), squared, over 1 + (share of majors among the workers touching it there /
+   * `majorInhibit`)². Rough: tuned so a well-fed colony settles at about one major in ten (Sempo & Detrain 2010).
+   */
+  majorMax: number;
+  /**
+   * Defence (P7; Detrain & Pasteels 1992: majors respond only to intense recruitment, and once roused kill
+   * the intruders minors hold): a major takes alarm from a nestmate only if that nestmate's alarm is at least
+   * `majorAlarm`, and its alarm fades with a half-life of `majorAlarmHalfLife` seconds instead of
+   * `alarmHalfLife`. Rough.
+   */
+  majorAlarm: number;
+  majorAlarmHalfLife: number;
+  majorWindow: number;
+  majorInhibit: number;
   /** Seconds a minor back from prey too big to take home goes about the nest inviting the majors it meets (rough). */
   inviteTime: number;
   /** Half-life of a major's arousal from invitations, seconds (rough). */
@@ -995,6 +1013,11 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   minorBite: 0.4,
   majorBite: 5,
   majorCall: 3,
+  majorMax: 0.3,
+  majorAlarm: 0.5,
+  majorAlarmHalfLife: 180,
+  majorWindow: 0.3,
+  majorInhibit: 0.07,
   inviteTime: 120,
   calledHalfLife: 180,
 };

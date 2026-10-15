@@ -47,6 +47,15 @@ export interface Brood {
   mouldy: Float64Array;
   /** Brood killed by mould, since the tank was set up. */
   moulded: number;
+  /**
+   * Pheidole larvae (DESIGN.md 4.4, P3): seconds spent in the last `majorWindow` of the larval stage, and
+   * how many of those it grew short of food; and the seconds of contact it had with workers there, and with
+   * majors among them. A worker's caste is drawn from these when it comes out of its cocoon.
+   */
+  late: Float64Array;
+  short: Float64Array;
+  workerTouch: Float64Array;
+  majorTouch: Float64Array;
 }
 
 export function createBrood(capacity = 0): Brood {
@@ -63,6 +72,10 @@ export function createBrood(capacity = 0): Brood {
     dried: 0,
     mouldy: new Float64Array(capacity),
     moulded: 0,
+    late: new Float64Array(capacity),
+    short: new Float64Array(capacity),
+    workerTouch: new Float64Array(capacity),
+    majorTouch: new Float64Array(capacity),
   };
 }
 
@@ -83,6 +96,10 @@ export function addBrood(brood: Brood, stage: BroodStage, x: number, y: number):
   brood.carried[k] = 0;
   brood.dry[k] = 0;
   brood.mouldy[k] = 0;
+  brood.late[k] = 0;
+  brood.short[k] = 0;
+  brood.workerTouch[k] = 0;
+  brood.majorTouch[k] = 0;
   return k;
 }
 
@@ -101,6 +118,10 @@ function growBrood(brood: Brood, capacity: number): void {
   brood.carried = grow(brood.carried, (n) => new Uint8Array(n));
   brood.dry = grow(brood.dry, (n) => new Float64Array(n));
   brood.mouldy = grow(brood.mouldy, (n) => new Float64Array(n));
+  brood.late = grow(brood.late, (n) => new Float64Array(n));
+  brood.short = grow(brood.short, (n) => new Float64Array(n));
+  brood.workerTouch = grow(brood.workerTouch, (n) => new Float64Array(n));
+  brood.majorTouch = grow(brood.majorTouch, (n) => new Float64Array(n));
 }
 
 /** Brood items of stage `from` or later within `radius` mm of (x, y), not counting item `skip` or items being carried. */
@@ -211,6 +232,11 @@ export function stepBrood(brood: Brood, farm: Farm, params: AntParams, seconds: 
       brood.progress[k]! += step;
       brood.food[k] = Math.max(0, brood.food[k]! - step * params.larvaFood);
       brood.unfed[k] = step < larva ? brood.unfed[k]! + seconds : 0;
+      // Pheidole: how well it is fed at the end of its growth decides whether it becomes a major (P3).
+      if (params.dimorphic && brood.progress[k]! >= 1 - params.majorWindow) {
+        brood.late[k]! += seconds;
+        if (step < larva) brood.short[k]! += seconds;
+      }
       if (brood.progress[k]! >= 1) {
         brood.stage[k] = BroodStage.pupa;
         brood.progress[k] = 0;

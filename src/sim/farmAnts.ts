@@ -35,7 +35,7 @@ import { humidityAt } from './water';
 import type { AntParams } from './params';
 import { placeGrain, removeGrain } from './soil';
 import { Purpose, Rng } from './rng';
-import { drawCaste, drawSize, isMajor, laysTrail, majorResponse } from './sizes';
+import { casteLength, drawCaste, drawSize, isMajor, laysTrail, majorChance, majorResponse } from './sizes';
 import { STEPS_PER_SECOND } from './time';
 
 /** Size of a bucket in the contact grid, mm; must be at least the contact radius. */
@@ -160,12 +160,48 @@ export function computeContacts(ctx: AntContext): void {
     // The brood's hunger, smelt here or passed on by touch, fading when nobody renews it.
     ants.broodNeed[i] = Math.max(ants.broodNeed[i]! * needKeep, smellBroodNeed(ctx, i), params.needRelay * need);
     // Alarm spreads from worker to worker, weaker at each one, so it reaches only a few bodies' lengths (DESIGN.md 4.4).
-    if (alarmed > 0 && ants.caste[i] === Caste.worker) ants.alarm[i] = Math.max(ants.alarm[i]!, params.alarmRelay * alarmed);
+    // A Pheidole major takes alarm only from a strongly alarmed nestmate (P7).
+    const roused = alarmed > 0 && (!params.dimorphic || alarmed >= params.majorAlarm || !isMajor(ants, params, i));
+    if (roused && ants.caste[i] === Caste.worker) ants.alarm[i] = Math.max(ants.alarm[i]!, params.alarmRelay * alarmed);
     if (params.sharing && canShare(ants.state[i]!)) beg(ctx, i, bx, by, bw, bh);
   }
+  if (params.dimorphic) smellMajors(ctx, bw, bh);
   tendBrood(ctx);
   feedQueen(ctx);
   pickUpBrood(ctx);
+}
+
+/**
+ * Pheidole larvae at the end of their growth (P3) note the workers touching
+ * them, and the majors among them: adult majors hold back the making of more
+ * (Wheeler & Nijhout 1984; in the model by touch, for their pheromone).
+ */
+function smellMajors(ctx: AntContext, bw: number, bh: number): void {
+  const { ants, brood, params } = ctx;
+  const r2 = params.contactRadius * params.contactRadius;
+  for (let k = 0; k < brood.count; k++) {
+    if (brood.stage[k] !== BroodStage.larva || brood.progress[k]! < 1 - params.majorWindow) continue;
+    const bx = Math.min(bw - 1, Math.max(0, Math.floor(brood.x[k]! / BUCKET)));
+    const by = Math.min(bh - 1, Math.max(0, Math.floor(brood.y[k]! / BUCKET)));
+    let workers = 0;
+    let majors = 0;
+    for (let y = Math.max(0, by - 1); y <= Math.min(bh - 1, by + 1); y++) {
+      for (let x = Math.max(0, bx - 1); x <= Math.min(bw - 1, bx + 1); x++) {
+        const cell = y * bw + x;
+        for (let m = start[cell]!; m < start[cell + 1]!; m++) {
+          const j = members[m]!;
+          if (ants.caste[j] !== Caste.worker || ants.state[j] === AntState.dead) continue;
+          const dx = ants.x[j]! - brood.x[k]!;
+          const dy = ants.y[j]! - brood.y[k]!;
+          if (dx * dx + dy * dy > r2) continue;
+          workers++;
+          if (isMajor(ants, params, j)) majors++;
+        }
+      }
+    }
+    brood.workerTouch[k]! += workers * DT;
+    brood.majorTouch[k]! += majors * DT;
+  }
 }
 
 /**
@@ -464,8 +500,16 @@ function eclose(ctx: AntContext, k: number): void {
   ants.lifespan[i] = drawLifespan(ctx.seed, i, 0, params);
   // Its size, as a colony of this many workers makes them (from its own stream, so other species are untouched).
   if (params.polymorph) ants.size[i] = drawSize(new Rng(ctx.seed, Purpose.traits, 2, i), workers(ants));
-  // A Pheidole worker comes out a minor or a major (DESIGN.md 4.4).
-  if (params.dimorphic) ants.size[i] = drawCaste(new Rng(ctx.seed, Purpose.traits, 2, i), params);
+  // A Pheidole worker comes out a major if it was well fed at the end of its growth and few majors were about (P3).
+  // A pupa whose end of growth went unrecorded (the keeper's first brood, or one saved before P3) comes out at the fixed share.
+  if (params.dimorphic) {
+    const caste = new Rng(ctx.seed, Purpose.traits, 2, i);
+    if (brood.late[k]! > 0) {
+      const fed = 1 - brood.short[k]! / brood.late[k]!;
+      const majors = brood.workerTouch[k]! > 0 ? brood.majorTouch[k]! / brood.workerTouch[k]! : 0;
+      ants.size[i] = casteLength(caste, params, caste.float() < majorChance(fed, majors, params));
+    } else ants.size[i] = drawCaste(caste, params);
+  }
   ants.born[i] = 1;
   brood.stage[k] = BroodStage.none;
 }
