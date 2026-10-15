@@ -100,7 +100,7 @@ export const FIRST_DROP = firstDrop(arenaFor(Species.lasiusNiger).height);
  * mat under the middle of it, a 40 x 30 cm arena with stones, bark, leaves and
  * moss laid out from the seed (DESIGN.md A1, A4), and a first sugar drop, so a
  * new tank has something to find (for Messor barbarus, 60 x 40 cm, and a
- * scoop of small seeds instead). The nest waters itself (a sand farm stays as
+ * scoop of small seeds instead; Pheidole pallidula gets the sugar). The nest waters itself (a sand farm stays as
  * damp as it was poured, DESIGN.md 7.7), what is left to rot goes mouldy, and
  * the colony can die.
  */
@@ -117,7 +117,7 @@ export function createTank(seed: number, nest: NestSetup | null = DEFAULT_NEST, 
   setHeatMat(world, nest ? (world.farm.width - MAT_WIDTH) / 2 : TANK_MAT_X);
   furnishArena(world, []);
   const first = firstDrop(world.arena.height);
-  if (world.params.seeds) placeSeeds(world, 'small', SEED_SCOOP.count, first.x, first.y, SEED_SCOOP.spread);
+  if (world.params.seeds && world.params.seedHoard > 0) placeSeeds(world, 'small', SEED_SCOOP.count, first.x, first.y, SEED_SCOOP.spread);
   else placeSugar(world, first.x, first.y, 40, 1);
   return world;
 }

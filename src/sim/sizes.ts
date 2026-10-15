@@ -11,6 +11,9 @@
  * Saved per ant (`Ants.size`, tenths of a mm); 0 is the species' standard
  * worker, which is what every ant of the other species is, and every Messor
  * worker of a tank kept before sizes (a media).
+ *
+ * Pheidole pallidula (DESIGN.md 4.4) has two castes instead: minors and
+ * majors with a huge head, nothing between (`dimorphic`).
  */
 import type { Ants } from './ants';
 import type { AntParams } from './params';
@@ -68,8 +71,55 @@ export function seedCapacity(ants: Ants, params: AntParams, i: number): number {
   return params.seedCarryMax * Math.pow(sizeScale(ants, i), params.seedSizeExponent);
 }
 
-/** How fast worker `i` cracks a seed relative to a media: with its jaw muscles' cross-section, the square of its length. */
-export function crackSpeed(ants: Ants, i: number): number {
+/**
+ * How fast worker `i` cracks a seed relative to a media: with its jaw
+ * muscles' cross-section, the square of its length; a Pheidole major
+ * `majorBite` times faster again, for its huge head.
+ */
+export function crackSpeed(ants: Ants, params: AntParams, i: number): number {
   const s = sizeScale(ants, i);
-  return s * s;
+  return s * s * (isMajor(ants, params, i) ? params.majorBite : 1);
+}
+
+/** True if worker `i` is a major of a species with minors and majors (Pheidole). */
+export function isMajor(ants: Ants, params: AntParams, i: number): boolean {
+  return params.dimorphic && ants.size[i]! >= 10 * params.majorLength[0];
+}
+
+/**
+ * How fast worker `i` bites through an insect's joints and skin, relative to
+ * a Lasius niger worker: 1 for a species of one size; a Pheidole minor
+ * `minorBite`, and a major `majorBite` times that.
+ */
+export function cutSpeed(ants: Ants, params: AntParams, i: number): number {
+  if (!params.dimorphic) return 1;
+  return isMajor(ants, params, i) ? params.minorBite * params.majorBite : params.minorBite;
+}
+
+/** 1 for a worker that lays trail and recruits, 0 for one that does not (a Pheidole major, Sempo & Detrain 2010). */
+export function laysTrail(ants: Ants, params: AntParams, i: number): number {
+  return isMajor(ants, params, i) ? 0 : 1;
+}
+
+/** -1 for a worker that invites majors when back from prey too big to take home (a Pheidole minor), else 0. */
+export function invitesMajors(ants: Ants, params: AntParams, i: number): number {
+  return params.dimorphic && !isMajor(ants, params, i) ? -1 : 0;
+}
+
+/**
+ * How readily a major answers an invitation of strength `called` (on the
+ * scale of `excitement`): `called` times called² / (called² + majorCall²),
+ * so a weak call barely moves it and a strong one does (Detrain & Pasteels
+ * 1991: majors' higher threshold). With `majorCall` 0, the control, majors
+ * answer the way minors do.
+ */
+export function majorResponse(called: number, params: AntParams): number {
+  const c2 = called * called;
+  return (called * c2) / (c2 + params.majorCall * params.majorCall);
+}
+
+/** A new Pheidole worker's length, tenths of a mm: a major with chance `majorShare`, else a minor. */
+export function drawCaste(rng: Rng, params: AntParams): number {
+  const [lo, hi] = rng.float() < params.majorShare ? params.majorLength : params.minorLength;
+  return Math.round(10 * (lo + (hi - lo) * rng.float()));
 }

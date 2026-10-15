@@ -1,7 +1,8 @@
 /**
  * The species a colony can be (DESIGN.md 4.4, Marco 2026-10-14 and
  * 2026-10-15): Lasius niger, the first, the Mediterranean acrobat ant,
- * Crematogaster scutellaris, and the harvester ant Messor barbarus. A species is a set of parameters over the Lasius model:
+ * Crematogaster scutellaris, the harvester ant Messor barbarus and Pheidole
+ * pallidula, with minors and big-headed majors. A species is a set of parameters over the Lasius model:
  * where the papers measured a difference it is here, and everything else
  * (brood times, food, growth) is Lasius niger's.
  *
@@ -14,6 +15,7 @@ export const Species = {
   lasiusNiger: 0,
   crematogaster: 1,
   messor: 2,
+  pheidole: 3,
 } as const;
 export type SpeciesId = (typeof Species)[keyof typeof Species];
 
@@ -21,6 +23,7 @@ export const SPECIES_NAMES: Record<SpeciesId, string> = {
   [Species.lasiusNiger]: 'Lasius niger',
   [Species.crematogaster]: 'Crematogaster scutellaris',
   [Species.messor]: 'Messor barbarus',
+  [Species.pheidole]: 'Pheidole pallidula',
 };
 
 /**
@@ -35,6 +38,7 @@ export function arenaFor(species: number): { width: number; height: number; wall
 /** The species' differences from the Lasius niger parameters. */
 export function speciesParams(species: number): Partial<AntParams> {
   if (species === Species.messor) return MESSOR;
+  if (species === Species.pheidole) return PHEIDOLE;
   if (species !== Species.crematogaster) return {};
   return {
     // Trails from the hind tibial gland (Gobin & Billen 1994; 2-tridecanol, Scarano et al. 2024) stop
@@ -66,4 +70,18 @@ const MESSOR: Partial<AntParams> = {
   // Kept drier than Lasius niger (keepers: nest 40-70% humid, with a damper part for the brood). Rough.
   broodHumidity: 0.7,
   broodDryHumidity: 0.45,
+};
+
+/**
+ * Pheidole pallidula (DESIGN.md 4.4): minors and big-headed majors. Minors
+ * scout, lay trail and swarm to food (a mass recruiter, Beckers et al. 1989);
+ * majors lay no trail and go out only when minors back from prey too big to
+ * take home invite them, with a higher threshold (Detrain & Pasteels 1991),
+ * and cut the prey up where it lies.
+ */
+const PHEIDOLE: Partial<AntParams> = {
+  dimorphic: true,
+  // Seeds taken from the arena when the brood wants protein, and cracked by the majors (keepers); not hoarded.
+  seeds: true,
+  seedHoard: 0,
 };

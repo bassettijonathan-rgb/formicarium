@@ -22,6 +22,7 @@
  *   npm run experiment -- nest-dark [--hours 2] [--no-light] [--gradient] [--material ytong|plaster|acrylic|wood] [--layout ...]
  *   npm run experiment -- harvest [--scattered] [--minutes 60] | trail-life [--after 60] | granary [--minutes 120]   (Messor barbarus)
  *   npm run experiment -- sizes [--ants 400] [--minutes 60] [--no-matching]   (Messor workers' sizes against the seeds they carry)
+ *   npm run experiment -- castes [--food sugar|fly|cricket|mealworm] [--minutes 60] [--same-threshold] [--no-majors]   (Pheidole pallidula: who comes to the food)
  *   growth takes --mortal: adults die of hunger, drying out and heat (M5c)
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
  */
@@ -52,6 +53,8 @@ import {
   runHarvest,
   runTrailLife,
   runGranary,
+  runCastes,
+  type CasteFood,
 } from '../src/sim/experiments';
 import type { Cut, Insect } from '../src/sim/prey';
 import type { NestLayout, NestMaterial } from '../src/sim/nest';
@@ -79,11 +82,16 @@ let gradient = false;
 let lit = false;
 let scattered = false;
 let afterSet = false;
+let food: CasteFood | undefined;
+let majors: number | undefined;
 const params: Partial<AntParams> = {};
 for (let i = 0; i < rest.length; i++) {
   if (rest[i] === '--runs') runs = Number(rest[++i]);
   else if (rest[i] === '--seed') first = Number(rest[++i]);
   else if (rest[i] === '--insect') insect = rest[++i] as Insect;
+  else if (rest[i] === '--food') food = rest[++i] as CasteFood;
+  else if (rest[i] === '--same-threshold') params.majorCall = 0;
+  else if (rest[i] === '--no-majors') majors = 0;
   else if (rest[i] === '--cut') cut = rest[++i] as Cut;
   else if (rest[i] === '--layout') layout = rest[++i] as NestLayout;
   else if (rest[i] === '--material') material = rest[++i] as NestMaterial;
@@ -329,9 +337,16 @@ for (let seed = first; seed < first + runs; seed++) {
         `${r.taken} of ${r.seeds} seeds taken; ${c('minor')}, ${c('media')}, ${c('major')}; lighter half carried by ${r.lightCarriers.toFixed(1)} mm workers, ` +
         `heavier half by ${r.heavyCarriers.toFixed(1)} mm; r = ${r.r.toFixed(2)}`,
     );
+  } else if (name === 'castes') {
+    for (const f of food ? [food] : (['sugar', 'fly', 'cricket', 'mealworm'] as const)) {
+      const r = runCastes({ seed, food: f, minutes, ...(ants ? { ants } : {}), ...(majors === undefined ? {} : { majors }), params });
+      const t = (s: number) => (s < 0 ? 'never' : `${(s / 60).toFixed(1)} min`);
+      const insectLine = f === 'sugar' ? '' : `; legs off after ${t(r.legsOff)}, half its juice taken after ${t(r.half)}; pieces carried home by minors ${r.carriedByMinors}, by majors ${r.carriedByMajors}`;
+      console.log(`seed ${seed} ${f}: came ${r.minors} minors and ${r.majors} majors, ${pct(r.majorShare)} majors (colony ${pct(r.colonyShare)})${insectLine}`);
+    }
   } else {
     throw new Error(
-      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation, prey, nest-damp, nest-room, nest-spread, moving, nest-dark, harvest, trail-life, granary or sizes',
+      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation, prey, nest-damp, nest-room, nest-spread, moving, nest-dark, harvest, trail-life, granary, sizes or castes',
     );
   }
 }

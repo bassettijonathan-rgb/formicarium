@@ -32,6 +32,11 @@
  * farmAnts.ts); the husk is carried out to the midden like a corpse; and a
  * piece left uneaten goes mouldy (mould.ts).
  *
+ * Pheidole pallidula (DESIGN.md 4.4): a minor coming home from prey too
+ * big to take home invites the majors too; a major bites five times faster
+ * than a minor and leaves the parts it cuts off lying for the minors to
+ * carry home.
+ *
  * Seeds (Messor barbarus, DESIGN.md 4.4) are pieces too, of kind 'seed': a
  * harvester that comes on one light enough carries it home whole, laying
  * trail if more seeds lie there; in the nest it is stored where the air is
@@ -44,7 +49,7 @@ import { temperatureAt } from './heat';
 import { humidityAt } from './water';
 import type { AntParams } from './params';
 import { Purpose, Rng } from './rng';
-import { crackSpeed, seedCapacity } from './sizes';
+import { crackSpeed, cutSpeed, invitesMajors, isMajor, seedCapacity } from './sizes';
 import { STEPS_PER_SECOND } from './time';
 
 /** The feeder insects a keeper buys (B6). */
@@ -373,14 +378,16 @@ export function workAtPrey(ctx: AntContext, i: number): void {
     }
   }
   if (part) {
-    part.bitten += DT;
+    part.bitten += DT * cutSpeed(ants, params, i);
     if (part.bitten >= part.toughness) {
       // Off: a wound on the part and one on the body it came from.
       const from = body.find((q) => q.id === part.joint);
       if (from) from.cuts++;
       part.cuts++;
       part.joint = -1;
-      pickUpPiece(ctx, i, part, true);
+      // A Pheidole major leaves the part lying for the minors to carry home and cuts on (Detrain & Deneubourg 1997).
+      if (isMajor(ants, params, i)) ants.timer[i] = 0;
+      else pickUpPiece(ctx, i, part, true);
     } else if (steps >= params.preyGiveUp * STEPS_PER_SECOND) leavePrey(ctx, i, true);
     return;
   }
@@ -392,7 +399,7 @@ export function workAtPrey(ctx: AntContext, i: number): void {
     return;
   }
   // Else bite a new hole through its skin.
-  p.bitten += DT;
+  p.bitten += DT * cutSpeed(ants, params, i);
   if (p.bitten >= p.skin) {
     p.cuts++;
     p.bitten = 0;
@@ -449,6 +456,8 @@ function drinkFrom(ctx: AntContext, i: number, body: Piece[]): void {
   ants.crop[i]! += take;
   ants.cropProtein[i]! += take;
   ants.cropQuality[i] = foodQuality(1, params) * (take / params.cropLoad);
+  // What it drank from is still there, too big to take home: a minor invites majors (Detrain & Pasteels 1991).
+  ants.invite[i] = invitesMajors(ants, params, i);
   goHome(ctx, i, true);
 }
 
@@ -462,6 +471,8 @@ function leavePrey(ctx: AntContext, i: number, forHelp: boolean): void {
     return;
   }
   ants.cropQuality[i] = params.preyTrail;
+  // Back from prey it could not move: it invites majors as well (Detrain & Pasteels 1991).
+  ants.invite[i] = invitesMajors(ants, params, i);
   goHome(ctx, i, true);
 }
 
@@ -488,6 +499,8 @@ function pickUpPiece(ctx: AntContext, i: number, p: Piece, more: boolean): void 
   ants.pieceHeld[i] = p.id;
   const seed = isSeed(p);
   ants.cropQuality[i] = more ? (seed ? params.seedTrail : params.preyTrail) : 0;
+  // A piece cut from an insect still too big to take home: it invites majors to come and cut it up (Detrain & Pasteels 1991).
+  ants.invite[i] = more && !seed ? invitesMajors(ants, params, i) : 0;
   goHome(ctx, i, more, seed);
 }
 
@@ -655,7 +668,7 @@ export function tendStores(ctx: AntContext, i: number): boolean {
   const hungry = Math.max(0, 1 - ants.crop[i]! / params.cropLoad);
   if (isSeed(p) && p.cuts === 0) {
     // Seconds of a media's biting this second: as hungry as it or the brood is, and faster the bigger its head.
-    p.bitten += (Math.max(hungry, ants.broodNeed[i]!) * crackSpeed(ants, i)) / TEND_RATE;
+    p.bitten += (Math.max(hungry, ants.broodNeed[i]!) * crackSpeed(ants, params, i)) / TEND_RATE;
     if (p.bitten >= p.skin) {
       p.cuts = 1;
       p.bitten = 0;

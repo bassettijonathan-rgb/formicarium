@@ -14,7 +14,7 @@ import { type NestSetup, createNest, moduleById } from './nest';
 import type { FoodDrop } from './food';
 import { type AntParams, DEFAULT_ANT_PARAMS } from './params';
 import { Purpose, Rng } from './rng';
-import { drawSize } from './sizes';
+import { drawCaste, drawSize } from './sizes';
 import { stepSoil } from './soil';
 import { type HeatMat, MAT_WIDTH, updateTemperature } from './heat';
 import { pourWater, updateHumidity, updateWater } from './water';
@@ -102,7 +102,7 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
     arena: createArena(),
     decor: [],
     ants,
-    nest: { stores: 0, excitement: 0 },
+    nest: { stores: 0, excitement: 0, call: 0 },
     nestMode,
     food: [],
     prey: [],
@@ -137,9 +137,10 @@ function giveTraits(ants: Ants, params: AntParams, seed: number): void {
     ants.lifespan[i] = drawLifespan(seed, i, ants.age[i]!, params);
   }
   // Sizes from their own stream, so species of one size draw exactly what they did before sizes.
-  if (!params.polymorph) return;
   const sizes = new Rng(seed, Purpose.traits, 1);
-  for (let i = 0; i < ants.count; i++) ants.size[i] = drawSize(sizes, ants.count);
+  if (params.polymorph) for (let i = 0; i < ants.count; i++) ants.size[i] = drawSize(sizes, ants.count);
+  // Pheidole: minors and majors (DESIGN.md 4.4).
+  if (params.dimorphic) for (let i = 0; i < ants.count; i++) ants.size[i] = drawCaste(sizes, params);
 }
 
 /** The keeper tips the workers onto the soil surface, all at one spot in the middle. They come part-fed. */

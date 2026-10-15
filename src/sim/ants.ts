@@ -17,7 +17,7 @@ import { computeContacts, stepFarmAnt } from './farmAnts';
 import { speedAt } from './heat';
 import { type FoodDrop, foodQuality, foodReach } from './food';
 import { type Piece, deliverToLabNest, holdPiece, nearestPiece, pieceReach, startAtPrey, workAtPrey } from './prey';
-import { seedCapacity } from './sizes';
+import { isMajor, laysTrail, majorResponse, seedCapacity } from './sizes';
 import type { AntParams } from './params';
 import type { Rng } from './rng';
 import { STEPS_PER_SECOND } from './time';
@@ -149,6 +149,14 @@ export interface Ants {
   broodNeed: Float64Array;
   /** Steps left during which this forager, just back with food, excites the ants it meets. */
   recruiting: Int32Array;
+  /**
+   * Pheidole (DESIGN.md 4.4): -1 while a minor walks home from an insect too
+   * big to move, to invite majors; once home, the steps left during which it
+   * invites the majors it meets. 0 otherwise, and always for other species.
+   */
+  invite: Int32Array;
+  /** Pheidole majors: how strongly minors back from big prey have invited this major, on the scale of `excitement`. */
+  called: Float64Array;
   /** 1 once the ant has come in through the tube, so its farm path integrator points to the tube. */
   knowsTube: Uint8Array;
   /**
@@ -278,6 +286,8 @@ export function createAnts(count: number): Ants {
     alarm: new Float64Array(count),
     broodNeed: new Float64Array(count),
     recruiting: new Int32Array(count),
+    invite: new Int32Array(count),
+    called: new Float64Array(count),
     knowsTube: new Uint8Array(count),
     holeX: new Float64Array(count),
     holeY: new Float64Array(count),
@@ -358,6 +368,8 @@ export interface Nest {
    * `AntParams.recruitRate`). In the farm each ant has its own.
    */
   excitement: number;
+  /** Lab nest only, Pheidole: the majors' invitation from minors back from big prey (as `excitement`). */
+  call: number;
 }
 
 /**
@@ -399,7 +411,10 @@ export interface AntContext {
 /** Advances every ant by one step, in id order. */
 export function stepAnts(ctx: AntContext): void {
   const { ants, nest, params } = ctx;
-  if (ctx.nestMode === 'lab') nest.excitement *= Math.pow(0.5, DT / params.excitementHalfLife);
+  if (ctx.nestMode === 'lab') {
+    nest.excitement *= Math.pow(0.5, DT / params.excitementHalfLife);
+    if (params.dimorphic) nest.call *= Math.pow(0.5, DT / params.excitementHalfLife);
+  }
   else computeContacts(ctx);
   // Every worker burns the sugar in its crop on the life clock (D6); the lab nest has no metabolism.
   const burn = ctx.nestMode === 'farm' ? (params.burnRate / params.daySeconds) * DT : 0;
@@ -566,9 +581,13 @@ function restInNest(ctx: AntContext, i: number): void {
     return;
   }
   const own = ants.hasMemory[i] ? params.returnToFoodRate : params.leaveRate;
-  const rate = own + params.recruitRate * nest.excitement;
+  // A Pheidole major goes out only when invited, and readily only when strongly (`majorResponse`).
+  const major = params.majorCall > 0 && isMajor(ants, params, i);
+  const rate = major ? params.recruitRate * majorResponse(nest.call, params) : own + params.recruitRate * nest.excitement;
   if (!rng.chance(rate * DT)) return;
   ants.state[i] = ants.hasMemory[i] ? AntState.toFood : AntState.exploring;
+  if (major) ants.seekProtein[i] = 1;
+  if (params.dimorphic) ants.invite[i] = 0;
   ants.x[i] = ctx.arena.entranceX;
   ants.y[i] = ctx.arena.entranceY;
   ants.heading[i] = rng.range(-1, 1); // out of the tube, roughly into the arena
@@ -627,7 +646,7 @@ function walk(ctx: AntContext, i: number): void {
   const trailR = sampleTrail(arena, rx, ry);
   const trailSum = trailL + trailR;
   // A scout out for protein with no insect in mind searches on its own: the trail leads to sugar as often as not.
-  // A harvester's scouts follow trails all the same: they lead to seeds.
+  // A harvester's scouts follow trails all the same: they lead to seeds (and a Pheidole's, to prey as well).
   const scouting = state === AntState.exploring && ants.seekProtein[i] === 1 && !params.seeds;
   const undertaker = state === AntState.carryingCorpse;
   if (!scouting && !undertaker && trailSum > params.trailThreshold) turn += params.trailTurn * DT * ((trailR - trailL) / trailSum);
@@ -695,7 +714,7 @@ function walk(ctx: AntContext, i: number): void {
   // 7. Lay trail on the way home from food, more for better food.
   const now = ants.state[i]!;
   if (now === AntState.returning && params.trailLaying) {
-    depositTrail(arena, nx, ny, params.trailDeposit * stepLength * ants.cropQuality[i]!);
+    depositTrail(arena, nx, ny, params.trailDeposit * stepLength * ants.cropQuality[i]! * laysTrail(ants, params, i));
   }
 
   // 8. Arrivals and decisions.
@@ -727,14 +746,21 @@ function walk(ctx: AntContext, i: number): void {
 
 function enterNest(ctx: AntContext, i: number): void {
   const { ants, nest, params } = ctx;
+  // A major excites no one (it lays no trail, Sempo & Detrain 2010).
+  const recruits = params.recruitPerReturn * ants.cropQuality[i]! * laysTrail(ants, params, i);
+  if (ants.invite[i]! < 0) {
+    // A minor back from prey too big to take home invites the majors too.
+    nest.call += recruits;
+    ants.invite[i] = 0;
+  }
   if (ants.pieceHeld[i]! >= 0) {
     // A piece of insect brought in excites nestmates as the forager's trail laying says (none for a whole fly).
-    nest.excitement += params.recruitPerReturn * ants.cropQuality[i]!;
+    nest.excitement += recruits;
     deliverToLabNest(ctx, i);
   }
   if (ants.crop[i]! > 0) {
     nest.stores += ants.crop[i]!;
-    nest.excitement += params.recruitPerReturn * ants.cropQuality[i]!;
+    nest.excitement += recruits;
     ants.crop[i] = 0;
     ants.cropProtein[i] = 0;
   }
@@ -802,9 +828,10 @@ function wantsProtein(ctx: AntContext, i: number): boolean {
   return ctx.ants.seekProtein[i] === 1 || ctx.ants.broodNeed[i]! >= ctx.params.preyNeed;
 }
 
-/** True if the ant takes pieces lying in the arena: insects, if it wants protein; seeds, always, if it harvests them. */
+/** True if the ant takes pieces lying in the arena: insects or seeds, if it wants protein; seeds, always, if it hoards them. */
 function wantsPiece(ctx: AntContext, i: number): boolean {
-  return ctx.params.seeds || wantsProtein(ctx, i);
+  // A species that does not hoard seeds (Pheidole) takes them only when it wants protein.
+  return (ctx.params.seeds && ctx.params.seedHoard > 0) || wantsProtein(ctx, i);
 }
 
 /** The nearest food of the kind the ant is after, a drop or a piece of insect, within `range` mm: where it is. */

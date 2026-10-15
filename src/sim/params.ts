@@ -726,6 +726,32 @@ export interface AntParams {
   seedSizeExponent: number;
   /** Fraction of a seed's content that feeds the larvae as protein; the rest is starch and oil (rough: seeds are 10-25% protein, more counting oil-rich seeds' fat). */
   seedProtein: number;
+  /**
+   * True: workers are minors or majors, nothing between (Pheidole, DESIGN.md 4.4; `sizes.ts`). Majors lay no
+   * trail and go out only when invited by nestmates back from prey too big to take home (`majorCall`).
+   */
+  dimorphic: boolean;
+  /** Share of new workers that come out majors (Pheidole pallidula field colonies: 10-12%, Sempo & Detrain 2010). */
+  majorShare: number;
+  /** Minors' and majors' lengths, mm, each drawn evenly from its range (rough: majors 3.4-3.9 mm, Sharaf et al. 2017). */
+  minorLength: [number, number];
+  majorLength: [number, number];
+  /**
+   * How fast a minor bites through an insect's joints and skin, relative to a Lasius niger worker (rough: its head
+   * about 0.55 mm wide against Lasius's 0.9 mm, so its jaw muscles' cross-section about 0.4 times).
+   */
+  minorBite: number;
+  /** How much faster a major bites through joints, skins and seed coats than a minor (rough: its head over twice as wide, Detrain 1989, so its jaw muscles' cross-section about five times). */
+  majorBite: number;
+  /**
+   * The invitation a major must feel to go out, on the scale of `excitement`: it goes out at `recruitRate`
+   * times its invitation times invitation² / (invitation² + this²), a high threshold (Detrain & Pasteels 1991).
+   */
+  majorCall: number;
+  /** Seconds a minor back from prey too big to take home goes about the nest inviting the majors it meets (rough). */
+  inviteTime: number;
+  /** Half-life of a major's arousal from invitations, seconds (rough). */
+  calledHalfLife: number;
 }
 
 export const DEFAULT_ANT_PARAMS: AntParams = {
@@ -962,4 +988,13 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   seedProtein: 0.5,
   polymorph: false,
   seedSizeExponent: 3,
+  dimorphic: false,
+  majorShare: 0.1,
+  minorLength: [2.3, 2.8],
+  majorLength: [3.4, 3.9],
+  minorBite: 0.4,
+  majorBite: 5,
+  majorCall: 3,
+  inviteTime: 120,
+  calledHalfLife: 180,
 };

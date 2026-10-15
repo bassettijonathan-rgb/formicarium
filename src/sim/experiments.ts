@@ -19,7 +19,7 @@ import { createArena, sampleTrail } from './arena';
 import { createTank } from './keeper';
 import { Species, arenaFor, speciesParams } from './species';
 import { type Cut, type Insect, makeSeeds } from './prey';
-import { type SizeClass, drawSize, lengthOf, sizeClass } from './sizes';
+import { type SizeClass, drawSize, isMajor, lengthOf, sizeClass } from './sizes';
 import { type NestLayout, type NestMaterial, type NestSize, TEST_TUBE, TEST_TUBE_SETUP, moduleAt } from './nest';
 import { addModule, connect, connectArena } from './table';
 import { TANK_ARENA } from './tank';
@@ -1594,5 +1594,100 @@ export function runSizeMatching(opts: RunOptions & { minutes: number; count?: nu
     lightCarriers: mean(sorted.slice(0, halfway).map((q) => q.length)),
     heavyCarriers: mean(sorted.slice(halfway).map((q) => q.length)),
     byClass,
+  };
+}
+
+export type CasteFood = 'sugar' | Insect;
+
+export interface CastesResult {
+  /** Workers that came to the food (fed at it, worked at it or carried part of it home): minors and majors. */
+  minors: number;
+  majors: number;
+  /** Majors' share of the workers that came, and of the colony. */
+  majorShare: number;
+  colonyShare: number;
+  /** Seconds until the insect's last leg came off (-1 if one was still on, or no legs), and until half its juice was taken (-1: never). */
+  legsOff: number;
+  half: number;
+  /** Pieces carried home by minors and by majors. */
+  carriedByMinors: number;
+  carriedByMajors: number;
+}
+
+/**
+ * Who comes to the food (Detrain & Pasteels 1991; Detrain & Deneubourg
+ * 1997): a hungry Pheidole pallidula lab colony of `ants` workers, one in
+ * ten a major (`majors` overrides the share), behind the entrance of the
+ * keeper's bare 40 x 30 cm arena, finds a drop of sugar water, a fruit fly
+ * or a cricket 10 cm out. Minors scout and recruit to all three; majors are
+ * invited only by minors back from prey too big to take home, and answer
+ * only a strong call, so a cricket should draw a larger share of majors
+ * than sugar or a fly. With `majorCall` 0 (the control) majors answer the
+ * way minors do.
+ */
+export function runCastes(opts: RunOptions & { food: CasteFood; minutes: number; majors?: number }): CastesResult {
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 100, nest: 'lab', species: Species.pheidole, params: opts.params ?? {} });
+  world.arena = createArena(TANK_ARENA.width, TANK_ARENA.height);
+  const { ants, params } = world;
+  // Exactly the share asked for, spread evenly through the ids (each keeps the length its caste was drawn with).
+  const share = opts.majors ?? params.majorShare;
+  const rng = new Rng(opts.seed, Purpose.test, 27);
+  let colonyMajors = 0;
+  for (let i = 0; i < ants.count; i++) {
+    const major = Math.floor((i + 1) * share) > Math.floor(i * share);
+    const [lo, hi] = major ? params.majorLength : params.minorLength;
+    ants.size[i] = Math.round(10 * (lo + (hi - lo) * rng.float()));
+    if (major) colonyMajors++;
+  }
+  const x = world.arena.entranceX + 100;
+  const y = world.arena.entranceY;
+  let dropId = -1;
+  if (opts.food === 'sugar') dropId = placeSugar(world, x, y, 20, 1);
+  else {
+    ants.seekProtein.fill(1);
+    placeInsect(world, opts.food, 'whole', x, y);
+  }
+  const juice = world.prey.reduce((sum, p) => sum + p.juice, 0);
+  const ids = new Set(world.prey.map((p) => p.id));
+  const came = new Uint8Array(ants.count);
+  let legsOff = -1;
+  let half = -1;
+  let carriedByMinors = 0;
+  let carriedByMajors = 0;
+  const steps = opts.minutes * 60 * STEPS_PER_SECOND;
+  for (let s = 1; s <= steps; s++) {
+    step(world);
+    for (let i = 0; i < ants.count; i++) {
+      if (ants.state[i] === AntState.atPrey || ants.pieceHeld[i]! >= 0 || (dropId >= 0 && ants.foodId[i] === dropId)) came[i] = 1;
+    }
+    for (const p of world.prey) {
+      if (!ids.has(p.id) || p.carriedBy < 0 || p.place !== Place.arena) continue;
+      ids.delete(p.id);
+      if (isMajor(ants, params, p.carriedBy)) carriedByMajors++;
+      else carriedByMinors++;
+    }
+    if (s % STEPS_PER_SECOND !== 0 || opts.food === 'sugar') continue;
+    const t = s / STEPS_PER_SECOND;
+    const hasLegs = world.prey.some((p) => p.joint >= 0 && (p.part === 'leg' || p.part === 'hindLeg'));
+    if (legsOff < 0 && !hasLegs && world.prey.some((p) => p.part === 'hindLeg' || p.part === 'leg')) legsOff = t;
+    const lying = world.prey.filter((p) => p.place === Place.arena && p.carriedBy < 0).reduce((sum, p) => sum + p.juice, 0);
+    if (half < 0 && lying <= juice / 2) half = t;
+  }
+  let minors = 0;
+  let majors = 0;
+  for (let i = 0; i < ants.count; i++) {
+    if (!came[i]) continue;
+    if (isMajor(ants, params, i)) majors++;
+    else minors++;
+  }
+  return {
+    minors,
+    majors,
+    majorShare: minors + majors > 0 ? majors / (minors + majors) : 0,
+    colonyShare: colonyMajors / ants.count,
+    legsOff,
+    half,
+    carriedByMinors,
+    carriedByMajors,
   };
 }

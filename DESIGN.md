@@ -673,7 +673,7 @@ where everyone was showed why, one cause after another:
 Each ant logs short events (born, first foraging trip, found food, died) so
 you can open any ant and read its life.
 
-### 4.4 Species: Lasius niger, Crematogaster scutellaris and Messor barbarus (Marco, 2026-10-14 and 15)
+### 4.4 Species: Lasius niger, Crematogaster scutellaris, Messor barbarus and Pheidole pallidula (Marco, 2026-10-14 and 15)
 
 Asked by Marco on 2026-10-14 ("I want you to implement another species,
 Crematogaster scutellaris") and approved with the colonies plan (S1 to S9;
@@ -817,6 +817,64 @@ plan), and kept tanks load as they were.
   damper part). Brood temperature and everything else (M9: brood times,
   the queen, food needs, founding in a test tube, no winter rest) are
   Lasius niger's.
+
+**Pheidole pallidula**, with minors and big-headed majors (Marco,
+2026-10-15: "what other species would be cool to add? ... I want the
+existing colonies to keep running"; he picked Pheidole pallidula, and
+approved the plan P1-P9 with "ok"). Step 1 is built: the species, its
+looks, the two castes at a fixed share, recruitment, the majors' higher
+threshold, cutting big prey on the spot, and seeds. Step 2 (majors made by
+feeding and held back by majors, P3, and defence, P7) is next. Lasius
+niger, Crematogaster scutellaris and Messor barbarus colonies run exactly
+as before (same ants and insects in the same places after 25 minutes with
+food, an insect, a dispenser and a cover lifted, in a ytong nest, a test
+tube and the sand farm, checked against the code before Pheidole), and
+kept tanks load as they were.
+
+- **Looks (P1).** Small and pale yellow-brown to brown. A minor (2.3-2.8 mm)
+  has a small round head; a major (3.4-3.9 mm, Sharaf et al. 2017) a huge
+  square head notched at the back, wider than its gaster, a little
+  redder, with heavy mandibles (head width ratio minor to major 0.42,
+  Detrain 1989); the queen 7.5 mm. Two waist nodes, two short spines.
+- **Two castes (P2; `dimorphic`, `sizes.ts`).** Each worker is a minor or a
+  major, nothing between, its length saved in `Ants.size` as for Messor.
+  For now one new worker in ten comes out a major (`majorShare`; field
+  colonies 10-12%, Sempo & Detrain 2010; Passera 1977), the keeper's first
+  workers too. The card of a worker says minor or major.
+- **Recruitment (P4).** Minors forage, lay trail and recruit as Lasius
+  niger workers do (trails fade as Lasius niger's, rough). Majors never lay
+  trail and excite no one (Sempo & Detrain 2010). Scouts follow trails, as
+  Messor's do.
+- **Who answers the call (P5).** A minor coming home from prey too big to
+  take home (one it bit at and gave up on, or drank from, or cut a piece
+  from while more lay there) invites majors as well as minors: in a farm
+  or bought nest for 2 minutes after it gets in (`inviteTime`), every major
+  it touches gaining 2 per second of contact on the scale of excitement;
+  in the lab nest the whole nest's `call`. A minor back from sugar or with
+  a fruit fly invites no majors. Majors go out only when called, at
+  `recruitRate` times call × call² / (call² + 3²) (`majorCall`): a weak
+  call barely moves them, a strong one as much as it moves a minor
+  (Detrain & Pasteels 1991: majors respond only to intense recruitment; the
+  numbers are rough). A major's arousal fades with a half-life of 3 minutes
+  (`calledHalfLife`). It goes out for protein. A major with food in its crop
+  still answers (majors store food in their crops, Lachaud et al. 1992); a
+  Lasius worker with protein for the brood takes it there first.
+- **Cutting (P6).** A Pheidole minor bites through an insect's joints and
+  skin at 0.4 of a Lasius worker's rate (`minorBite`, rough: its head about
+  0.55 mm wide against 0.9 mm), a major five times faster than a minor
+  (`majorBite`: its head over twice as wide). A major that bites a part
+  off leaves it lying and cuts on, and the minors carry the parts home
+  (Detrain & Deneubourg 1997: majors cut the sclerites, workers fed and
+  carried). A minor still carries home what it can, a fruit fly whole.
+- **Seeds (P8).** Pheidole takes seeds it can carry (by the cube of its
+  length, as Messor: under a milligram for a minor, about 2 mg for a
+  major) only when it wants protein (`seedHoard` 0: no hoarding), and
+  majors crack them (by the square of their length, times five). The seed
+  dispenser works for it; a new Pheidole tank gets the first sugar drop.
+- **Everything else (P9)** is Lasius niger's: brood times, the queen,
+  food needs, founding in a test tube with one queen, nest climate, no
+  winter rest. The simulation's bodies (spacing, walking speed) are Lasius
+  niger's too.
 
 ---
 
@@ -1566,6 +1624,22 @@ project. If one fails, we fix the model, not the test.
    seed taken grows from minors to medias to majors. With every worker a
    media's load (`seedSizeExponent` 0), the two halves' carriers differ by
    under 1 mm.
+27. **Majors to big prey, not to small food** (Pheidole plan, test 4;
+   Detrain & Pasteels 1991, qualitative: majors respond only to intense
+   recruitment; Detrain & Deneubourg 1997: free flies drew few majors, an
+   unmovable cockroach many): a hungry Pheidole lab colony of 100 workers,
+   one in ten a major, finds a drop of sugar water, a fruit fly or a
+   cricket 10 cm out in the keeper's bare 40 x 30 cm arena. Within 30
+   minutes over 30 minors and no major come to the sugar; one minor takes
+   the fly home; at least 5 majors come to the cricket. With no higher
+   threshold for majors (`majorCall` 0), majors come to the sugar in their
+   share of the colony (over 5% of those that came).
+28. **Cut where it lies** (Pheidole plan, test 5; Detrain & Deneubourg
+   1997, qualitative): in the same colony a cricket's six legs come off
+   where it lies and all six are carried home by minors, none by majors;
+   a mealworm, whose skin is far harder, is half eaten at least 5% sooner
+   with majors than with minors alone. (The plan asked this of the
+   cricket too; it does not hold there, see 9.20.)
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -2231,6 +2305,44 @@ min (mean 1.7), 1.7-2.9 seeds/min (mean 2.4); the pile with no trail
 seeds (1.9 with all medias in step 1; 2.8 in the field). Trails as in
 9.18.
 
+### 9.20 Results so far (Pheidole pallidula, step 1)
+
+`npm run experiment -- castes [--food sugar|fly|cricket|mealworm]
+[--same-threshold] [--no-majors]` runs tests 27 and 28. Lasius niger, C.
+scutellaris and Messor barbarus run exactly as before (plan test 1: the
+same ants and insects in the same places after 25 minutes in a ytong nest,
+a test tube and the sand farm, against the code before Pheidole).
+
+**Who comes to the food (test 27).** 100 workers, 10 of them majors, 30
+minutes, 3 colonies:
+
+| | Sugar | Fruit fly | Cricket |
+|---|---|---|---|
+| Majors' higher threshold | 59-69 minors, 0 majors | 1 minor | 85-90 minors, 9-10 majors |
+| Majors answer as minors (`majorCall` 0) | 58-67 minors, 6-7 majors (8-11%) | 1 minor | 85-89 minors, 9-10 majors |
+
+So sugar and a fly draw minors only, and a cricket the majors as well; with
+the same threshold for both castes, majors come to sugar in their share.
+At a cricket nearly the whole hungry colony comes within 30 minutes, so
+the majors' share there is their share of the colony (9-11%); Detrain &
+Deneubourg (1997) give no proportions to compare.
+
+**Cut where it lies (test 28).** The cricket's legs are off after 2.5-4.0
+min and carried home by minors (6 of 6 in all three; with majors that
+answer as minors, a major carried one in two colonies). Half its juice
+was taken after 13.0-14.3 min with majors and 13.8-17.2 min with minors
+alone: **no real difference**. The cricket's legs are cut by the swarm of
+minors before the first majors arrive (about 4 minutes in), and after
+that what limits eating is drinking at the wounds (5 minutes per crop),
+which majors do not speed. A mealworm, whose skin takes a Lasius worker
+10 minutes to bite through, was half eaten after 31.5-33.2 min with
+majors and 37.6-39.0 min with minors alone (about 15% sooner): there the
+majors' jaws are what limits the work.
+
+**In a keeper's tank** (60 workers, 6 majors, a ytong nest, a cricket put
+in): minors find and cut it over the next 40 minutes, and once they come
+home from it the majors come out, 2-5 at a time, and stay at it.
+
 ---
 
 ## 10. Architecture
@@ -2269,6 +2381,7 @@ Each milestone is one or a few small PRs, merged by Marco, with a link to play.
 | A | The arena (asked by Marco 2026-10-13, section 3.4): Arena 1 climbing; Arena 2 dishes, feeders and placing objects; Arena 3 feeder insects |
 | N | Bought nests (asked by Marco 2026-10-13, section 3.5): Nests 1 one ytong nest, in three sizes and three layouts; Nests 2 plaster, acrylic and wood, covers and light; Nests 3a keeping together (settling beside resting nestmates); Nests 3 modules, tubes and cotton plugs, the test-tube start and moving house |
 | C | Colonies and species (asked by Marco 2026-10-14, sections 3.6 and 4.4): step 1 up to four colonies on one table; step 2 Crematogaster scutellaris |
+| P | Pheidole pallidula (asked by Marco 2026-10-15, section 4.4): step 1 minors and majors, recruitment and cutting; step 2 majors made by feeding, and defence |
 
 If a validation test in M1 or M2 cannot be made to pass with plausible
 parameters, I stop and report before changing the model.
@@ -2277,6 +2390,7 @@ parameters, I stop and report before changing the model.
 
 ## 12. References
 
+- Beckers, Goss, Deneubourg & Pasteels 1989. Colony size, communication and ant foraging strategy. Psyche 96, 239-256.
 - Beckers, Deneubourg & Goss 1993. Modulation of trail laying in the ant *Lasius niger*. J. Insect Behav.
 - Bernadou, Hoffacker, Pable & Heinze 2020. Lipid content influences division of labour in a clonal ant. J. Exp. Biol. 223, jeb219238.
 - Blanchard, Orledge, Reynolds & Franks 2000. Division of labour and seasonality in the ant *Leptothorax albipennis*: worker corpulence and its influence on behaviour. Anim. Behav. 59, 723-738.
@@ -2288,6 +2402,9 @@ parameters, I stop and report before changing the model.
 - Charbonneau & Dornhaus 2015. When doing nothing is something. J. Bioecon.
 - Deneubourg, Goss, Franks, Sendova-Franks, Detrain & Chrétien 1991. The dynamics of collective sorting: robot-like ants and ant-like robots. In From Animals to Animats (SAB 1990). MIT Press.
 - Depickère, Fresneau & Deneubourg 2004. Dynamics of aggregation in *Lasius niger* (Formicidae): influence of polyethism. Insectes Soc. 51, 81-90.
+- Detrain & Deneubourg 1997. Scavenging by *Pheidole pallidula*: a key for understanding decision-making systems in ants. Anim. Behav. 53, 537-547.
+- Detrain & Pasteels 1991. Caste differences in behavioral thresholds as a basis for polyethism during food recruitment in the ant *Pheidole pallidula*. J. Insect Behav. 4, 157-176.
+- Detrain & Pasteels 1992. Caste polyethism and collective defense in the ant *Pheidole pallidula*: the outcome of quantitative differences in recruitment. Behav. Ecol. Sociobiol. 29, 405-412.
 - Detrain, Tasse, Versaen & Pasteels 2000. A field assessment of optimal foraging in ants: trail patterns and seed retrieval by the European harvester ant *Messor barbarus*. Insectes Soc. 47, 56-62.
 - Diez, Deneubourg & Detrain 2012. Social prophylaxis through distant corpse removal in ants. Naturwissenschaften 99, 833-842.
 - Diez, Lejeune & Detrain 2014. Keep the nest clean: survival advantages of corpse removal in ants. Biol. Lett. 10, 20140306.
@@ -2316,8 +2433,11 @@ parameters, I stop and report before changing the model.
 - Reyes-López & Fernández-Haeger 2001. Some factors determining size-matching in the harvester ant *Messor barbarus*: food type, transfer activity, recruitment rate and size-range. Insectes Soc. 48, 118-124.
 - Roces & Núñez 1989. Brood translocation and circadian variation of temperature preference in the ant *Camponotus mus*. Oecologia 81.
 - Roces & Núñez 1995. Thermal sensitivity during brood care in workers of two Camponotus ant species: circadian variation and its ecological correlates. J. Insect Physiol. 41, 659-669.
+- Sempo & Detrain 2010. Social task regulation in the dimorphic ant *Pheidole pallidula*: the influence of caste ratio. J. Insect Sci. 10, 3 (cites Detrain 1989 for head widths, Lachaud et al. 1992 for repletes, Passera 1977 for field caste ratios).
+- Sharaf et al. 2017, via AntWiki: *Pheidole pallidula* worker sizes.
 - Theraulaz, Bonabeau & Deneubourg 1998. Response threshold reinforcement and division of labour in insect societies. Proc. R. Soc. B 265, 327-332.
 - Theraulaz et al. 2002. Spatial patterns in ant colonies. PNAS.
+- Wheeler & Nijhout 1984. Soldier determination in *Pheidole bicarinata*: inhibition by adult soldiers. J. Insect Physiol. 30, 127-135.
 - Wilson, Durlach & Roth 1958. Chemical releasers of necrophoric behavior in ants. Psyche.
 
 Parameter values marked "rough" will be checked against these papers when
