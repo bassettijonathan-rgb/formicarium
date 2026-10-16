@@ -1,6 +1,6 @@
 /**
- * The sky over Legnano (DESIGN.md section 8.1, V3): where the sun and the moon
- * are, and the moon's phase, at a real moment. Low-precision formulas (the
+ * The sky outside the window (DESIGN.md section 8.1, V3): where the sun and the
+ * moon are, and the moon's phase, at a real moment and place. Low-precision formulas (the
  * Astronomical Almanac's solar position and a truncated lunar theory, as in
  * Meeus, Astronomical Algorithms, ch. 25 and 47), good to a fraction of a
  * degree, which is far below what the window shows.
@@ -8,8 +8,11 @@
  * This is decoration only: nothing in the simulation reads it (V5).
  */
 
-/** Legnano, Lombardy: the keeper's window. */
-export const LEGNANO = { latitude: 45.5967, longitude: 8.9139, timeZone: 'Europe/Rome' } as const;
+/** Where the sky is seen from: degrees north and east. */
+export interface Observer {
+  latitude: number;
+  longitude: number;
+}
 
 const D2R = Math.PI / 180;
 const R2D = 180 / Math.PI;
@@ -62,10 +65,10 @@ function moonEquatorial(n: number): { ra: number; dec: number; longitude: number
   };
 }
 
-function horizontal(n: number, ra: number, dec: number): SkyPosition {
-  const siderealTime = (280.46061837 + 360.98564736629 * n) * D2R + LEGNANO.longitude * D2R;
+function horizontal(n: number, ra: number, dec: number, at: Observer): SkyPosition {
+  const siderealTime = (280.46061837 + 360.98564736629 * n) * D2R + at.longitude * D2R;
   const hourAngle = siderealTime - ra;
-  const phi = LEGNANO.latitude * D2R;
+  const phi = at.latitude * D2R;
   const alt = Math.asin(Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(hourAngle));
   // Azimuth from the south, westward; turned to clockwise from the north.
   const fromSouth = Math.atan2(Math.sin(hourAngle), Math.cos(hourAngle) * Math.sin(phi) - Math.tan(dec) * Math.cos(phi));
@@ -80,36 +83,31 @@ function lowered(p: SkyPosition): SkyPosition {
   return { alt: p.alt - 0.95 * Math.cos(p.alt * D2R), az: p.az };
 }
 
-/** The sun and the moon as seen from Legnano at a moment given in Unix milliseconds. */
-export function skyAt(ms: number): Sky {
+/** The sun and the moon as seen from `at` at a moment given in Unix milliseconds. */
+export function skyAt(ms: number, at: Observer): Sky {
   const n = daysSinceJ2000(ms);
   const sun = sunEquatorial(n);
   const moon = moonEquatorial(n);
   let elongation = (moon.longitude - sun.longitude) % (2 * Math.PI);
   if (elongation < 0) elongation += 2 * Math.PI;
   return {
-    sun: horizontal(n, sun.ra, sun.dec),
-    moon: lowered(horizontal(n, moon.ra, moon.dec)),
+    sun: horizontal(n, sun.ra, sun.dec, at),
+    moon: lowered(horizontal(n, moon.ra, moon.dec, at)),
     elongation,
     illumination: (1 - Math.cos(elongation)) / 2,
     waxing: elongation < Math.PI,
   };
 }
 
-/** Legnano's wall clock at a moment: hours and minutes, and the zone's name (CET or CEST). */
-export function legnanoClock(ms: number): { hours: number; minutes: number; zone: string } {
+/** The wall clock in an IANA time zone at a moment: hours and minutes, and the zone's short name (e.g. BST, or GMT-4). */
+export function clockAt(ms: number, timeZone: string): { hours: number; minutes: number; zone: string } {
   const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: LEGNANO.timeZone,
+    timeZone,
     hour: '2-digit',
     minute: '2-digit',
     hourCycle: 'h23',
-    timeZoneName: 'shortOffset',
+    timeZoneName: 'short',
   }).formatToParts(new Date(ms));
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
-  const offset = get('timeZoneName');
-  return {
-    hours: Number(get('hour')),
-    minutes: Number(get('minute')),
-    zone: offset === 'GMT+2' ? 'CEST' : offset === 'GMT+1' ? 'CET' : offset,
-  };
+  return { hours: Number(get('hour')), minutes: Number(get('minute')), zone: get('timeZoneName') };
 }

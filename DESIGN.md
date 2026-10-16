@@ -1453,7 +1453,7 @@ and replayable.
 ### 8.1 The room and the window
 
 Asked by Marco on 2026-10-13: no black screen behind the formicarium but a
-window showing the real time and weather of Legnano. Approved the same day
+window showing a real town's time and weather. Approved the same day
 (choices V1 to V6; mockup at https://claude.ai/artifact/CzJXMFQ8LGotkGeSbMhrCi).
 All of it is drawing: nothing here reaches the simulation.
 
@@ -1462,31 +1462,38 @@ All of it is drawing: nothing here reaches the simulation.
   soil is see-through, so the window shows through the headspace, down into
   the gaps between spoil heaps as far as the ground nearby. Tunnel mouths and
   shafts into the ground narrower than 6 mm stay dark.
-- **V2 The view.** West-north-west over Legnano: roofs and chimney pots, San
-  Magno's bell tower and dome, an old mill chimney, and Monte Rosa on the
-  horizon. Monte Rosa is 4634 m high and 90 km away, at azimuth ~295° and
-  2.4° high; it is drawn 1.8 times taller so it clears the roofs. The view is
-  stylised, not a photograph. The window spans azimuth 245° to 326°, so
-  sunsets happen in it.
-- **V3 Real time, real sky.** Legnano's clock is Europe/Rome, with summer time.
-  Sun and moon positions and the moon's phase come from low-precision formulas
+- **V2 The view.** West-north-west over a town: roofs and chimney pots, a
+  domed church with a bell tower, an old mill chimney, and far mountains on
+  the horizon (the highest about 2.4° high, drawn 1.8 times taller so it
+  clears the roofs). The view is stylised and the same wherever the window
+  is. The window spans azimuth 245° to 326°, so sunsets happen in it.
+- **V3 Real time, real sky.** The clock is the chosen city's (V7), with summer
+  time. Sun and moon positions and the moon's phase come from low-precision formulas
   (`src/room/sky.ts`; Meeus 1998, ch. 25 and 47), with the moon lowered by its
   parallax. Tests check them against almanac sunrise and sunset times, noon
   heights at the solstices and equinox, and the 2026 eclipses. The tank's own
   clock (D6) is untouched.
 - **V4 Live weather.** Every 15 minutes the page asks Open-Meteo (free, no
-  account) for Legnano's current conditions: WMO weather code, cloud cover,
-  wind, visibility and temperature. `src/room/weather.ts` turns them into
+  account) for the chosen city's current conditions: WMO weather code, cloud
+  cover, wind, visibility and temperature. `src/room/weather.ts` turns them into
   clouds and their drift, a grey deck, drizzle, rain, snow, fog, lightning,
-  and whether the Alps show. A HUD line gives time, temperature and
-  conditions. Offline, it keeps the last reading; before the first, the sky is
-  clear.
+  and whether the far mountains show. A HUD line gives the city, time,
+  temperature and conditions. Offline, it keeps the last reading; before the
+  first, the sky is clear.
 - **V5 Looks only.** The weather and the clock never touch the simulation. The
   tank is indoors, and replay from seed plus keeper log stays exact (D10).
 - **V6 Light.** Tints multiply the room and the tank by the daylight. Clouds
   make it greyer and sunset makes it warmer. When the room grows dark, a desk
   lamp lights the tank warmly, so the ants stay visible. Overlays (warmth,
   damp, trails' markers) are readings and are not dimmed.
+- **V7 Each player's own city** (Marco, 2026-10-16: no town of his named in
+  the game or its code). The Climate tab has a box to type a city; Open-Meteo's
+  geocoding search (free, no account) offers up to five matches, and the one
+  picked sets the window's sky, clock and weather. It is kept only in that
+  browser (`localStorage`, `src/room/place.ts`), never in a tank, a save or a
+  tank file, and "Forget my city" clears it. Until a city is picked the window
+  shows the sky at the computer's own time, as seen at 45° north on its time
+  zone's meridian, with no name and no weather report (the sky clear).
 
 ### 8.2 The page: tanks, tabs and adding nests
 
@@ -2472,7 +2479,7 @@ Each milestone is one or a few small PRs, merged by Marco, with a link to play.
 | M5 | Tending: temperature, humidity, mould, feeding tools, colony death. In parts: M5a warmth (heat mat, temperature field, brood thermotaxis); M5b water (soil water, humidity, watering, brood drying out and hygrotaxis) and mould (prey and corpses); M5c colony death (hunger, drying out, heat) and the keeper's tools (clean the arena, damp overlay, new tank) |
 | M6 | Keeping it: saves, offline catch-up, ant inspector, graphs, timelapse. In parts: M6a saves and catching up while closed, with a report of what happened; M6b the ant inspector; M6c colony graphs and timelapse |
 | M7 | Optional extras: second colony and war, other species, nuptial flights |
-| L | Looks (asked by Marco 2026-10-13, section 8.1): L1 the room and the window onto Legnano with its real sky and weather; L2 a bigger arena seen at an angle, with decorations |
+| L | Looks (asked by Marco 2026-10-13, section 8.1): L1 the room and the window onto the player's city with its real sky and weather; L2 a bigger arena seen at an angle, with decorations |
 | A | The arena (asked by Marco 2026-10-13, section 3.4): Arena 1 climbing; Arena 2 dishes, feeders and placing objects; Arena 3 feeder insects |
 | N | Bought nests (asked by Marco 2026-10-13, section 3.5): Nests 1 one ytong nest, in three sizes and three layouts; Nests 2 plaster, acrylic and wood, covers and light; Nests 3a keeping together (settling beside resting nestmates); Nests 3 modules, tubes and cotton plugs, the test-tube start and moving house |
 | C | Colonies and species (asked by Marco 2026-10-14, sections 3.6 and 4.4): step 1 up to four colonies on one table; step 2 Crematogaster scutellaris |

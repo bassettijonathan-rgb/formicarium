@@ -25,8 +25,9 @@ import type { ShelfEntry } from './worker/store';
 import { RoomLayer } from './render/room/roomLayer';
 import { NEST_SIZES, type NestLayout, type NestMaterial, type NestSetup, type NestSize, TEST_TUBE_SETUP } from './sim/nest';
 import { MAT_WIDTH } from './sim/heat';
-import { legnanoClock } from './room/sky';
-import { CLEAR, REFRESH_MS, type Weather, fetchLegnanoWeather } from './room/weather';
+import { clockAt } from './room/sky';
+import { CLEAR, REFRESH_MS, type Weather, fetchWeather } from './room/weather';
+import { type Place, computerPlace, loadPlace, savePlace, searchPlaces } from './room/place';
 import { download, readTankFile, tankFile } from './ui/tankFile';
 import { WholeTable } from './ui/wholeTable';
 import { SPECIES_NAMES, Species, type SpeciesId } from './sim/species';
@@ -61,16 +62,32 @@ async function start(): Promise<void> {
 
   const view = new TankView(app.renderer);
   app.stage.addChild(view.root);
-  // The keeper's room behind the tank, lit by Legnano's real sky (DESIGN.md section 8.1).
+  // The keeper's room behind the tank, lit by the real sky over the city the player picked (DESIGN.md section 8.1).
   const room = new RoomLayer(ArenaLayer.vanishingPoint);
   view.root.addChildAt(room.root, 0);
   view.root.addChildAt(room.lampGlow, view.root.getChildIndex(view.lit) + 1);
   const outsideLine = $('outside');
+  // The city outside the window is kept only in this browser (V7), never in a tank or a tank file.
+  const storage = (() => {
+    try {
+      return localStorage;
+    } catch {
+      return null;
+    }
+  })();
+  let cityPicked: Place | null = loadPlace(storage);
+  const home = computerPlace(new Date().getFullYear());
+  const place = (): Place => cityPicked ?? home;
   let weather: Weather = CLEAR;
   let weatherKnown = false;
+  let asked = 0;
   const refreshWeather = async () => {
-    const w = await fetchLegnanoWeather();
-    if (w) {
+    const at = cityPicked;
+    const ask = ++asked;
+    if (!at) return;
+    const w = await fetchWeather(at);
+    // A reading for a city the player has since changed is dropped.
+    if (w && ask === asked) {
       weather = w;
       weatherKnown = true;
     }
@@ -79,13 +96,49 @@ async function start(): Promise<void> {
   setInterval(() => void refreshWeather(), REFRESH_MS);
   let lastLine = 0;
   const showOutside = (ms: number) => {
-    const { hours, minutes, zone } = legnanoClock(ms);
+    const { hours, minutes, zone } = clockAt(ms, place().timeZone);
     const time = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${zone}`;
     const temperature = weather.temperature !== null ? `${Math.round(weather.temperature)} °C, ` : '';
-    outsideLine.textContent = weatherKnown
-      ? `The room follows the weather outside the window: Legnano, ${time}, ${temperature}${weather.label}.`
-      : `The room follows the weather outside the window: Legnano, ${time}. No weather report yet, so the sky is drawn clear.`;
+    outsideLine.textContent = !cityPicked
+      ? `The window shows the sky at your computer's time, ${time}, with no weather. Pick your city to see its sky and weather.`
+      : weatherKnown
+        ? `The room follows the weather outside the window: ${cityPicked.name}, ${time}, ${temperature}${weather.label}.`
+        : `The room follows the weather outside the window: ${cityPicked.name}, ${time}. No weather report yet, so the sky is drawn clear.`;
   };
+  const placeInput = $('place-name') as HTMLInputElement;
+  const placeResults = $('place-results');
+  const forget = $('place-forget');
+  const choosePlace = (p: Place | null) => {
+    cityPicked = p;
+    savePlace(storage, p);
+    weather = CLEAR;
+    weatherKnown = false;
+    placeResults.replaceChildren();
+    placeInput.value = '';
+    forget.hidden = !p;
+    void refreshWeather();
+    showOutside(Date.now());
+  };
+  forget.hidden = !cityPicked;
+  forget.addEventListener('click', () => choosePlace(null));
+  const findPlace = async () => {
+    const name = placeInput.value.trim();
+    if (name.length < 2) return;
+    placeResults.textContent = 'Looking…';
+    const found = await searchPlaces(name);
+    placeResults.replaceChildren();
+    if (found.length === 0) placeResults.textContent = 'No city of that name found (or no connection).';
+    for (const p of found) {
+      const b = document.createElement('button');
+      b.textContent = p.name;
+      b.addEventListener('click', () => choosePlace(p));
+      placeResults.appendChild(b);
+    }
+  };
+  $('place-find').addEventListener('click', () => void findPlace());
+  placeInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') void findPlace();
+  });
 
   // The bars take the top and bottom of the screen; the overlays sit between them.
   const camera = new Camera(view.root, stage);
@@ -629,7 +682,7 @@ async function start(): Promise<void> {
   app.ticker.add(() => {
     const now = performance.now();
     const ms = Date.now();
-    room.update(ms, now, weather);
+    room.update(ms, now, weather, place());
     view.lit.tint = room.tankTint;
     if (now - lastLine > 1000) {
       lastLine = now;

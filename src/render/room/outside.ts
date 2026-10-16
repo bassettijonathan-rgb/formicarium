@@ -1,12 +1,12 @@
 /**
  * The view out of the keeper's window (DESIGN.md section 8.1, V2-V4): the sky
- * over Legnano at the real time, with the real sun and moon, the live weather,
- * Monte Rosa on the horizon, and the town. Painted with Canvas 2D on its own
+ * at the real time over the place the player picked, with the real sun and
+ * moon, the live weather, far mountains on the horizon, and a town. Painted with Canvas 2D on its own
  * canvas, which the room shows as a texture.
  *
  * The painter works in "window pixels": the glass is GLASS.width x GLASS.height,
  * 1.6 px per mm of the scene. The window looks west-north-west, so sunsets
- * happen in it and Monte Rosa (azimuth ~295°, 90 km off) stands near the middle.
+ * happen in it, with the highest of the far mountains near the middle.
  */
 import type { Sky } from '../../room/sky';
 import type { Weather } from '../../room/weather';
@@ -106,8 +106,7 @@ interface Cloud {
 function layOut() {
   const r = sequence(11);
   const W = GLASS.width;
-  // Monte Rosa (4634 m, 90 km away) and its neighbours. Monte Rosa stands about 2.4° high; drawn
-  // 1.8 times taller so it clears the roofs.
+  // A range of far mountains, the highest about 2.4° high; drawn 1.8 times taller so it clears the roofs.
   const alps: [number, number][] = [];
   const peaks: [number, number, number][] = [[268, 0.9, 40], [276, 1.2, 30], [283, 1.5, 34], [291, 2.1, 22], [295, 2.45, 26], [299, 2.2, 18], [304, 1.6, 30], [312, 1.3, 36], [320, 0.9, 40]];
   for (let x = -10; x <= W + 10; x += 4) {
@@ -267,7 +266,7 @@ export class OutsideView {
       c.fill();
     }
 
-    // Monte Rosa and its neighbours: pink at sunrise, dark against the sunset, gone in haze.
+    // The far mountains: pink at sunrise, dark against the sunset, gone in haze.
     const alpsA = wx.alps * (1 - wx.fog);
     if (alpsA > 0.01) {
       const morning = sky.sun.az < 180;
@@ -321,7 +320,7 @@ export class OutsideView {
       }
     }
 
-    // The town: far roofs in the haze, an old mill chimney, San Magno, trees, then the houses across the street.
+    // The town: far roofs in the haze, an old mill chimney, a domed church, trees, then the houses across the street.
     const amb = daylight(sky, wx);
     const haze = (col: RGB, h: number) => mix(scale(col, 0.18 + 0.82 * amb), hor, h);
     c.fillStyle = rgb(haze(hex('#7f8a96'), 0.62 + 0.3 * wx.fog));
@@ -334,7 +333,7 @@ export class OutsideView {
     c.lineTo(230, HOR + 30);
     c.fill();
     c.fillRect(210, HOR - 134, 18, 6);
-    // San Magno: the octagonal drum and dome with its lantern, and the bell tower.
+    // The church: an octagonal drum and dome with its lantern, and the bell tower.
     const church = haze(hex('#b0694a'), 0.3 + 0.45 * wx.fog);
     const roof = haze(hex('#6f7a7d'), 0.3 + 0.45 * wx.fog);
     c.fillStyle = rgb(church);
@@ -397,7 +396,7 @@ export class OutsideView {
         c.fill();
       }
       for (const p of h.pots) {
-        // Chimney pots, Lombard style, with a little tiled roof.
+        // Chimney pots with a little tiled roof.
         const y = h.eave - h.ridge * (1 - Math.abs((p.x - h.x) / h.w - 0.5) * 2);
         c.fillStyle = rgb(haze(hex('#9a6a52'), 0.1));
         c.fillRect(p.x, y - p.h, 10, p.h + 4);
