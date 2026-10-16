@@ -1,6 +1,6 @@
 /**
  * The keeper's room (DESIGN.md section 8.1, V1 and V6): a wall with a big
- * window onto Legnano, a roller shutter part way down, a marble sill, and the
+ * window onto a town, a roller shutter part way down, a marble sill, and the
  * wooden desk the tank stands on. The room's light follows the real sky; at
  * dusk a desk lamp comes on over the tank so the ants are always visible.
  *
@@ -8,7 +8,7 @@
  * room is drawn in daylight colours and dimmed with tints, which cost nothing.
  */
 import { Container, Graphics, Sprite, Texture } from 'pixi.js';
-import { type Sky, skyAt } from '../../room/sky';
+import { type Observer, type Sky, skyAt } from '../../room/sky';
 import type { Weather } from '../../room/weather';
 import { GLASS, GLASS_PX_PER_MM, OutsideView, daylight, smooth, sunsetGlow } from './outside';
 
@@ -77,8 +77,8 @@ export class RoomLayer {
    * Brings the room up to date: `ms` is the real time (Unix ms) that sets the
    * sky, `now` a steady clock in ms for the animation.
    */
-  update(ms: number, now: number, weather: Weather): Sky {
-    const sky = skyAt(ms);
+  update(ms: number, now: number, weather: Weather, at: Observer): Sky {
+    const sky = skyAt(ms, at);
     const falling = weather.rain > 0 || weather.snow > 0 || weather.storm > 0;
     if (now - this.lastPaint >= (falling ? REPAINT_FALLING : REPAINT_CALM)) {
       this.outside.paint(sky, weather, now, now - this.lastNow);
@@ -139,7 +139,7 @@ export class RoomLayer {
   }
 
   private drawSill(): Graphics {
-    // A white marble sill, as in most Italian flats.
+    // A white marble sill.
     return new Graphics()
       .rect(WINDOW.x - 40, WINDOW.y + WINDOW.height + FRAME, WINDOW.width + 80, 10)
       .fill(0xe6e2da)

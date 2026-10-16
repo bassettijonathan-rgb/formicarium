@@ -1,12 +1,13 @@
 /**
- * Legnano's weather for the window (DESIGN.md section 8.1, V4), read from
+ * The weather outside the window (DESIGN.md section 8.1, V4) at the place the
+ * player picked (`place.ts`), read from
  * Open-Meteo (https://open-meteo.com: free, no account, open to the browser).
  * The reading is turned into what the window draws: how cloudy, how grey,
- * rain, snow, fog, thunder, wind for the clouds, and whether the Alps show.
+ * rain, snow, fog, thunder, wind for the clouds, and whether the far mountains show.
  *
  * Decoration only: the simulation never reads the weather (V5).
  */
-import { LEGNANO } from './sky';
+import type { Place } from './place';
 
 /** What the window draws for a weather. Amounts run from 0 to 1. */
 export interface Weather {
@@ -25,19 +26,22 @@ export interface Weather {
   storm: number;
   /** Wind at 10 m, km/h: moves the clouds and slants the rain. */
   wind: number;
-  /** How clearly Monte Rosa stands on the horizon. */
+  /** How clearly the far mountains stand on the horizon. */
   alps: number;
 }
 
 /** What the window shows before the first reading, or with no connection at all. */
 export const CLEAR: Weather = { label: 'clear', temperature: null, cloud: 0.06, fill: 0, rain: 0, snow: 0, fog: 0, storm: 0, wind: 6, alps: 1 };
 
-/** The current conditions in Legnano, with only the fields the window uses. */
-export const OPEN_METEO_URL =
-  'https://api.open-meteo.com/v1/forecast' +
-  `?latitude=${LEGNANO.latitude}&longitude=${LEGNANO.longitude}` +
-  '&current=temperature_2m,weather_code,cloud_cover,wind_speed_10m,visibility' +
-  `&timezone=${encodeURIComponent(LEGNANO.timeZone)}`;
+/** The current conditions at a place, with only the fields the window uses. */
+export function openMeteoUrl(place: Place): string {
+  return (
+    'https://api.open-meteo.com/v1/forecast' +
+    `?latitude=${place.latitude}&longitude=${place.longitude}` +
+    '&current=temperature_2m,weather_code,cloud_cover,wind_speed_10m,visibility' +
+    `&timezone=${encodeURIComponent(place.timeZone)}`
+  );
+}
 
 /** How often the page asks again: Open-Meteo updates its current conditions every 15 minutes. */
 export const REFRESH_MS = 15 * 60 * 1000;
@@ -106,7 +110,7 @@ export function weatherFromOpenMeteo(response: unknown): Weather | null {
   const fill = Math.max(kind.fill ?? 0, clamp01((cover - 0.75) / 0.25) * 0.85);
   const rain = kind.rain ?? 0;
   const snow = kind.snow ?? 0;
-  // Monte Rosa is 90 km off: it shows only through dry air and gaps in the cloud. Open-Meteo caps
+  // The mountains are far off: they show only through dry air and gaps in the cloud. Open-Meteo caps
   // visibility near 24 km, so "as far as it reports" stands for a clear horizon.
   const far = visibility === null ? 1 : clamp01((visibility - 10_000) / 10_000);
   const alps = rain > 0 || snow > 0 ? 0 : far * clamp01(1 - cover * 1.2) * (1 - fog);
@@ -124,10 +128,10 @@ export function weatherFromOpenMeteo(response: unknown): Weather | null {
   };
 }
 
-/** Asks Open-Meteo for Legnano's weather now. Returns null when offline or on any error. */
-export async function fetchLegnanoWeather(): Promise<Weather | null> {
+/** Asks Open-Meteo for the weather at a place now. Returns null when offline or on any error. */
+export async function fetchWeather(place: Place): Promise<Weather | null> {
   try {
-    const res = await fetch(OPEN_METEO_URL);
+    const res = await fetch(openMeteoUrl(place));
     if (!res.ok) return null;
     return weatherFromOpenMeteo(await res.json());
   } catch {
