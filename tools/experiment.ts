@@ -24,7 +24,8 @@
  *   npm run experiment -- sizes [--ants 400] [--minutes 60] [--no-matching]   (Messor workers' sizes against the seeds they carry)
  *   npm run experiment -- castes [--food sugar|fly|cricket|mealworm] [--minutes 60] [--same-threshold] [--no-majors]   (Pheidole pallidula: who comes to the food)
  *   npm run experiment -- caste-making [--protein 3] [--no-majors] | defence [--same-alarm]   (Pheidole: majors made by feeding; majors in defence)
- *   npm run experiment -- live [--insect fly|cricket|mealworm] [--ants 60] [--minutes 10] [--busy] | lone-grip [--insect ...]   (live insects: caught or not)
+ *   npm run experiment -- live [--insect fly|cricket|mealworm] [--ants 60] [--minutes 10] [--busy] [--no-call] | lone-grip [--insect ...]   (live insects: caught or not)
+ *   castes takes --alive: the insect is put in alive
  *   growth takes --mortal: adults die of hunger, drying out and heat (M5c)
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
  */
@@ -81,6 +82,7 @@ let waterEvery = 0;
 let fed = false;
 let insect: Insect | undefined;
 let cut: Cut = 'whole';
+let alive = false;
 let minutesSet = false;
 let layout: NestLayout = 'classic';
 let material: NestMaterial = 'ytong';
@@ -101,6 +103,8 @@ for (let i = 0; i < rest.length; i++) {
   else if (rest[i] === '--no-majors') majors = 0;
   else if (rest[i] === '--protein') proteinFed = Number(rest[++i]);
   else if (rest[i] === '--busy') params.leaveRate = 1 / 60;
+  else if (rest[i] === '--no-call') params.liveCall = false;
+  else if (rest[i] === '--alive') alive = true;
   else if (rest[i] === '--same-alarm') Object.assign(params, { majorAlarm: 0, majorAlarmHalfLife: 45 });
   else if (rest[i] === '--cut') cut = rest[++i] as Cut;
   else if (rest[i] === '--layout') layout = rest[++i] as NestLayout;
@@ -349,7 +353,7 @@ for (let seed = first; seed < first + runs; seed++) {
     );
   } else if (name === 'castes') {
     for (const f of food ? [food] : (['sugar', 'fly', 'cricket', 'mealworm'] as const)) {
-      const r = runCastes({ seed, food: f, minutes, ...(ants ? { ants } : {}), ...(majors === undefined ? {} : { majors }), params });
+      const r = runCastes({ seed, food: f, minutes, ...(ants ? { ants } : {}), ...(majors === undefined ? {} : { majors }), ...(alive ? { live: true } : {}), params });
       const t = (s: number) => (s < 0 ? 'never' : `${(s / 60).toFixed(1)} min`);
       const insectLine = f === 'sugar' ? '' : `; legs off after ${t(r.legsOff)}, half its juice taken after ${t(r.half)}; pieces carried home by minors ${r.carriedByMinors}, by majors ${r.carriedByMajors}`;
       console.log(`seed ${seed} ${f}: came ${r.minors} minors and ${r.majors} majors, ${pct(r.majorShare)} majors (colony ${pct(r.colonyShare)})${insectLine}`);
@@ -369,7 +373,7 @@ for (let seed = first; seed < first + runs; seed++) {
       const r = runLiveCapture({ seed, insect: k, minutes: minutesSet ? minutes : 10, ...(ants ? { ants } : {}), params });
       const t = (s: number) => (s < 0 ? 'never' : `${s.toFixed(1)} s`);
       console.log(
-        `seed ${seed} ${k}: first grabbed after ${t(r.grabbed)}, killed after ${t(r.killed)}; grabbed ${r.grabs} times, broke free ${r.escapes} times; ` +
+        `seed ${seed} ${k}: first grabbed after ${t(r.grabbed)}, a second holder ${t(r.helped)} later, killed after ${t(r.killed)}; grabbed ${r.grabs} times, broke free ${r.escapes} times; ` +
           `most holding it at once ${r.mostHolders}, ${r.holdersAtDeath} as it died`,
       );
     }

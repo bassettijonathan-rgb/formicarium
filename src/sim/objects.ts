@@ -12,6 +12,7 @@ import { isBlocked, reliefAt } from './arena';
 import { type Decoration, buildRelief, chuteOf, extent, inDish, isObstacle, middleOf, reliefOf, shifted, stampDecorations } from './decor';
 import { Place } from './ants';
 import { type Cut, type Insect, type SeedMix, edible, makeInsect, makeSeeds } from './prey';
+import { makeLive } from './live';
 import { Purpose, Rng } from './rng';
 import type { World } from './world';
 
@@ -23,6 +24,8 @@ export interface ItemSetup {
   concentration: number;
   insect?: Insect | undefined;
   cut?: Cut | undefined;
+  /** An insect dispenser that gives its insects alive (L1). */
+  live?: boolean | undefined;
   /** What a seed dispenser gives. */
   seeds?: SeedMix | undefined;
 }
@@ -53,7 +56,7 @@ export function makeItem(world: World, item: Item, x: number, y: number, setup: 
       return { kind: 'feeder', x0: x - 40, x1: x + 40, y, radius: 7.5, capacity: FEEDER_CAPACITY, auto: setup.concentration };
     case 'dispenser':
       // A plastic box 4 cm wide, 3 cm deep and 3 cm high, its chute in front.
-      return { kind: 'dispenser', x, y, width: 40, depth: 30, height: 30, insect: setup.insect ?? 'fly', cut: setup.cut ?? 'whole', dropped: [] };
+      return { kind: 'dispenser', x, y, width: 40, depth: 30, height: 30, insect: setup.insect ?? 'fly', cut: setup.cut ?? 'whole', dropped: [], ...(setup.live ? { live: true } : {}) };
     case 'seedDispenser':
       // The same box, filled with seeds (Marco, 2026-10-15).
       return { kind: 'dispenser', x, y, width: 40, depth: 30, height: 30, insect: 'fly', cut: 'whole', dropped: [], seeds: setup.seeds ?? 'small' };
@@ -144,9 +147,16 @@ export function runDispensers(world: World): void {
     if (d.kind !== 'dispenser') continue;
     const last = new Set(d.dropped);
     const lying = world.prey.some((p) => last.has(p.id) && p.place === Place.arena && p.carriedBy < 0 && (edible(p) || p.mouldy));
-    if (lying) continue;
+    // A live insect it dropped is still about (when it dies, its dead body is what the dispenser waits for, live.ts).
+    if (lying || world.live.some((b) => last.has(b.id))) continue;
     const c = chuteOf(d);
     if (!canPutFood(world, c.x, c.y)) continue;
+    if (d.live && !d.seeds) {
+      const id = world.nextFoodId++;
+      world.live.push(makeLive(world.seed, world.step, id, d.insect, c.x, c.y));
+      d.dropped = [id];
+      continue;
+    }
     const pieces = d.seeds
       ? makeSeeds(world.seed, world.step, world.nextFoodId, d.seeds, SEED_SCOOP.count, c.x, c.y, SEED_SCOOP.spread)
       : makeInsect(world.seed, world.step, world.nextFoodId, d.insect, d.cut, c.x, c.y);

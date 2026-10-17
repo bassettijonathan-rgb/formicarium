@@ -65,9 +65,9 @@ export type KeeperCommand =
   | { type: 'clean' }
   /**
    * An object put in the arena with its middle at (x, y); a liquid feeder comes full of sugar water of `concentration` mol/L
-   * (B3-B5), and an automatic one keeps it so; an insect dispenser gives `insect`, cut as `cut`; a seed dispenser, `seeds`.
+   * (B3-B5), and an automatic one keeps it so; an insect dispenser gives `insect`, cut as `cut` (alive, `live`); a seed dispenser, `seeds`.
    */
-  | { type: 'put'; item: Item; x: number; y: number; concentration: number; insect?: Insect; cut?: Cut; seeds?: SeedMix }
+  | { type: 'put'; item: Item; x: number; y: number; concentration: number; insect?: Insect; cut?: Cut; seeds?: SeedMix; live?: boolean }
   /** The decoration at `index` in the tank's list moved so its middle is at (x, y), with any food in it (B3). */
   | { type: 'move'; index: number; x: number; y: number }
   /** The decoration at `index` taken out, with any food in it (B3). */
@@ -217,7 +217,7 @@ export function applyCommand(world: World, command: KeeperCommand): boolean {
       emptyDishes(world);
       break;
     case 'put':
-      putItem(world, command.item, command.x, command.y, { concentration: command.concentration, insect: command.insect, cut: command.cut, seeds: command.seeds });
+      putItem(world, command.item, command.x, command.y, { concentration: command.concentration, insect: command.insect, cut: command.cut, seeds: command.seeds, live: command.live });
       break;
     case 'move':
       moveDecoration(world, command.index, command.x, command.y);

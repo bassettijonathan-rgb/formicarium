@@ -1627,7 +1627,7 @@ export interface CastesResult {
  * than sugar or a fly. With `majorCall` 0 (the control) majors answer the
  * way minors do.
  */
-export function runCastes(opts: RunOptions & { food: CasteFood; minutes: number; majors?: number }): CastesResult {
+export function runCastes(opts: RunOptions & { food: CasteFood; minutes: number; majors?: number; live?: boolean }): CastesResult {
   const world = createWorld(opts.seed, { ants: opts.ants ?? 100, nest: 'lab', species: Species.pheidole, params: opts.params ?? {} });
   world.arena = createArena(TANK_ARENA.width, TANK_ARENA.height);
   const { ants, params } = world;
@@ -1647,10 +1647,12 @@ export function runCastes(opts: RunOptions & { food: CasteFood; minutes: number;
   if (opts.food === 'sugar') dropId = placeSugar(world, x, y, 20, 1);
   else {
     ants.seekProtein.fill(1);
-    placeInsect(world, opts.food, 'whole', x, y);
+    // Alive (the live-insects plan, check 5), or dead.
+    if (opts.live) placeLive(world, opts.food, x, y);
+    else placeInsect(world, opts.food, 'whole', x, y);
   }
-  const juice = world.prey.reduce((sum, p) => sum + p.juice, 0);
-  const ids = new Set(world.prey.map((p) => p.id));
+  let juice = world.prey.reduce((sum, p) => sum + p.juice, 0);
+  let ids = new Set(world.prey.map((p) => p.id));
   const came = new Uint8Array(ants.count);
   let legsOff = -1;
   let half = -1;
@@ -1659,8 +1661,13 @@ export function runCastes(opts: RunOptions & { food: CasteFood; minutes: number;
   const steps = opts.minutes * 60 * STEPS_PER_SECOND;
   for (let s = 1; s <= steps; s++) {
     step(world);
+    // A live insect, once dead, is counted from then on as the dead one would be.
+    if (opts.live && juice === 0 && world.prey.length > 0) {
+      juice = world.prey.reduce((sum, p) => sum + p.juice, 0);
+      ids = new Set(world.prey.map((p) => p.id));
+    }
     for (let i = 0; i < ants.count; i++) {
-      if (ants.state[i] === AntState.atPrey || ants.pieceHeld[i]! >= 0 || (dropId >= 0 && ants.foodId[i] === dropId)) came[i] = 1;
+      if (ants.state[i] === AntState.atPrey || ants.state[i] === AntState.holding || ants.pieceHeld[i]! >= 0 || (dropId >= 0 && ants.foodId[i] === dropId)) came[i] = 1;
     }
     for (const p of world.prey) {
       if (!ids.has(p.id) || p.carriedBy < 0 || p.place !== Place.arena) continue;
@@ -1673,7 +1680,7 @@ export function runCastes(opts: RunOptions & { food: CasteFood; minutes: number;
     const hasLegs = world.prey.some((p) => p.joint >= 0 && (p.part === 'leg' || p.part === 'hindLeg'));
     if (legsOff < 0 && !hasLegs && world.prey.some((p) => p.part === 'hindLeg' || p.part === 'leg')) legsOff = t;
     const lying = world.prey.filter((p) => p.place === Place.arena && p.carriedBy < 0).reduce((sum, p) => sum + p.juice, 0);
-    if (half < 0 && lying <= juice / 2) half = t;
+    if (half < 0 && juice > 0 && lying <= juice / 2) half = t;
   }
   let minors = 0;
   let majors = 0;
@@ -1844,6 +1851,14 @@ export interface LiveCaptureResult {
   /** Seconds until the first worker grabbed the insect (-1: none did), and until it died (-1: it lived to the end). */
   grabbed: number;
   killed: number;
+  /** Seconds from the first grab until a second worker held it too (-1: none did). */
+  helped: number;
+  /**
+   * Each time a worker took hold of it while none held it: whether a second worker took hold before it broke
+   * free or died, and if so how many seconds after the first.
+   */
+  episodes: number;
+  helpTimes: number[];
   /** Times an ant grabbed it while none held it, and times it shook every holder off. */
   grabs: number;
   escapes: number;
@@ -1867,7 +1882,12 @@ export function runLiveCapture(opts: RunOptions & { insect: Insect; minutes: num
   const id = placeLive(world, opts.insect, world.arena.entranceX + 50, world.arena.entranceY);
   let grabbed = -1;
   let killed = -1;
+  let helped = -1;
   let last = world.live[0]!;
+  let episodes = 0;
+  let since = -1;
+  let gotHelp = false;
+  const helpTimes: number[] = [];
   let holders = 0;
   const steps = opts.minutes * 60 * STEPS_PER_SECOND;
   for (let s = 1; s <= steps && killed < 0; s++) {
@@ -1880,8 +1900,19 @@ export function runLiveCapture(opts: RunOptions & { insect: Insect; minutes: num
     }
     last = b;
     if (grabbed < 0 && b.grabs > 0) grabbed = s / STEPS_PER_SECOND;
+    if (helped < 0 && grabbed >= 0 && b.holders >= 2) helped = s / STEPS_PER_SECOND - grabbed;
+    if (b.holders > 0 && since < 0) {
+      episodes++;
+      since = s;
+      gotHelp = b.holders >= 2;
+      if (gotHelp) helpTimes.push(0);
+    } else if (b.holders === 0) since = -1;
+    else if (!gotHelp && b.holders >= 2) {
+      gotHelp = true;
+      helpTimes.push((s - since) / STEPS_PER_SECOND);
+    }
   }
-  return { grabbed, killed, grabs: last.grabs, escapes: last.escapes, mostHolders: last.mostHolders, holdersAtDeath: killed >= 0 ? holders : 0 };
+  return { grabbed, killed, helped, episodes, helpTimes, grabs: last.grabs, escapes: last.escapes, mostHolders: last.mostHolders, holdersAtDeath: killed >= 0 ? holders : 0 };
 }
 
 export interface LoneGripResult {

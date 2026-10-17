@@ -192,9 +192,9 @@ describe('live insects (DESIGN.md 3.4, L1-L12)', () => {
       expect(b.hop + b.slip).toBeGreaterThan(0);
     });
     expect(freed).toBeGreaterThan(0);
-    // Free, the ant goes back to what it was doing.
+    // Shaken off, a lone ant goes home for help (L7).
     expect(world.live).toHaveLength(1);
-    expect(after).toBe(AntState.exploring);
+    expect(after).toBe(AntState.returning);
   });
 
   it('the keeper clearing the food takes the live insects out too, and their holders let go', () => {
@@ -235,5 +235,110 @@ describe('live insects (DESIGN.md 3.4, L1-L12)', () => {
       run(world, 120);
       return world;
     });
+  });
+});
+
+describe('live insects, calling help and weapons (L7, L8, L10)', () => {
+  it('a worker 3 cm from a held cricket smells the alarm and runs to it; without the scent it does not', () => {
+    for (const call of [true, false]) {
+      const world = bareArena(11, 2);
+      world.params.liveCall = call;
+      world.params.liveAttack = 0;
+      const id = placeLive(world, 'cricket', 200, 150);
+      const b = insect(world, id)!;
+      b.heading = 0;
+      sendOut(world, 0, 200 + 6, 150 - 4.2, Math.PI / 2);
+      // The other worker 3 cm off, facing away.
+      sendOut(world, 1, 200, 150 + 3 + 30, Math.PI / 2);
+      world.params.wiggle = 0;
+      world.params.outwardTurn = 0;
+      // Held fast: its escape is slowed so the test sees only the call.
+      LIVE.cricket.escape = 0;
+      try {
+        let joined = -1;
+        run(world, 10, () => {
+          if (joined < 0 && world.ants.liveHeld[1] === id) joined = world.step / 20;
+        });
+        if (call) {
+          expect(joined).toBeGreaterThan(0);
+          expect(joined).toBeLessThan(4);
+        } else expect(joined).toBe(-1);
+      } finally {
+        LIVE.cricket.escape = 1;
+      }
+    }
+  });
+
+  it('a lone worker shaken off a cricket goes home for help, laying trail; a Pheidole minor invites the majors too', () => {
+    for (const species of [0, 3]) {
+      const world = createWorld(12, { nest: 'lab', ants: 1, species });
+      world.arena = createArena(TANK_ARENA.width, TANK_ARENA.height);
+      world.params.leaveRate = 0;
+      world.ants.size[0] = species === 3 ? 25 : 0; // a minor
+      const id = placeLive(world, 'cricket', 200, 150);
+      insect(world, id)!.heading = 0;
+      sendOut(world, 0, 200 + 6, 150 - 4.2, Math.PI / 2);
+      let state = -1;
+      run(world, 60, () => {
+        if (state < 0 && insect(world, id)!.escapes > 0) state = world.ants.state[0]!;
+      });
+      expect(state).toBe(AntState.returning);
+      expect(world.ants.hasMemory[0]).toBe(1);
+      expect(world.ants.cropQuality[0]).toBe(world.params.preyTrail);
+      if (species === 3) expect(world.ants.invite[0]).toBe(-1);
+    }
+  });
+
+  it('each species attacks with its own weapon: Crematogaster venom kills fastest, Messor slowest; a Pheidole major bites hardest', () => {
+    const killTime = (species: number, size = 0): number => {
+      const world = createWorld(13, { nest: 'lab', ants: 1, species });
+      world.arena = createArena(TANK_ARENA.width, TANK_ARENA.height);
+      world.params.leaveRate = 0;
+      world.ants.size[0] = size;
+      const id = placeLive(world, 'fly', 200, 150);
+      const b = insect(world, id)!;
+      b.walking = false;
+      b.timer = 10000;
+      LIVE.fly.escape = 0;
+      try {
+        sendOut(world, 0, 200 - LIVE.fly.half - 1.5, 150, 0);
+        let s = 0;
+        while (world.live.length > 0 && s < 2000) {
+          step(world);
+          s++;
+        }
+        return s;
+      } finally {
+        LIVE.fly.escape = 0.5;
+      }
+    };
+    const lasius = killTime(0);
+    const crema = killTime(1);
+    const messor = killTime(2);
+    const minor = killTime(3, 25);
+    const major = killTime(3, 37);
+    expect(crema).toBeLessThan(lasius);
+    expect(messor).toBeGreaterThan(lasius);
+    expect(major).toBeLessThan(minor / 3);
+  });
+
+  it('an insect dispenser can give live insects: the next comes once the last, killed, is gone', () => {
+    const world = createTank(14);
+    applyCommand(world, { type: 'put', item: 'dispenser', x: 250, y: 200, concentration: 1, insect: 'fly', cut: 'whole', live: true });
+    const d = world.decor.at(-1)!;
+    expect(d.kind === 'dispenser' && d.live).toBe(true);
+    run(world, 11);
+    expect(world.live).toHaveLength(1);
+    const first = world.live[0]!.id;
+    // It dies where it is (of age, say): the dispenser now waits for its body.
+    world.live[0]!.age = world.live[0]!.lifespan;
+    run(world, 11);
+    expect(world.live).toHaveLength(0);
+    expect(d.kind === 'dispenser' && d.dropped).toEqual(world.prey.filter((p) => p.part === 'fly').map((p) => p.id));
+    // The keeper takes the body out: a new live fly drops.
+    world.prey = world.prey.filter((p) => p.part !== 'fly');
+    run(world, 11);
+    expect(world.live).toHaveLength(1);
+    expect(world.live[0]!.id).not.toBe(first);
   });
 });

@@ -478,6 +478,15 @@ function leavePrey(ctx: AntContext, i: number, forHelp: boolean): void {
   goHome(ctx, i, true);
 }
 
+/**
+ * A worker shaken off a live insect too big to hold alone (live.ts, L7)
+ * goes home for help as from a dead one too big to move, laying trail and,
+ * a Pheidole minor, inviting the majors (L10).
+ */
+export function goForHelp(ctx: AntContext, i: number): void {
+  leavePrey(ctx, i, true);
+}
+
 function goHome(ctx: AntContext, i: number, remember: boolean, seed = false): void {
   const { ants } = ctx;
   ants.preyId[i] = -1;

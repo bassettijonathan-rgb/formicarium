@@ -304,10 +304,22 @@ they took them apart". He approved this plan as drafted
   hopping cricket rises over its shadow, a held insect twitches, and the
   ant card reads "holding a cricket, with 3 nestmates". Clear food takes
   live insects out too. Old tanks load with none. Validation: section 9,
-  test 32. In step 1 a worker holding an insect calls no one, so in an
-  ordinary colony crickets and mealworms always break free; step 2 adds
-  the short-range alarm that calls nestmates in (L7), the species'
-  weapons, Pheidole majors (L10) and live insects from the dispenser.
+  test 32. Step 2 (built): L7, a worker holding a live insect gives off
+  alarm scent, and any worker out in the arena with its mandibles free
+  that comes within `liveCallRange` (4 cm, rough: a short-range alarm) of
+  the insect's outline runs straight to it (`liveCall`; off for the
+  control). A worker shaken off alone by an insect that takes more than
+  two to pin (a cricket, a mealworm) goes home for help, laying trail, as
+  from a dead insect too big to move (B7), and a Pheidole minor invites
+  the majors as it does then (L10); majors that come grab the insect too,
+  and once it is dead cut it up as before. L8, weapons (`liveAttack`,
+  rough): Lasius niger's formic acid 1, Crematogaster's venom daubed from
+  its sting 1.5 (Richard et al. 2001), Pheidole's sting 0.8 with a major
+  biting `majorBite` (5) times as hard, Messor's weak bite and sting 0.5.
+  The insect dispenser can give its insects alive (its card reads alive,
+  dead, cut in two, in pieces); it drops the next once the last, dead, is
+  gone, as before. Validation: tests 33 and 34. Not modelled: a worker's
+  size in pinning (a Pheidole minor pins as much as a Lasius worker).
 
 ### 3.5 Bought nests (Marco, 2026-10-13)
 
@@ -1745,11 +1757,25 @@ project. If one fails, we fix the model, not the test.
    each, kills at least 30 of 40 fruit flies (in under 10 s on average)
    and none of 40 crickets or mealworms, which all break free, the
    mealworm sooner. In a busy foraging arena (a lab colony of 200 workers
-   leaving the nest every minute or so on average), 3 runs each: every fly is killed
+   leaving the nest every minute or so on average, with no alarm scent
+   to call help, `liveCall` off), 3 runs each: every fly is killed
    within 10 s of the first grab, by one or two ants; every cricket and
    mealworm is killed, a cricket only with at least 4 holding it, a
    mealworm with at least 6; and over 40% of their grabs end with them
    breaking free, more than twice a fly's share.
+33. **Help comes fast, and matters** (live-insects plan, checks 3 and 4;
+   Dejean et al. 2007: the second worker reaches the prey in about 7 s,
+   the first found it in about 36 s): a Lasius lab colony of 60 workers
+   out for protein, one live cricket 5 cm from the entrance, 4 runs of up
+   to 15 minutes. When a second worker takes hold while the first still
+   holds it, it does so in under a third of the median time the first
+   took to find the cricket; with the alarm scent over three times as
+   many grabs get such help as without it, at least 3 of the 4 crickets
+   are caught, and without it fewer are caught and more break free.
+34. **Pheidole majors to a live cricket** (live-insects plan, check 5;
+   as test 27): the Pheidole lab colony of test 27 given a live cricket
+   draws at least 3 majors within 30 minutes; given a live fruit fly,
+   which a minor kills and carries home, none.
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -2531,6 +2557,34 @@ of 60 workers with ordinary foraging (`leaveRate` 1/600 s), no cricket
 was caught in 15 minutes (6 runs, 8-18 grabs each, never more than 2 ants
 holding it): with nobody called, help comes too seldom. Step 2's alarm
 scent is what should bring it.
+
+### 9.23 Results so far (live insects, step 2: help, weapons, majors)
+
+`npm run experiment -- live --insect cricket [--no-call]` runs test 33,
+`castes --alive --food cricket|fly --minutes 30` test 34. The four
+species still run exactly as before (the check of 9.22).
+
+**Help (test 33).** A Lasius lab colony of 60 workers and a live cricket,
+6 runs of up to 15 minutes each:
+
+| | Crickets caught | Caught after | Grabs | Grabs a second ant joined | Second ant came after |
+|---|---|---|---|---|---|
+| Alarm scent | 4 of 6 | 4.6-13 min | 65 | 14 (22%) | 1.1 s (median; at most 5 s) |
+| No scent | 0 of 6 | | 113 | 3 (3%) | 0.6 s (median) |
+
+The first worker found the cricket after 14-191 s (median about 50 s), so
+help, when it comes, comes some fifty times sooner: Dejean et al. saw
+five times (7 against 36 s), with prey a lone worker can hold for a
+while; a lone Lasius worker loses a cricket in under 2 s here (9.22), so
+only help close by is in time. What brings the crowd in the end is the
+shaken-off worker going home for help: a trail and recruits, then the
+scent pulling each newcomer the last few cm. Mealworms alike: 4 of 6
+caught with the scent, none without.
+
+**Pheidole majors (test 34).** 100 workers, 10 of them majors, 3 runs of
+30 minutes: a live cricket drew 83-90 minors and 7-10 majors (8-10%,
+their share of the colony), its legs off after 6-11 minutes; a live
+fruit fly drew 2 minors and no major, one minor carrying it home.
 
 ---
 

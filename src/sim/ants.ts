@@ -17,7 +17,7 @@ import { computeContacts, stepFarmAnt } from './farmAnts';
 import { speedAt } from './heat';
 import { type FoodDrop, foodQuality, foodReach } from './food';
 import { type Piece, deliverToLabNest, holdPiece, nearestPiece, pieceReach, startAtPrey, workAtPrey } from './prey';
-import { type LiveInsect, grabLive, holdLive } from './live';
+import { type LiveInsect, alarmCall, grabLive, holdLive } from './live';
 import { isMajor, laysTrail, majorResponse, seedCapacity } from './sizes';
 import type { AntParams } from './params';
 import type { Rng } from './rng';
@@ -716,6 +716,9 @@ function walk(ctx: AntContext, i: number): void {
     const near = nearestFood(ctx, i, x, y, params.foodSenseRange);
     if (near) turn = angleDiff(Math.atan2(near.y - y, near.x - x), heading);
   }
+  // A nestmate's alarm at a live insect it holds, smelt close by, pulls any worker out here to it (L7).
+  const call = alarmCall(ctx, i);
+  if (call !== undefined) turn = call;
 
   heading = wrapAngle(heading + turn);
 

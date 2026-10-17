@@ -18,10 +18,21 @@
  * dies (L8). An insect left alone dies of age (L3). Dead, it becomes an
  * ordinary dead insect (prey.ts), lying where it died; the ants holding it
  * that want protein set to work on it at once.
+ *
+ * Calling help (L7; Dejean et al. 2007: the second worker arrives in about
+ * 7 s, the first found the prey in about 36 s): an ant holding a live
+ * insect gives off alarm scent, which nestmates within `liveCallRange` of
+ * it smell and run up to; and one shaken off a big insect it held alone
+ * goes home for help, laying trail, as from a dead insect too big to move
+ * (prey.ts), a Pheidole minor inviting the majors too (L10). Each species
+ * attacks with its own weapon (`liveAttack`; a Pheidole major bites
+ * `majorBite` times as hard).
  */
-import { type AntContext, AntState, Caste, DT, Place, wantsProtein, wrapAngle } from './ants';
+import { type AntContext, AntState, Caste, DT, Place, angleDiff, wantsProtein, wrapAngle } from './ants';
 import { type Arena, floorStep, isBlocked } from './arena';
-import { type Insect, type Piece, makeInsect, startAtPrey } from './prey';
+import type { Decoration } from './decor';
+import { type Insect, type Piece, goForHelp, makeInsect, startAtPrey } from './prey';
+import { isMajor } from './sizes';
 import { Purpose, Rng } from './rng';
 import { STEPS_PER_SECOND } from './time';
 
@@ -150,7 +161,7 @@ export function liveGap(b: LiveInsect, x: number, y: number): number {
 }
 
 /** True for a worker that grabs a live insect it touches: out in the arena on its own errands, its mandibles free (L9). */
-function mayGrab(ctx: AntContext, i: number): boolean {
+export function mayGrab(ctx: AntContext, i: number): boolean {
   const { ants } = ctx;
   const state = ants.state[i]!;
   return (
@@ -187,6 +198,30 @@ export function grabLive(ctx: AntContext, i: number): boolean {
   return false;
 }
 
+/**
+ * The way to the nearest live insect being held whose alarm scent the ant
+ * smells (L7), as a turn from its heading, or undefined: the scent reaches
+ * `liveCallRange` mm from the insect's outline.
+ */
+export function alarmCall(ctx: AntContext, i: number): number | undefined {
+  const live = ctx.live;
+  if (!live || live.length === 0 || !ctx.params.liveCall || !mayGrab(ctx, i)) return undefined;
+  const { ants, params } = ctx;
+  const x = ants.x[i]!;
+  const y = ants.y[i]!;
+  let best: LiveInsect | undefined;
+  let bestGap = params.liveCallRange;
+  for (const b of live) {
+    if (b.holders === 0) continue;
+    const gap = liveGap(b, x, y);
+    if (gap < bestGap) {
+      best = b;
+      bestGap = gap;
+    }
+  }
+  return best ? angleDiff(Math.atan2(best.y - y, best.x - x), ants.heading[i]!) : undefined;
+}
+
 /** A holder lets go (or is shaken off) and goes back to what it was doing. */
 function letGo(ctx: AntContext, i: number): void {
   const { ants } = ctx;
@@ -209,6 +244,8 @@ export interface LiveWorld {
   step: number;
   nextFoodId: number;
   live: LiveInsect[];
+  /** The arena's objects: an insect dispenser keeps track of what its live insect became. */
+  decor?: Decoration[];
 }
 
 /**
@@ -230,7 +267,8 @@ export function stepLive(world: LiveWorld, ctx: AntContext): void {
       continue;
     }
     b.holders++;
-    attack.set(id, (attack.get(id) ?? 0) + params.liveAttack);
+    const bite = params.dimorphic && isMajor(ants, params, i) ? params.majorBite : 1;
+    attack.set(id, (attack.get(id) ?? 0) + params.liveAttack * bite);
   }
   for (const b of [...live]) {
     const spec = LIVE[b.insect];
@@ -251,10 +289,19 @@ export function stepLive(world: LiveWorld, ctx: AntContext): void {
   }
 }
 
-/** The insect shakes off every ant holding it and runs, or (a cricket) hops away. */
+/**
+ * The insect shakes off every ant holding it and runs, or (a cricket) hops
+ * away. A lone holder shaken off an insect that takes several to pin goes
+ * home for help (L7).
+ */
 function breakFree(ctx: AntContext, b: LiveInsect): void {
   const { ants, rng } = ctx;
-  for (let i = 0; i < ants.count; i++) if (ants.liveHeld[i] === b.id) letGo(ctx, i);
+  const alone = b.holders === 1 && LIVE[b.insect].pinned > 2;
+  for (let i = 0; i < ants.count; i++) {
+    if (ants.liveHeld[i] !== b.id) continue;
+    letGo(ctx, i);
+    if (alone) goForHelp(ctx, i);
+  }
   b.holders = 0;
   b.escapes++;
   b.slip = Math.round(SLIP_TIME * STEPS_PER_SECOND);
@@ -366,6 +413,8 @@ function die(world: LiveWorld, ctx: AntContext, b: LiveInsect): void {
   const pieces = makeInsect(world.seed, world.step, world.nextFoodId, b.insect, 'whole', b.x, b.y, b.heading);
   world.nextFoodId += pieces.length;
   ctx.prey.push(...pieces);
+  // A dispenser that dropped it waits for what is left of it as for a dead insect it dropped.
+  for (const d of world.decor ?? []) if (d.kind === 'dispenser' && d.dropped.includes(b.id)) d.dropped = pieces.map((p) => p.id);
   for (let i = 0; i < ants.count; i++) {
     if (ants.liveHeld[i] !== b.id) continue;
     letGo(ctx, i);
