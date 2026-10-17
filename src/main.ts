@@ -220,7 +220,7 @@ async function start(): Promise<void> {
       view.arena.ants.setAnts(msg, now);
       view.farmAnts.setAnts(msg, now);
       view.brood.setBrood(msg.brood, msg.prey);
-      view.arena.setPieces(msg.prey);
+      view.arena.setPieces(msg.prey, msg.live);
       const n = [0, 0, 0, 0];
       for (let o = 2; o < msg.brood.length; o += BROOD_STRIDE) n[msg.brood[o]!]!++;
       $('clock').textContent = `Day ${Math.floor(msg.step / STEPS_PER_SECOND / DAY_SECONDS) + 1} · ant time ${formatAntTime(msg.step)}`;
@@ -706,7 +706,8 @@ async function start(): Promise<void> {
 
   // ---- Feed: choose the food, then tap the arena floor or a dish.
   let food = '1';
-  let cut: Cut = 'whole';
+  /** How an insect is given: alive (L1), or dead, whole, cut in two or in pieces (B6). */
+  let cut: Cut | 'live' = 'whole';
   /** The sugar chosen for drops, feeders and refills: rich sugar while an insect is chosen. */
   const sugar = () => (food === '0.1' ? 0.1 : 1);
   const sugarButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-sugar]')];
@@ -715,17 +716,18 @@ async function start(): Promise<void> {
     b.addEventListener('click', () => {
       food = b.dataset.sugar ?? '1';
       for (const x of sugarButtons) x.setAttribute('aria-pressed', String(x === b));
-      // A fruit fly is given whole; a cricket or a mealworm whole, cut in two, or in pieces (B6).
-      cutRow.hidden = food !== 'cricket' && food !== 'mealworm';
+      // An insect alive or dead; a fruit fly dead is given whole, a cricket or a mealworm whole, cut in two, or in pieces (B6).
+      cutRow.hidden = food !== 'fly' && food !== 'cricket' && food !== 'mealworm';
+      for (const x of cutButtons) if (x.dataset.cut === 'halved' || x.dataset.cut === 'pieces') x.hidden = food === 'fly';
+      if (food === 'fly' && cut !== 'live') pickCut('whole');
     });
   }
   const cutButtons = [...document.querySelectorAll<HTMLButtonElement>('button[data-cut]')];
-  for (const b of cutButtons) {
-    b.addEventListener('click', () => {
-      cut = (b.dataset.cut ?? 'whole') as Cut;
-      for (const x of cutButtons) x.setAttribute('aria-pressed', String(x === b));
-    });
-  }
+  const pickCut = (k: Cut | 'live') => {
+    cut = k;
+    for (const x of cutButtons) x.setAttribute('aria-pressed', String(x.dataset.cut === k));
+  };
+  for (const b of cutButtons) b.addEventListener('click', () => pickCut((b.dataset.cut ?? 'whole') as Cut | 'live'));
   $('refill').addEventListener('click', () => command({ type: 'refill', concentration: sugar() }));
   $('clear').addEventListener('click', () => command({ type: 'clearFood' }));
 
@@ -1204,7 +1206,9 @@ async function start(): Promise<void> {
       // The point of the arena under the tap: on the floor, or in a dish (the worker refuses food put on a stone).
       const { u: x, v: y } = view.arena.surfaceAt(p.x, p.y);
       if (x > 2 && y > 2 && x < view.arena.floorWidth - 2 && y < view.arena.floorHeight - 2) {
-        if (food === 'fly' || food === 'cricket' || food === 'mealworm') command({ type: 'insect', insect: food, cut, x, y });
+        if (food === 'fly' || food === 'cricket' || food === 'mealworm') {
+          command(cut === 'live' ? { type: 'insect', insect: food, cut: 'whole', x, y, live: true } : { type: 'insect', insect: food, cut, x, y });
+        }
         else command({ type: 'sugar', x, y, volume: DROP_VOLUME, concentration: Number(food) });
       }
     }

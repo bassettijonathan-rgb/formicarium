@@ -55,6 +55,8 @@ export const Purpose = {
   prey: 8,
   /** Carving a bought nest's chambers (DESIGN.md 3.5). */
   nest: 9,
+  /** How each live insect the keeper puts in faces, and how long it lives (L1-L3). */
+  live: 10,
   test: 99,
 } as const;
 

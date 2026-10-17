@@ -22,6 +22,7 @@ import { agePrey, updateMould } from './mould';
 import { type Cut, type Insect, type Piece, type SeedMix, agePieces, edible, makeInsect, makeSeeds } from './prey';
 import { STEPS_PER_SECOND } from './time';
 import { runDispensers } from './objects';
+import { type LiveInsect, makeLive, removeLive, stepLive } from './live';
 import { type History, createHistory, recordHistory } from './history';
 import { Species, speciesParams } from './species';
 
@@ -51,6 +52,8 @@ export interface World {
   food: FoodDrop[];
   /** The pieces of feeder insects in the tank, in the order they were put in (Arena 3). */
   prey: Piece[];
+  /** Live insects in the arena, in the order they were put in (L1). */
+  live: LiveInsect[];
   /** Eggs, larvae and pupae in the farm. */
   brood: Brood;
   nextFoodId: number;
@@ -106,6 +109,7 @@ export function createWorld(seed: number, options: WorldOptions = {}): World {
     nestMode,
     food: [],
     prey: [],
+    live: [],
     brood: createBrood(),
     nextFoodId: 1,
     params,
@@ -213,19 +217,23 @@ const WATER_EVERY = 10 * STEPS_PER_SECOND;
 /** Advances the world by one step (1/20 s of ant time). */
 export function step(world: World): void {
   const rng = Rng.over(world.rng);
-  stepAnts({
+  const antCtx: AntContext = {
     seed: world.seed,
     ants: world.ants,
     arena: world.arena,
     farm: world.farm,
     food: world.food,
     prey: world.prey,
+    live: world.live,
     brood: world.brood,
     nest: world.nest,
     nestMode: world.nestMode,
     params: world.params,
     rng,
-  });
+  };
+  stepAnts(antCtx);
+  // Live insects move after the ants (L2), dragging their holders.
+  if (world.live.length > 0) stepLive(world, antCtx);
   if (world.food.some((d) => d.volume <= 0)) world.food = world.food.filter((d) => d.volume > 0);
   if (world.prey.some((p) => p.place === Place.gone)) world.prey = world.prey.filter((p) => p.place !== Place.gone);
   world.step += 1;
@@ -301,6 +309,7 @@ export function removeAnt(world: World, i: number): void {
   }
   if (ants.corpseHeld[i]! >= 0 || ants.pieceHeld[i]! >= 0) dropCorpse(ctx(world), i);
   ants.preyId[i] = -1;
+  ants.liveHeld[i] = -1;
   const carrier = ants.carriedBy[i]!;
   // A corpse taken out of its carrier's mandibles: the carrier goes on as if it had put it down.
   if (carrier >= 0) dropCorpse(ctx(world), carrier);
@@ -324,6 +333,7 @@ function ctx(world: World): AntContext {
     farm: world.farm,
     food: world.food,
     prey: world.prey,
+    live: world.live,
     brood: world.brood,
     nest: world.nest,
     nestMode: world.nestMode,
@@ -421,6 +431,18 @@ export function placeInsect(world: World, insect: Insect, cut: Cut, x: number, y
   world.nextFoodId += pieces.length;
   world.prey.push(...pieces);
   return pieces.map((p) => p.id);
+}
+
+/** Puts a live insect in the arena at (x, y) (L1). Returns its id. */
+export function placeLive(world: World, insect: Insect, x: number, y: number): number {
+  const id = world.nextFoodId++;
+  world.live.push(makeLive(world.seed, world.step, id, insect, x, y));
+  return id;
+}
+
+/** The keeper takes the live insects out of the arena (with the food, `clearFood`); the ants holding them let go. */
+export function clearLive(world: World): void {
+  removeLive(world, ctx(world));
 }
 
 /** Scatters `count` seeds of `mix` in the arena within `spread` mm of (x, y) (DESIGN.md 4.4). Returns their ids. */

@@ -12,7 +12,7 @@ import { type KeeperCommand, applyCommand, createTank } from '../sim/keeper';
 import { Species } from '../sim/species';
 import { catchUpSteps, census } from '../sim/save';
 import { type Colony, MAX_COLONIES, type TableSave, asTable, freeSlots, loadTable, nextSeed, stepColonies, tableReport, tableSave } from '../sim/colonies';
-import { ANT_STRIDE, type ColonyView, type FromWorker, Look, type PieceView, type TableShape, type ToWorker } from './protocol';
+import { ANT_STRIDE, type ColonyView, type FromWorker, type LiveView, Look, type PieceView, type TableShape, type ToWorker } from './protocol';
 import { edible } from '../sim/prey';
 import { type Kept, type ShelfEntry, deleteTank, freeName, newId, readShelf, readTank, renameTank, setAside, writeTank } from './store';
 import { inspectAnt } from '../sim/inspect';
@@ -142,7 +142,20 @@ function sendAnts(w: World): void {
     if (p.carriedBy >= 0) carried.push({ ant: p.carriedBy, piece: view });
     else prey.push(view);
   }
-  post({ type: 'ants', step: w.step, ants: data, full, caste, callow, alarmed, species: w.species, brood: broodData, prey, carried, size }, [
+  const live: LiveView[] = w.live.map((b) => {
+    // A hop rises and falls in an arc a quarter as high as it is long.
+    const t = b.hop > 0 ? 1 - b.hop / b.hopSteps : 0;
+    return {
+      x: b.x,
+      y: b.y,
+      heading: b.heading,
+      insect: b.insect,
+      walked: b.walked,
+      lift: b.hopLength * t * (1 - t),
+      twitch: b.holders > 0 ? 0.15 * Math.sin(w.step * 2.3 + b.id) * Math.sqrt(b.strength) : 0,
+    };
+  });
+  post({ type: 'ants', step: w.step, ants: data, full, caste, callow, alarmed, species: w.species, brood: broodData, prey, carried, size, live }, [
     data.buffer,
     full.buffer,
     caste.buffer,

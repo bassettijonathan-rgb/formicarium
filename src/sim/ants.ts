@@ -17,6 +17,7 @@ import { computeContacts, stepFarmAnt } from './farmAnts';
 import { speedAt } from './heat';
 import { type FoodDrop, foodQuality, foodReach } from './food';
 import { type Piece, deliverToLabNest, holdPiece, nearestPiece, pieceReach, startAtPrey, workAtPrey } from './prey';
+import { type LiveInsect, grabLive, holdLive } from './live';
 import { isMajor, laysTrail, majorResponse, seedCapacity } from './sizes';
 import type { AntParams } from './params';
 import type { Rng } from './rng';
@@ -52,6 +53,8 @@ export const AntState = {
   dead: 12,
   /** At a feeder insect: biting a part off it, biting it open, or drinking from it (Arena 3). */
   atPrey: 13,
+  /** Holding a live insect, hanging on while it struggles, until it dies or shakes the ant off (L5). */
+  holding: 14,
 } as const;
 
 export type AntState = (typeof AntState)[keyof typeof AntState];
@@ -222,6 +225,10 @@ export interface Ants {
   preyId: Int32Array;
   /** The piece of insect the ant is carrying, home or (a husk) out to the midden, or -1. */
   pieceHeld: Int32Array;
+  /** The live insect the ant is holding (state `holding`), or -1; and where it holds it, in the insect's frame (mm along its body toward the head, and to its left). */
+  liveHeld: Int32Array;
+  holdU: Float64Array;
+  holdV: Float64Array;
   /** Counts corpses picked up, put down or newly dead, so lookups know when corpses have moved. */
   corpseVersion: number;
   /** Adults (M5c): tank days starving (crop empty, fat spent), dried out, and too hot; 0 while all is well. */
@@ -317,6 +324,9 @@ export function createAnts(count: number): Ants {
     carriedBy: new Int32Array(count).fill(-1),
     preyId: new Int32Array(count).fill(-1),
     pieceHeld: new Int32Array(count).fill(-1),
+    liveHeld: new Int32Array(count).fill(-1),
+    holdU: new Float64Array(count),
+    holdV: new Float64Array(count),
     corpseVersion: 0,
     hunger: new Float64Array(count),
     thirst: new Float64Array(count),
@@ -340,7 +350,7 @@ export function createAnts(count: number): Ants {
 }
 
 /** Array fields whose empty value is -1 rather than 0. */
-const MINUS_ONE: ReadonlySet<string> = new Set(['broodHeld', 'carriedBy', 'corpseHeld', 'foodId', 'partner', 'pieceHeld', 'preyId']);
+const MINUS_ONE: ReadonlySet<string> = new Set(['broodHeld', 'carriedBy', 'corpseHeld', 'foodId', 'liveHeld', 'partner', 'pieceHeld', 'preyId']);
 
 /** Adds one ant at the end (a new worker eclosing) and returns its id. Every field starts empty. */
 export function addAnt(ants: Ants): number {
@@ -395,6 +405,8 @@ export interface AntContext {
   food: FoodDrop[];
   /** The pieces of feeder insects in the tank (Arena 3). */
   prey: Piece[];
+  /** Live insects in the arena (L1), if any. */
+  live?: LiveInsect[];
   brood: Brood;
   nest: Nest;
   nestMode: NestMode;
@@ -454,6 +466,7 @@ export function stepAnts(ctx: AntContext): void {
     else if (state === AntState.inNest) restInNest(ctx, i);
     else if (state === AntState.feeding) feed(ctx, i);
     else if (state === AntState.atPrey) workAtPrey(ctx, i);
+    else if (state === AntState.holding) holdLive(ctx, i);
     else walk(ctx, i);
     if (ants.corpseHeld[i]! >= 0) holdCorpse(ctx, i);
     if (ants.pieceHeld[i]! >= 0) holdPiece(ctx, i);
@@ -722,7 +735,8 @@ function walk(ctx: AntContext, i: number): void {
     depositTrail(arena, nx, ny, params.trailDeposit * stepLength * ants.cropQuality[i]! * laysTrail(ants, params, i));
   }
 
-  // 8. Arrivals and decisions.
+  // 8. Arrivals and decisions. A live insect it bumps into, it grabs (L4, L9).
+  if (grabLive(ctx, i)) return;
   const home = Math.hypot(nx - arena.entranceX, ny - arena.entranceY) < HOME_RADIUS;
   if (now === AntState.carryingCorpse) {
     mayDropCorpse(ctx, i);
@@ -829,7 +843,7 @@ export function moveAnt(
  * True if the ant takes protein (prey): it set out for it, or, out for sugar,
  * it feels the brood's hunger.
  */
-function wantsProtein(ctx: AntContext, i: number): boolean {
+export function wantsProtein(ctx: AntContext, i: number): boolean {
   return ctx.ants.seekProtein[i] === 1 || ctx.ants.broodNeed[i]! >= ctx.params.preyNeed;
 }
 

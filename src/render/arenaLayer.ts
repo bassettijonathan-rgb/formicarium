@@ -11,9 +11,9 @@ import { Container, Graphics, PerspectiveMesh, type Renderer, Texture } from 'pi
 import { Place } from '../sim/ants';
 import { DISH_WALL, type Decoration, buildRelief, standing } from '../sim/decor';
 import { foodReach } from '../sim/food';
-import { drawPiece } from './insects';
+import { drawLive, drawPiece } from './insects';
 import { TANK_ARENA, TUBE } from '../sim/tank';
-import type { ArenaSnapshot, PieceView } from '../worker/protocol';
+import type { ArenaSnapshot, LiveView, PieceView } from '../worker/protocol';
 import { AntLayer } from './antLayer';
 import { paintFloor } from './arenaFloor';
 import { type Projection, makeProjection } from './projection';
@@ -593,8 +593,11 @@ export class ArenaLayer {
     else this.trail.texture = canvasTexture(canvas);
   }
 
-  /** Draws the pieces of insect lying in the arena, each on the ground where it lies, turned and seen in perspective. */
-  setPieces(prey: readonly PieceView[]): void {
+  /**
+   * Draws the pieces of insect lying in the arena, each on the ground where it lies, turned and seen in
+   * perspective, and the live insects (L12): a hopping cricket in the air over its shadow.
+   */
+  setPieces(prey: readonly PieceView[], live: readonly LiveView[] = []): void {
     const g = this.insects.clear();
     for (const p of prey) {
       if (p.place !== Place.arena) continue;
@@ -604,6 +607,20 @@ export class ArenaLayer {
       const n = Math.sin(p.angle);
       g.setTransform(s.sx * c, s.sy * n, -s.sx * n, s.sy * c, at.x, at.y);
       drawPiece(g, p);
+    }
+    for (const b of live) {
+      const ground = this.heightAt(b.x, b.y);
+      const s = this.projection.stretch(b.x, b.y);
+      if (b.lift > 0) {
+        const shadow = this.projection.toScene(b.x, b.y, ground);
+        g.setTransform(s.sx, 0, 0, s.sy, shadow.x, shadow.y);
+        g.ellipse(0, 0, 6, 3).fill({ color: 0x000000, alpha: 0.18 });
+      }
+      const at = this.projection.toScene(b.x, b.y, ground + b.lift);
+      const angle = b.heading + b.twitch;
+      const c = Math.cos(angle);
+      const n = Math.sin(angle);
+      drawLive(g, b, { a: s.sx * c, b: s.sy * n, c: -s.sx * n, d: s.sy * c, tx: at.x, ty: at.y });
     }
     g.resetTransform();
   }

@@ -5,8 +5,8 @@
  * the transform that puts a piece where it lies.
  */
 import type { Graphics } from 'pixi.js';
-import type { Insect } from '../sim/prey';
-import { Look, type PieceView } from '../worker/protocol';
+import { INSECTS, type Insect } from '../sim/prey';
+import { type LiveView, Look, type PieceView } from '../worker/protocol';
 
 const COLOURS: Record<Insect, { body: number; dark: number; light: number }> = {
   fly: { body: 0x6b5a3e, dark: 0x2e261c, light: 0xb89a62 },
@@ -143,6 +143,62 @@ export function drawPiece(g: Graphics, p: PieceView): void {
     g.ellipse(0, 0, L * 1.15, W * 1.4 + 0.3).fill({ color: 0xd6e2be, alpha: 0.5 });
     for (let a = 0; a < 7; a++) g.circle(L * 0.8 * Math.cos(a * 2.1), (W + 0.2) * Math.sin(a * 1.7), Math.min(0.5, W * 0.4 + 0.1)).fill({ color: 0xeef3e2, alpha: 0.6 });
   }
+}
+
+/** A 2D affine transform, as Pixi's setTransform takes it: (x, y) goes to (a x + c y + tx, b x + d y + ty). */
+export interface Affine {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  tx: number;
+  ty: number;
+}
+
+/**
+ * Draws a live insect (L12) whose own frame `at` puts where it stands, its
+ * head toward +x: its parts as a dead one's, its legs swinging as it walks,
+ * a mealworm's body rippling, a fruit fly's six legs stepping.
+ */
+export function drawLive(g: Graphics, b: LiveView, at: Affine): void {
+  const stride = b.walked * 1.6;
+  const part = (p: PieceView, x: number, y: number, angle: number) => {
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    g.setTransform(at.a * c + at.c * s, at.b * c + at.d * s, -at.a * s + at.c * c, -at.b * s + at.d * c, at.a * x + at.c * y + at.tx, at.b * x + at.d * y + at.ty);
+    drawPiece(g, p);
+  };
+  const view = (p: { part: PieceView['part']; length: number; width: number }): PieceView => ({
+    x: 0,
+    y: 0,
+    angle: 0,
+    place: 0,
+    insect: b.insect,
+    part: p.part,
+    length: p.length,
+    width: p.width,
+    look: Look.closed,
+  });
+  if (b.insect === 'fly') {
+    // Six thin legs stepping in two tripods, under the body.
+    g.setTransform(at.a, at.b, at.c, at.d, at.tx, at.ty);
+    for (let k = 0; k < 3; k++) {
+      for (const side of [-1, 1]) {
+        const swing = 0.35 * Math.sin(stride * 2 + (k % 2 === 0 ? 0 : Math.PI) + (side > 0 ? Math.PI : 0));
+        const base = 0.35 - 0.4 * k;
+        const a = side * (0.9 + 0.55 * (k - 1)) + swing;
+        g.moveTo(base, 0).lineTo(base + 1.1 * Math.cos(a), side * 0.2 + 1.1 * Math.sin(a)).stroke({ color: COLOURS.fly.dark, width: 0.08 });
+      }
+    }
+  }
+  INSECTS[b.insect].forEach((s, k) => {
+    let angle = s.angle;
+    let y = s.y;
+    if (s.part === 'leg') angle += 0.35 * Math.sin(stride + (k % 2 === 0 ? 0 : Math.PI));
+    else if (s.part === 'hindLeg') angle += 0.1 * Math.sin(stride + (k % 2 === 0 ? 0 : Math.PI));
+    else if (b.insect === 'mealworm') y += 0.35 * Math.sin(stride * 0.6 - k * 0.9);
+    part(view(s), s.x, y, angle);
+  });
 }
 
 /** Blends two 0xrrggbb colours. */

@@ -692,6 +692,12 @@ export interface AntParams {
   preyDropTime: number;
   /** How often a worker in the farm touching a piece of insect drinks from it, per second (rough). */
   pieceSipRate: number;
+  /**
+   * How hard one worker holding a live insect attacks it, on the scale of the insects' toughness (live.ts,
+   * L8): 1 kills a fruit fly in about 4 s, a cricket in 5 minutes (a minute or so with the four that pin
+   * it), a mealworm in 25 (rough).
+   */
+  liveAttack: number;
 
   // --- Seeds (Messor barbarus, DESIGN.md 4.4) ---
 
@@ -993,6 +999,7 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   preyDrinkTime: 300,
   preyDropTime: 300,
   pieceSipRate: 0.2,
+  liveAttack: 1,
 
   seeds: false,
   seedHoard: 0,

@@ -14,7 +14,7 @@ import { Purpose, Rng } from './rng';
 import { doubleBridge, foodChoice, Tally } from './lab';
 import { type AntParams, DEFAULT_ANT_PARAMS } from './params';
 import { STEPS_PER_SECOND } from './time';
-import { addCorpse, colonyCrop, createWorld, deathsBy, killAnt, setCover, setHeatMat, placeInsect, placeProtein, placeSeeds, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
+import { addCorpse, colonyCrop, createWorld, deathsBy, killAnt, setCover, setHeatMat, placeInsect, placeLive, placeProtein, placeSeeds, placeSugar, removeAnt, removeFood, step, water, type World } from './world';
 import { createArena, sampleTrail } from './arena';
 import { applyCommand, createTank } from './keeper';
 import { Species, arenaFor, speciesParams } from './species';
@@ -27,6 +27,8 @@ import { TANK_ARENA } from './tank';
 export interface RunOptions {
   seed: number;
   ants?: number;
+  /** The colony's `Species` (Lasius niger if none), where an experiment takes one. */
+  species?: number;
   params?: Partial<AntParams>;
 }
 
@@ -1836,4 +1838,96 @@ export function runDefence(opts: RunOptions & { majors?: number }): DefenceResul
     alarmedMajors.push(m);
   }
   return { workers, majors, atSeconds, alarmed, alarmedMajors };
+}
+
+export interface LiveCaptureResult {
+  /** Seconds until the first worker grabbed the insect (-1: none did), and until it died (-1: it lived to the end). */
+  grabbed: number;
+  killed: number;
+  /** Times an ant grabbed it while none held it, and times it shook every holder off. */
+  grabs: number;
+  escapes: number;
+  /** Most ants holding it at once, and how many held it as it died (0 if it lived). */
+  mostHolders: number;
+  holdersAtDeath: number;
+}
+
+/**
+ * Catching live prey (L4-L8; Richard, Fabre & Dejean 2001; Dejean et al.
+ * 2007): a lab colony of `ants` workers out for protein behind the
+ * entrance of the keeper's bare 40 x 30 cm arena, one live insect let go
+ * 5 cm from the entrance. A lone ant should catch most fruit flies it
+ * grabs; a cricket should be caught only by several ants together, and
+ * bigger insects should escape more often.
+ */
+export function runLiveCapture(opts: RunOptions & { insect: Insect; minutes: number }): LiveCaptureResult {
+  const world = createWorld(opts.seed, { ants: opts.ants ?? 60, nest: 'lab', species: opts.species ?? Species.lasiusNiger, params: opts.params ?? {} });
+  world.arena = createArena(TANK_ARENA.width, TANK_ARENA.height);
+  world.ants.seekProtein.fill(1);
+  const id = placeLive(world, opts.insect, world.arena.entranceX + 50, world.arena.entranceY);
+  let grabbed = -1;
+  let killed = -1;
+  let last = world.live[0]!;
+  let holders = 0;
+  const steps = opts.minutes * 60 * STEPS_PER_SECOND;
+  for (let s = 1; s <= steps && killed < 0; s++) {
+    holders = last.holders;
+    step(world);
+    const b = world.live.find((q) => q.id === id);
+    if (!b) {
+      if (last.age < last.lifespan) killed = s / STEPS_PER_SECOND;
+      break;
+    }
+    last = b;
+    if (grabbed < 0 && b.grabs > 0) grabbed = s / STEPS_PER_SECOND;
+  }
+  return { grabbed, killed, grabs: last.grabs, escapes: last.escapes, mostHolders: last.mostHolders, holdersAtDeath: killed >= 0 ? holders : 0 };
+}
+
+export interface LoneGripResult {
+  /** Grabs that ended with the insect free, and with it dead, of `tries`. */
+  escaped: number;
+  killed: number;
+  /** Mean seconds the ant held on, whichever way it ended. */
+  held: number;
+}
+
+/**
+ * One ant against one insect (L5-L8; Richard, Fabre & Dejean 2001: capture
+ * fails more often the bigger the prey): `tries` times, a lone worker
+ * grabs a live insect in the bare arena, with no nestmate to help; how often
+ * the insect breaks free before it dies, and how long the ant holds on.
+ */
+export function runLoneGrip(opts: RunOptions & { insect: Insect; tries: number }): LoneGripResult {
+  let escaped = 0;
+  let killed = 0;
+  let held = 0;
+  for (let k = 0; k < opts.tries; k++) {
+    const world = createWorld(opts.seed * 1000 + k, { ants: 1, nest: 'lab', species: opts.species ?? Species.lasiusNiger, params: { leaveRate: 0, ...opts.params } });
+    world.arena = createArena(TANK_ARENA.width, TANK_ARENA.height);
+    const id = placeLive(world, opts.insect, 200, 150);
+    const b = world.live[0]!;
+    const { ants } = world;
+    // The ant comes up behind it and takes hold of its side.
+    ants.state[0] = AntState.exploring;
+    ants.place[0] = Place.arena;
+    ants.x[0] = 200 - Math.sin(b.heading) * 10;
+    ants.y[0] = 150 + Math.cos(b.heading) * 10;
+    ants.heading[0] = b.heading - Math.PI / 2;
+    for (let s = 0; s < 60 * STEPS_PER_SECOND && b.grabs === 0; s++) {
+      // Walked straight at it until it touches.
+      ants.heading[0] = Math.atan2(b.y - ants.y[0]!, b.x - ants.x[0]!);
+      step(world);
+    }
+    if (b.grabs === 0) continue;
+    let steps = 0;
+    while (steps < 3600 * STEPS_PER_SECOND && b.escapes === 0 && world.live.some((q) => q.id === id)) {
+      step(world);
+      steps++;
+    }
+    if (b.escapes > 0) escaped++;
+    else if (!world.live.some((q) => q.id === id)) killed++;
+    held += steps / STEPS_PER_SECOND;
+  }
+  return { escaped, killed, held: held / Math.max(1, escaped + killed) };
 }

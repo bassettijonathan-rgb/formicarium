@@ -99,7 +99,7 @@ export interface Piece {
   mouldy: boolean;
 }
 
-interface PartSpec {
+export interface PartSpec {
   part: Part;
   /** Where it lies from the insect's middle, mm, and which way it points, in the insect's frame (x toward the head). */
   x: number;
@@ -122,7 +122,7 @@ interface PartSpec {
  * mealworm about 120 mg and 22 mm. Biting times are rough too: a fly's
  * and a cricket's leg joints are soft, a mealworm's skin is hard.
  */
-const INSECTS: Record<Insect, PartSpec[]> = {
+export const INSECTS: Record<Insect, PartSpec[]> = {
   fly: [{ part: 'fly', x: 0, y: 0, angle: 0, length: 2.5, width: 1.1, mass: 1, hard: 0.3, joint: -1, toughness: 0, skin: 20 }],
   cricket: [
     { part: 'thorax', x: 0, y: 0, angle: 0, length: 3.5, width: 3, mass: 10, hard: 0.3, joint: -1, toughness: 0, skin: 90 },
@@ -158,11 +158,13 @@ const HALVE: Record<Insect, number> = { fly: -1, cricket: 2, mealworm: 4 };
 
 /**
  * Puts a feeder insect on the arena floor with its middle at (x, y), whole,
- * cut in two or in pieces, lying any way round. Returns the new pieces.
+ * cut in two or in pieces, lying any way round, or with its head toward
+ * `facing` (a live insect that died there). Returns the new pieces.
  */
-export function makeInsect(seed: number, step: number, firstId: number, insect: Insect, cut: Cut, x: number, y: number): Piece[] {
+export function makeInsect(seed: number, step: number, firstId: number, insect: Insect, cut: Cut, x: number, y: number, facing?: number): Piece[] {
   const rng = new Rng(seed, Purpose.prey, step, firstId);
-  const turn = rng.range(-Math.PI, Math.PI);
+  const drawn = rng.range(-Math.PI, Math.PI);
+  const turn = facing ?? drawn;
   const specs = INSECTS[insect];
   const pieces = specs.map((s, k): Piece => {
     let jx = s.x;
