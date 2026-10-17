@@ -698,6 +698,13 @@ export interface AntParams {
    * it), a mealworm in 25 (rough).
    */
   liveAttack: number;
+  /**
+   * True: a worker holding a live insect gives off alarm scent that nestmates within `liveCallRange` mm of the
+   * insect run up to (L7; Dejean et al. 2007: the second worker arrives in about 7 s, five times sooner than the
+   * first; short-range alarm, rough range). False for the control.
+   */
+  liveCall: boolean;
+  liveCallRange: number;
 
   // --- Seeds (Messor barbarus, DESIGN.md 4.4) ---
 
@@ -1000,6 +1007,8 @@ export const DEFAULT_ANT_PARAMS: AntParams = {
   preyDropTime: 300,
   pieceSipRate: 0.2,
   liveAttack: 1,
+  liveCall: true,
+  liveCallRange: 40,
 
   seeds: false,
   seedHoard: 0,

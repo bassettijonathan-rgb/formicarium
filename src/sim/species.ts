@@ -51,6 +51,9 @@ export function speciesParams(species: number): Partial<AntParams> {
     // Kept dry and warm, in dead wood (keepers: nest 30-80% humid; AntsDavey: a dry setup). Rough.
     broodHumidity: 0.65,
     broodDryHumidity: 0.4,
+    // Live prey is daubed with venom from the spatulate sting (Richard, Fabre & Dejean 2001, Crematogaster sp.):
+    // half again as deadly as Lasius's formic acid (L8; rough).
+    liveAttack: 1.5,
   };
 }
 
@@ -70,6 +73,8 @@ const MESSOR: Partial<AntParams> = {
   // Kept drier than Lasius niger (keepers: nest 40-70% humid, with a damper part for the brood). Rough.
   broodHumidity: 0.7,
   broodDryHumidity: 0.45,
+  // A seed eater: it bites live prey and stings it only weakly (L8; rough).
+  liveAttack: 0.5,
 };
 
 /**
@@ -87,4 +92,7 @@ const PHEIDOLE: Partial<AntParams> = {
   // Seeds taken from the arena when the brood wants protein, and cracked by the majors (keepers); not hoarded.
   seeds: true,
   seedHoard: 0,
+  // Minors sting live prey, small as they are; a major bites `majorBite` times as hard (L8; Dejean et al. 2007,
+  // P. megacephala: minors pin, majors kill; rough).
+  liveAttack: 0.8,
 };

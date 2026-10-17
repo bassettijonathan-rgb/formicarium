@@ -43,7 +43,7 @@ export type Decoration =
    * A seed dispenser (`seeds`, Marco 2026-10-15) is the same box giving a
    * scoop of seeds of that mix instead, once the last scoop is all taken.
    */
-  | { kind: 'dispenser'; x: number; y: number; width: number; depth: number; height: number; insect: Insect; cut: Cut; dropped: number[]; seeds?: SeedMix }
+  | { kind: 'dispenser'; x: number; y: number; width: number; depth: number; height: number; insect: Insect; cut: Cut; dropped: number[]; seeds?: SeedMix; live?: boolean }
   /** A round branch lying on the floor (B3), from one end to the other, thick enough to climb along. */
   | { kind: 'branch'; x0: number; y0: number; x1: number; y1: number; radius: number };
 

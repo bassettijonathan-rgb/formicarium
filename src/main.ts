@@ -751,7 +751,7 @@ async function start(): Promise<void> {
     moss: 'moss',
   };
   /** What a sugar dispenser is filled with and what an insect dispenser gives, chosen on its card before placing it. */
-  const dispense: { concentration: number; insect: Insect; cut: Cut; seeds: SeedMix } = { concentration: 1, insect: 'fly', cut: 'whole', seeds: 'small' };
+  const dispense: { concentration: number; insect: Insect; cut: Cut | 'live'; seeds: SeedMix } = { concentration: 1, insect: 'fly', cut: 'whole', seeds: 'small' };
   const startPutting = (b: HTMLButtonElement, put: string) => {
     tool = put;
     b.setAttribute('aria-pressed', 'true');
@@ -779,13 +779,24 @@ async function start(): Promise<void> {
           ['Cancel', closeCard],
         ]);
       } else if (put === 'dispenser') {
-        const cutRow = choices<Cut>([['whole', 'whole'], ['halved', 'cut in two'], ['pieces', 'in pieces']], () => dispense.cut, (k) => (dispense.cut = k));
-        cutRow.hidden = dispense.insect === 'fly';
+        const cutRow = choices<Cut | 'live'>([['live', 'alive'], ['whole', 'dead'], ['halved', 'cut in two'], ['pieces', 'in pieces']], () => dispense.cut, (k) => (dispense.cut = k));
+        // A fruit fly comes alive or dead, never cut.
+        const flyCuts = () => {
+          for (const b of cutRow.querySelectorAll<HTMLButtonElement>('button')) {
+            const cut = b.textContent === 'cut in two' || b.textContent === 'in pieces';
+            b.hidden = cut && dispense.insect === 'fly';
+          }
+          if (dispense.insect === 'fly' && dispense.cut !== 'live' && dispense.cut !== 'whole') {
+            dispense.cut = 'whole';
+            for (const b of cutRow.querySelectorAll<HTMLButtonElement>('button')) b.setAttribute('aria-pressed', String(b.textContent === 'dead'));
+          }
+        };
+        flyCuts();
         showCard('Insect dispenser', [
-          'It drops an insect in front of it, and the next one once the last is gone: carried into the nest or cleaned away. Ants take insects only while they have larvae to feed.',
+          'It drops an insect in front of it, and the next one once the last is gone: carried into the nest or cleaned away. Ants kill live insects they meet, but take insects home only while they have larvae to feed.',
           choices<Insect>([['fly', 'Fruit fly'], ['cricket', 'Cricket'], ['mealworm', 'Mealworm']], () => dispense.insect, (k) => {
             dispense.insect = k;
-            cutRow.hidden = k === 'fly';
+            flyCuts();
           }),
           cutRow,
         ], [
@@ -828,7 +839,11 @@ async function start(): Promise<void> {
     if (d.kind === 'dispenser' && d.seeds) {
       about.push(`Drops a scoop of ${{ small: 'small seeds', mixed: 'mixed bird seed', big: 'big seeds' }[d.seeds]} each time the last scoop has been carried off.`);
     } else if (d.kind === 'dispenser') {
-      const given = d.insect === 'fly' ? 'a fruit fly' : `a ${d.insect}${{ whole: ', whole', halved: ', cut in two', pieces: ', in pieces' }[d.cut]}`;
+      const given = d.live
+        ? `a live ${d.insect === 'fly' ? 'fruit fly' : d.insect}`
+        : d.insect === 'fly'
+          ? 'a fruit fly'
+          : `a ${d.insect}${{ whole: ', whole', halved: ', cut in two', pieces: ', in pieces' }[d.cut]}`;
       about.push(`Drops ${given} each time the last one is gone.`);
     }
     showCard(name[0]!.toUpperCase() + name.slice(1), about, [
@@ -1176,7 +1191,10 @@ async function start(): Promise<void> {
       const { u: x, v: y } = view.arena.toFloor(p.x, p.y);
       fitCheck = { before: view.arena.decorations, snapshots: 0 };
       if (moving >= 0) command({ type: 'move', index: moving, x, y });
-      else if (tool === 'dispenser') command({ type: 'put', item: 'dispenser', x, y, concentration: 1, insect: dispense.insect, cut: dispense.cut });
+      else if (tool === 'dispenser') {
+        const live = dispense.cut === 'live';
+        command({ type: 'put', item: 'dispenser', x, y, concentration: 1, insect: dispense.insect, cut: live ? 'whole' : (dispense.cut as Cut), ...(live ? { live } : {}) });
+      }
       else if (tool === 'seedDispenser') command({ type: 'put', item: 'seedDispenser', x, y, concentration: 1, seeds: dispense.seeds });
       else command({ type: 'put', item: tool as Item, x, y, concentration: tool === 'autoFeeder' ? dispense.concentration : sugar() });
       cancelModes();
