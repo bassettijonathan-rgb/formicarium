@@ -19,8 +19,10 @@ import { addModule, connect, connectArena, moveModule, removeModule, removeTube,
 import type { Cut, Insect, SeedMix } from './prey';
 import {
   cleanArena,
+  clearLive,
   createWorld,
   placeInsect,
+  placeLive,
   placeProtein,
   placeSeeds,
   placeSugar,
@@ -72,8 +74,8 @@ export type KeeperCommand =
   | { type: 'remove'; index: number }
   /** The liquid feeders filled to the top with sugar water of `concentration` mol/L (B5). */
   | { type: 'refill'; concentration: number }
-  /** A dead feeder insect put in the arena with its middle at (x, y): whole, cut in two or in pieces (B6). */
-  | { type: 'insect'; insect: Insect; cut: Cut; x: number; y: number };
+  /** A dead feeder insect put in the arena with its middle at (x, y): whole, cut in two or in pieces (B6); or, `live`, a live one (L1). */
+  | { type: 'insect'; insect: Insect; cut: Cut; x: number; y: number; live?: boolean };
 
 /** A keeper's action and the step it was applied at, before that step ran. */
 export interface LoggedCommand {
@@ -180,6 +182,8 @@ export function applyCommand(world: World, command: KeeperCommand): boolean {
       for (const d of [...world.food]) removeFood(world, d.id);
       // And the insects lying in the arena (not those already in an ant's mandibles).
       world.prey = world.prey.filter((p) => p.place !== Place.arena || p.carriedBy >= 0);
+      // And the live insects.
+      if (world.live.length > 0) clearLive(world);
       break;
     case 'heatMat':
       setHeatMat(world, command.x);
@@ -225,7 +229,9 @@ export function applyCommand(world: World, command: KeeperCommand): boolean {
       refillFeeders(world, command.concentration);
       break;
     case 'insect':
-      if (canPutFood(world, command.x, command.y)) placeInsect(world, command.insect, command.cut, command.x, command.y);
+      if (!canPutFood(world, command.x, command.y)) break;
+      if (command.live) placeLive(world, command.insect, command.x, command.y);
+      else placeInsect(world, command.insect, command.cut, command.x, command.y);
       break;
   }
   return true;

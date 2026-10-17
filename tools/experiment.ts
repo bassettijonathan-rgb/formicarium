@@ -24,6 +24,7 @@
  *   npm run experiment -- sizes [--ants 400] [--minutes 60] [--no-matching]   (Messor workers' sizes against the seeds they carry)
  *   npm run experiment -- castes [--food sugar|fly|cricket|mealworm] [--minutes 60] [--same-threshold] [--no-majors]   (Pheidole pallidula: who comes to the food)
  *   npm run experiment -- caste-making [--protein 3] [--no-majors] | defence [--same-alarm]   (Pheidole: majors made by feeding; majors in defence)
+ *   npm run experiment -- live [--insect fly|cricket|mealworm] [--ants 60] [--minutes 10] [--busy] | lone-grip [--insect ...]   (live insects: caught or not)
  *   growth takes --mortal: adults die of hunger, drying out and heat (M5c)
  *   any of them: [--param name=value] to try a different ant parameter, [--seed N] to start from seed N
  */
@@ -57,6 +58,8 @@ import {
   runCastes,
   runCasteMaking,
   runDefence,
+  runLiveCapture,
+  runLoneGrip,
   type CasteFood,
 } from '../src/sim/experiments';
 import type { Cut, Insect } from '../src/sim/prey';
@@ -97,6 +100,7 @@ for (let i = 0; i < rest.length; i++) {
   else if (rest[i] === '--same-threshold') params.majorCall = 0;
   else if (rest[i] === '--no-majors') majors = 0;
   else if (rest[i] === '--protein') proteinFed = Number(rest[++i]);
+  else if (rest[i] === '--busy') params.leaveRate = 1 / 60;
   else if (rest[i] === '--same-alarm') Object.assign(params, { majorAlarm: 0, majorAlarmHalfLife: 45 });
   else if (rest[i] === '--cut') cut = rest[++i] as Cut;
   else if (rest[i] === '--layout') layout = rest[++i] as NestLayout;
@@ -360,9 +364,23 @@ for (let seed = first; seed < first + runs; seed++) {
     const r = runDefence({ seed, params });
     const at = r.atSeconds.map((s, k) => `${s} s ${r.alarmed[k]} (${r.alarmedMajors[k]} majors)`).join(', ');
     console.log(`seed ${seed}: ${r.workers} workers, ${r.majors} majors; alarmed after the cover was lifted: ${at}`);
+  } else if (name === 'live') {
+    for (const k of insect ? [insect] : (['fly', 'cricket', 'mealworm'] as const)) {
+      const r = runLiveCapture({ seed, insect: k, minutes: minutesSet ? minutes : 10, ...(ants ? { ants } : {}), params });
+      const t = (s: number) => (s < 0 ? 'never' : `${s.toFixed(1)} s`);
+      console.log(
+        `seed ${seed} ${k}: first grabbed after ${t(r.grabbed)}, killed after ${t(r.killed)}; grabbed ${r.grabs} times, broke free ${r.escapes} times; ` +
+          `most holding it at once ${r.mostHolders}, ${r.holdersAtDeath} as it died`,
+      );
+    }
+  } else if (name === 'lone-grip') {
+    for (const k of insect ? [insect] : (['fly', 'cricket', 'mealworm'] as const)) {
+      const r = runLoneGrip({ seed, insect: k, tries: 40, params });
+      console.log(`seed ${seed} ${k}: one ant against it 40 times: it broke free ${r.escaped} times, was killed ${r.killed} times; held ${r.held.toFixed(1)} s on average`);
+    }
   } else {
     throw new Error(
-      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation, prey, nest-damp, nest-room, nest-spread, moving, nest-dark, harvest, trail-life, granary, sizes, castes, caste-making or defence',
+      'Experiment must be bridge, symmetric, choice, equal-choice, decay, nest, spread, growth, division, sorting, cemetery, midden, warmth, damp, hygiene, starvation, prey, nest-damp, nest-room, nest-spread, moving, nest-dark, harvest, trail-life, granary, sizes, castes, caste-making, defence, live or lone-grip',
     );
   }
 }

@@ -268,6 +268,46 @@ they took them apart". He approved this plan as drafted
   (Messor barbarus, 4.4) takes them; in a Lasius or Crematogaster arena the
   first scoop lies there and the dispenser waits. Seeds never go mouldy in
   the arena (dry air).
+- **Live insects (Marco, 2026-10-17; plan
+  `/mnt/project-files/ants/live-prey.md`, L1-L12, approved with its picks:
+  they stay in the arena and never hurt an ant).** Step 1 (built,
+  `src/sim/live.ts`): the Feed tab gives a fruit fly, a cricket or a
+  mealworm *alive* as well as dead (the row under the insects reads
+  alive, dead, cut in two, in pieces). L2: a fly walks at 15 mm/s in
+  bursts of 0.5-3 s with pauses of 1-5 s; a cricket walks at 20 mm/s
+  (bursts of 1-5 s, pauses of 2-10 s) and hops 3-6 cm about every 30 s;
+  a mealworm crawls at 4 mm/s for 10-40 s at a time. All rough, from
+  keepers. They wander at random, climb what lies on the floor as the
+  ants do (`floorStep`), and never leave the arena; they do not eat,
+  drink or breed. L3: one left alone dies of age after 2 (fly), 5
+  (cricket) or 20 (mealworm) tank days, ±30%. L4: an ant notices one only
+  when it comes within 1.5 mm of its outline (touch; Richard, Fabre &
+  Dejean 2001), and not in the air or in the 1.5 s after it has shaken
+  its holders off, when it runs at twice its speed. L5, L9: any worker
+  walking in the arena with its mandibles free (searching, heading to
+  food, coming home, with food or without) grabs it where it touches it
+  and keeps that grip; holders are dragged along and face the insect.
+  Each holder slows it by 1/`pinned` of its speed (fly 1.5, cricket 4,
+  mealworm 6), so that many hold it still; at most 3, 12 or 14 find room
+  round it. L6: held, it shakes off all its holders at once at a rate of
+  `escape` × strength × (1 − holders/pinned)² per second (0.5 for a
+  fly, 1 for a cricket and a mealworm; rough), and a cricket hops away.
+  L8: each holder takes `liveAttack` (1) off its strength per second, out
+  of 4 for a fly, 300 for a cricket and 1500 for a mealworm (rough: a fly
+  dies in seconds, a cricket held by four in about a minute, a mealworm
+  held by six in about four); weaker, it walks and struggles less. Dead,
+  it becomes an ordinary dead insect (B6), whole, lying as it stood; its
+  holders let go, and those that want protein (B7) set to work on it at
+  once, so a colony with no hungry larvae kills a live insect and leaves
+  it lying. L11: an insect never harms an ant. L12: legs step as it
+  walks (a fly's six in two tripods), a mealworm's body ripples, a
+  hopping cricket rises over its shadow, a held insect twitches, and the
+  ant card reads "holding a cricket, with 3 nestmates". Clear food takes
+  live insects out too. Old tanks load with none. Validation: section 9,
+  test 32. In step 1 a worker holding an insect calls no one, so in an
+  ordinary colony crickets and mealworms always break free; step 2 adds
+  the short-range alarm that calls nestmates in (L7), the species'
+  weapons, Pheidole majors (L10) and live insects from the dispenser.
 
 ### 3.5 Bought nests (Marco, 2026-10-13)
 
@@ -1698,6 +1738,18 @@ project. If one fails, we fix the model, not the test.
    their share at a cricket, test 27). If majors take alarm as minors do
    (`majorAlarm` 0, `majorAlarmHalfLife` 45 s), they are under 12% of the
    alarmed at 15 seconds and none is alarmed at 4 minutes.
+32. **Caught by size** (live-insects plan, check 2; Richard, Fabre &
+   Dejean 2001: capture fails more often the bigger the prey; Dejean et
+   al. 2007: big prey held still by several workers; qualitative): a lone
+   Lasius worker that grabs a live insect in the bare arena, 40 times
+   each, kills at least 30 of 40 fruit flies (in under 10 s on average)
+   and none of 40 crickets or mealworms, which all break free, the
+   mealworm sooner. In a busy foraging arena (a lab colony of 200 workers
+   leaving the nest every minute or so on average), 3 runs each: every fly is killed
+   within 10 s of the first grab, by one or two ants; every cricket and
+   mealworm is killed, a cricket only with at least 4 holding it, a
+   mealworm with at least 6; and over 40% of their grabs end with them
+   breaking free, more than twice a fly's share.
 
 ### 9.1 Results so far (M1, 10 colonies of 60 workers per condition, 30 min each)
 
@@ -2444,6 +2496,41 @@ keep them out in this small nest, where the alarm is strong everywhere;
 it is their hold that tells. Detrain & Pasteels (1992) give the castes'
 numbers at a real intruder, which the tank does not have, so this check
 is qualitative.
+
+### 9.22 Results so far (live insects, step 1)
+
+`npm run experiment -- lone-grip` and `live --busy --ants 200` run test 32.
+Lasius niger, C. scutellaris, Messor barbarus and Pheidole pallidula
+colonies with no live insect run exactly as before (the same ants in the
+same places, with the same crops and headings, and the same food and
+insects, after 25 minutes of a keeper's tank with sugar, a cut cricket,
+an insect dispenser, the cover lifted and the arena cleaned, in a sand
+farm, a test tube and a ytong nest, against the code before live insects).
+
+**One ant alone** (40 grabs each): a fruit fly was killed 35 times and
+broke free 5 times (held 3.6 s on average); a cricket broke free all 40
+times after 1.7 s, a mealworm all 40 after 1.4 s.
+
+**A busy foraging arena** (200 workers, `leaveRate` 1/60 s; 6 runs of
+10 minutes, the insect 5 cm from the entrance):
+
+| | First grabbed | Killed | Grabs | Broke free | Holding it as it died |
+|---|---|---|---|---|---|
+| Fruit fly | 5-16 s | 2-5 s after | 1-2 | 0-1 | 1-2 |
+| Cricket | 3-13 s | 38-192 s | 2-15 | 1-14 | 7-12 |
+| Mealworm | 3-6 s | 118-150 s | 1-7 | 0-6 | 14 |
+
+So a fly is caught by whoever touches it, while a cricket or a mealworm is
+caught only by a crowd, after breaking free again and again (half or
+more of the grabs on both). The mealworm, three times a cricket's mass,
+breaks a lone ant's grip sooner, but in a crowd it escapes less than a
+cricket does: it crawls at 4 mm/s and is grabbed again at once, while a
+cricket hops 3-6 cm out of reach. Richard et al.'s size effect is over
+prey that move alike; the hop is the cricket's own escape. In a colony
+of 60 workers with ordinary foraging (`leaveRate` 1/600 s), no cricket
+was caught in 15 minutes (6 runs, 8-18 grabs each, never more than 2 ants
+holding it): with nobody called, help comes too seldom. Step 2's alarm
+scent is what should bring it.
 
 ---
 

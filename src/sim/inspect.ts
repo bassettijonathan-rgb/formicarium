@@ -100,6 +100,13 @@ export function doing(world: World, i: number): string {
       const p = world.prey.find((q) => q.id === ants.preyId[i]);
       return p ? `at a ${p.insect}, biting it apart and drinking its juices` : 'at an insect';
     }
+    case AntState.holding: {
+      // L12: "holding a cricket".
+      const b = world.live.find((q) => q.id === ants.liveHeld[i]);
+      if (!b) return 'holding a live insect';
+      const what = b.insect === 'fly' ? 'a fruit fly' : `a ${b.insect}`;
+      return b.holders > 1 ? `holding ${what}, with ${b.holders - 1} nestmate${b.holders > 2 ? 's' : ''}` : `holding ${what}`;
+    }
     default:
       return 'about its business';
   }
